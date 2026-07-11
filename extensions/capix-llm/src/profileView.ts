@@ -59,6 +59,12 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
     this.view.webview.postMessage({ type: "loading", value: true });
 
     try {
+      const configured = await this.client.checkConfigured();
+      this.view.webview.postMessage({ type: "auth", configured });
+      if (!configured) {
+        this.billing = null;
+        return;
+      }
       const [billingRes, treasuryRes] = await Promise.all([
         this.client.getBalance(),
         this.client.getBaseTreasury().catch(() => ({ ok: false }) as { ok: boolean }),
@@ -388,6 +394,8 @@ ${cspMeta}
         document.body.classList.toggle('loading', msg.value);
       } else if (msg.type === 'billing') {
         render(msg.value);
+      } else if (msg.type === 'auth') {
+        isConfigured = Boolean(msg.configured);
       } else if (msg.type === 'treasury') {
         renderTreasury(msg.value);
       }

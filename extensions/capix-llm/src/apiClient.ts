@@ -191,7 +191,11 @@ export class CapixClient {
 
   // ── Wallet balance ────────────────────────────────────────────────────
   async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; activeInstances?: number; totalSpent?: number; error?: string }> {
-    return this.get("/api/cloud/billing");
+    const result = await this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; error?: string }>("/api/v1/billing");
+    if (!result.ok) return result;
+    const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
+    const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
+    return { ok: true, balance: { usd: usdc, sol, usdc }, activeInstances: 0, totalSpent: 0 };
   }
 
   // ── Billing: base treasury address for USDC on Base ───────────────────
