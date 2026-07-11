@@ -22,19 +22,25 @@ echo "  done: product.json"
 CAPIX_EXTENSIONS=(capix-llm capix-cloud capix-workspace capix-agent-ui)
 CODE_CUSTOMER_DIR="${CAPIX_CODE_CUSTOMER_DIR:-$DIR/../capix-code/dist/customer}"
 if [ -d "$CODE_CUSTOMER_DIR" ]; then
+  CODE_EXE_SUFFIX=""
+  [ -f "$CODE_CUSTOMER_DIR/engine/capix-engine.exe" ] && CODE_EXE_SUFFIX=".exe"
   rm -rf "$DIR/extensions/capix-llm/tools/capix-code"
   mkdir -p "$DIR/extensions/capix-llm/tools/capix-code"
   cp -R "$CODE_CUSTOMER_DIR/." "$DIR/extensions/capix-llm/tools/capix-code/"
   if [ -x "$DIR/extensions/capix-llm/tools/capix-code/engine/opencode" ]; then
     mv "$DIR/extensions/capix-llm/tools/capix-code/engine/opencode" "$DIR/extensions/capix-llm/tools/capix-code/engine/capix-engine"
-  elif [ ! -x "$DIR/extensions/capix-llm/tools/capix-code/engine/capix-engine" ]; then
+  elif [ ! -x "$DIR/extensions/capix-llm/tools/capix-code/engine/capix-engine$CODE_EXE_SUFFIX" ]; then
     echo "ERROR: Capix Code engine is missing"
     exit 1
   fi
   tar -czf "$DIR/extensions/capix-llm/tools/capix-code/runtime.tar.gz" -C "$DIR/extensions/capix-llm/tools/capix-code/runtime" .
   rm -rf "$DIR/extensions/capix-llm/tools/capix-code/runtime"
-  cp "$DIR/scripts/capix-code-bundled.sh" "$DIR/extensions/capix-llm/tools/capix-code/bin/capix-code"
-  chmod +x "$DIR/extensions/capix-llm/tools/capix-code/bin/capix-code" "$DIR/extensions/capix-llm/tools/capix-code/engine/capix-engine"
+  if [ -z "$CODE_EXE_SUFFIX" ]; then
+    cp "$DIR/scripts/capix-code-bundled.sh" "$DIR/extensions/capix-llm/tools/capix-code/bin/capix-code"
+    chmod +x "$DIR/extensions/capix-llm/tools/capix-code/bin/capix-code" "$DIR/extensions/capix-llm/tools/capix-code/engine/capix-engine"
+  else
+    chmod +x "$DIR/extensions/capix-llm/tools/capix-code/bin/capix-code.exe" "$DIR/extensions/capix-llm/tools/capix-code/engine/capix-engine.exe"
+  fi
   echo "  done: bundled Capix Code customer runtime staged"
 else
   echo "ERROR: built Capix Code customer runtime missing: $CODE_CUSTOMER_DIR"
