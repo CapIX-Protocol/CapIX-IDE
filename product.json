@@ -3,6 +3,10 @@
   "nameLong": "CapixIDE",
   "capixVersion": "1.1.0",
   "capixRelease": "0001",
+  "capixControlPlaneOrigin": "https://www.capix.network",
+  "capixOAuthAuthorizePath": "/oauth/authorize",
+  "capixOAuthTokenPath": "/oauth/token",
+  "capixOAuthRevokePath": "/oauth/revoke",
   "enableTelemetry": false,
   "applicationName": "capix",
   "dataFolderName": ".capix-ide",
@@ -23,12 +27,9 @@
   "tunnelApplicationName": "capix-tunnel",
   "urlProtocol": "capix",
   "licenseName": "Apache-2.0",
+  "licenseFileName": "LICENSE.txt",
   "licenseUrl": "https://github.com/Ritzky/CapixIDE/blob/main/LICENSE",
   "reportIssueUrl": "https://github.com/Ritzky/CapixIDE/issues/new",
-  "extensionsGallery": {
-    "serviceUrl": "https://open-vsx.org/vscode/gallery",
-    "itemUrl": "https://open-vsx.org/vscode/item"
-  },
   "builtInExtensions": [],
   "linkProtectionTrustedDomains": [
     "https://capix.network",

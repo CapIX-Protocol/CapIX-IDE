@@ -8,7 +8,7 @@
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Machine Learning", "Other"],
   "icon": "resources/capix-icon.png",
-  "activationEvents": ["onStartupFinished", "onUri"],
+  "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -58,6 +58,11 @@
       ]
     },
     "commands": [
+      {
+        "command": "capix.launchCentre",
+        "title": "Capix: Open Launch Centre",
+        "icon": "$(rocket)"
+      },
       {
         "command": "capix.deployModel",
         "title": "Capix: Deploy LLM…",
@@ -113,7 +118,7 @@
       },
       {
         "command": "capix.connectWallet",
-        "title": "Capix: Connect Wallet / Set Session Token"
+        "title": "Capix: Sign In"
       },
       {
         "command": "capix.execOnInstance",
@@ -352,11 +357,6 @@
     "configuration": {
       "title": "Capix LLM",
       "properties": {
-        "capix.baseUrl": {
-          "type": "string",
-          "default": "https://capix.network",
-          "description": "Capix network base URL (use https://capix.network for production)."
-        },
         "capix.autoRefreshSeconds": {
           "type": "number",
           "default": 30,

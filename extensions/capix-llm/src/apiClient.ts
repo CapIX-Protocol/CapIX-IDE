@@ -1,12 +1,14 @@
 /**
  * Capix API client — wraps fetch calls to capix.network /api/llm/* routes.
- * Uses the session token from VS Code settings as a Bearer header.
+ * The production origin is compiled into the product. Workspace settings must
+ * never be able to redirect an authenticated request.
  */
 
 import * as vscode from "vscode";
 import type { CatalogModel, GpuOffer, LlmDeploy, HostedEndpoint, DeployResult } from "./types";
 
 export class CapixClient {
+  static readonly PRODUCTION_BASE_URL = "https://www.capix.network";
   /** Cached session token (loaded from SecretStorage on first use) */
   private _sessionToken: string | null = null;
   private _secretStorage?: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void> };
@@ -27,16 +29,7 @@ export class CapixClient {
   }
 
   get baseUrl(): string {
-    const url = vscode.workspace.getConfiguration("capix").get<string>("baseUrl") || "https://capix.network";
-    return this.validateBaseUrl(url);
-  }
-
-  private validateBaseUrl(url: string): string {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") {
-      throw new Error("baseUrl must use HTTPS");
-    }
-    return url;
+    return CapixClient.PRODUCTION_BASE_URL;
   }
 
   getBaseUrl(): string {
@@ -51,15 +44,6 @@ export class CapixClient {
       if (stored) { this._sessionToken = stored; return stored; }
     }
     return "";
-  }
-
-  /** Save the session token to SecretStorage + clear plaintext settings */
-  async saveSessionToken(token: string): Promise<void> {
-    this._sessionToken = token;
-    if (this._secretStorage) {
-      await this._secretStorage.store("capix.sessionToken", token);
-    }
-    await vscode.workspace.getConfiguration("capix").update("sessionToken", undefined, vscode.ConfigurationTarget.Global);
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {

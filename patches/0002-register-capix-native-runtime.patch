@@ -1,0 +1,21 @@
+diff --git a/src/main.ts b/src/main.ts
+index 77c44fd0000..77c44fd0001 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -19,5 +19,6 @@ import { resolveNLSConfiguration } from './vs/base/node/nls.js';
+ import { getUNCHost, addUNCHostToAllowlist } from './vs/base/node/unc.js';
+ import { INLSConfiguration } from './vs/nls.js';
++import { startCapixNativeRuntime } from './main/capix-runtime-bootstrap.js';
+ import { NativeParsedArgs } from './vs/platform/environment/common/argv.js';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+@@ -210,6 +211,9 @@ async function startup(codeCachePath: string | undefined, nlsConfig: INLSConfigu
+ 	// Bootstrap ESM
+ 	await bootstrapESM();
+ 
++	// Register the narrow, schema-validated Capix native broker before windows start.
++	startCapixNativeRuntime(product);
++
+ 	// Load Main
+ 	await import('./vs/code/electron-main/main.js');
+ 	perf.mark('code/didRunMainBundle');

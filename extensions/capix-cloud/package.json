@@ -1,0 +1,136 @@
+{
+  "name": "capix-cloud",
+  "displayName": "Capix Cloud",
+  "description": "Resource, quote and billing UI for the Capix control plane — deployments, operations, invoices and receipts.",
+  "version": "1.0.0",
+  "publisher": "capix",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "capix-cloud",
+          "title": "Capix Cloud",
+          "icon": "$(cloud)"
+        }
+      ]
+    },
+    "views": {
+      "capix-cloud": [
+        {
+          "id": "capix.cloud.deployments",
+          "name": "Deployments"
+        },
+        {
+          "id": "capix.cloud.billing",
+          "name": "Billing"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "capix.cloud.refreshDeployments",
+        "title": "Capix: Refresh Deployments",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.cloud.refreshBilling",
+        "title": "Capix: Refresh Billing",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.cloud.createDeployment",
+        "title": "Capix: Create Deployment…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.cloud.deleteDeployment",
+        "title": "Capix: Destroy Deployment",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "capix.cloud.showOperation",
+        "title": "Capix: Show Operation Timeline",
+        "icon": "$(timeline-view)"
+      },
+      {
+        "command": "capix.cloud.cancelOperation",
+        "title": "Capix: Cancel Operation",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "capix.cloud.viewReceipt",
+        "title": "Capix: View Receipt",
+        "icon": "$(receipt)"
+      },
+      {
+        "command": "capix.cloud.openWebConsole",
+        "title": "Capix: Open Web Console",
+        "icon": "$(link-external)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "capix.cloud.createDeployment",
+          "when": "view == capix.cloud.deployments",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.cloud.refreshDeployments",
+          "when": "view == capix.cloud.deployments",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.cloud.openWebConsole",
+          "when": "view == capix.cloud.deployments",
+          "group": "navigation@3"
+        },
+        {
+          "command": "capix.cloud.refreshBilling",
+          "when": "view == capix.cloud.billing",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "capix.cloud.deleteDeployment",
+          "when": "viewItem =~ /^capix-deploy-/",
+          "group": "inline@1"
+        },
+        {
+          "command": "capix.cloud.cancelOperation",
+          "when": "viewItem =~ /^capix-deploy-/",
+          "group": "inline@2"
+        },
+        {
+          "command": "capix.cloud.showOperation",
+          "when": "viewItem =~ /^capix-deploy-/"
+        },
+        {
+          "command": "capix.cloud.viewReceipt",
+          "when": "viewItem == capix-invoice || viewItem == capix-receipt"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "eslint": "^9.17.0"
+  }
+}

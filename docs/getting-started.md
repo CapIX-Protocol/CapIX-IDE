@@ -11,7 +11,7 @@ Download the installer for your OS from the [Releases page](https://github.com/R
 | Windows | `CapixIDE-Setup-x.x.x.exe` |
 | Linux | `CapixIDE-x.x.x.AppImage` (or `.deb` / `.rpm`) |
 
-- **Mac:** Open the `.dmg`, drag CapixIDE to Applications. Notarized builds open without Gatekeeper warnings. For self-built/pre-notarization builds, right-click → Open on first launch.
+- **Mac:** Open the `.dmg`, drag CapixIDE to Applications. The build is **unsigned** — right-click → **Open** on first launch to bypass Gatekeeper's unverified-app warning.
 - **Windows:** Run the `.exe`. The NSIS installer lets you pick the install directory.
 - **Linux:** Make the AppImage executable (`chmod +x CapixIDE-*.AppImage`) and run, or install the `.deb` / `.rpm`.
 

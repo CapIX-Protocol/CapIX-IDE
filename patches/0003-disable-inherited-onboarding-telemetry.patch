@@ -1,0 +1,56 @@
+diff --git a/src/vs/workbench/contrib/void/browser/voidOnboardingService.ts b/src/vs/workbench/contrib/void/browser/voidOnboardingService.ts
+index 097fac7..a06870c 100644
+--- a/src/vs/workbench/contrib/void/browser/voidOnboardingService.ts
++++ b/src/vs/workbench/contrib/void/browser/voidOnboardingService.ts
+@@ -5,7 +5,7 @@
+ 
+ import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
+ import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+-import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
++import { IWorkbenchContribution } from '../../../common/contributions.js';
+ import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
+ import { mountVoidOnboarding } from './react/out/void-onboarding/index.js'
+ import { h, getActiveWindow } from '../../../../base/browser/dom.js';
+@@ -49,4 +49,5 @@ export class OnboardingContribution extends Disposable implements IWorkbenchCont
+ }
+ 
+ // Register the contribution to be initialized during the AfterRestored phase
+-registerWorkbenchContribution2(OnboardingContribution.ID, OnboardingContribution, WorkbenchPhase.AfterRestored);
++// Capix owns first-run through its native PKCE onboarding and Launch Centre.
++// The inherited provider/model onboarding must never mount in the customer app.
+diff --git a/src/vs/workbench/contrib/void/electron-main/metricsMainService.ts b/src/vs/workbench/contrib/void/electron-main/metricsMainService.ts
+index b6553c4..0939e1a 100644
+--- a/src/vs/workbench/contrib/void/electron-main/metricsMainService.ts
++++ b/src/vs/workbench/contrib/void/electron-main/metricsMainService.ts
+@@ -91,8 +91,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
+ 		this.client = new PostHog('phc_UanIdujHiLp55BkUTjB1AuBXcasVkdqRwgnwRlWESH2', {
+ 			host: 'https://us.i.posthog.com',
+ 		})
+-
+-		this.initialize() // async
++		this.client.optOut()
+ 	}
+ 
+ 	async initialize() {
+@@ -140,18 +139,12 @@ export class MetricsMainService extends Disposable implements IMetricsService {
+ 
+ 
+ 	capture: IMetricsService['capture'] = (event, params) => {
+-		const capture = { distinctId: this.distinctId, event, properties: params } as const
+-		// console.log('full capture:', this.distinctId)
+-		this.client.capture(capture)
++		void event; void params;
+ 	}
+ 
+ 	setOptOut: IMetricsService['setOptOut'] = (newVal: boolean) => {
+-		if (newVal) {
+-			this._appStorage.store(OPT_OUT_KEY, 'true', StorageScope.APPLICATION, StorageTarget.MACHINE)
+-		}
+-		else {
+-			this._appStorage.remove(OPT_OUT_KEY, StorageScope.APPLICATION)
+-		}
++		void newVal;
++		this._appStorage.store(OPT_OUT_KEY, 'true', StorageScope.APPLICATION, StorageTarget.MACHINE)
+ 	}
+ 
+ 	async getDebuggingProperties() {

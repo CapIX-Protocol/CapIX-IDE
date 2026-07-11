@@ -1,0 +1,157 @@
+{
+  "name": "capix-workspace",
+  "displayName": "Capix Workspace",
+  "description": "Remote workspace attach, port forwarding and private preview UI for CapixIDE.",
+  "version": "1.0.0",
+  "publisher": "capix",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "capix-workspace",
+          "title": "Capix Workspace",
+          "icon": "$(remote)"
+        }
+      ]
+    },
+    "views": {
+      "capix-workspace": [
+        {
+          "id": "capix.workspace.sessions",
+          "name": "Sessions"
+        },
+        {
+          "id": "capix.workspace.ports",
+          "name": "Ports & Previews"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "capix.workspace.refreshSessions",
+        "title": "Capix: Refresh Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.workspace.refreshPorts",
+        "title": "Capix: Refresh Ports",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.workspace.connect",
+        "title": "Capix: Attach Workspace",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "capix.workspace.reconnect",
+        "title": "Capix: Reconnect Workspace",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "capix.workspace.disconnect",
+        "title": "Capix: Disconnect Workspace",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "capix.workspace.forwardPort",
+        "title": "Capix: Forward Port…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.workspace.closePort",
+        "title": "Capix: Close Forwarded Port",
+        "icon": "$(close)"
+      },
+      {
+        "command": "capix.workspace.openPreview",
+        "title": "Capix: Open Preview",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "capix.workspace.openTerminal",
+        "title": "Capix: Open Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "capix.workspace.openFile",
+        "title": "Capix: Open Remote Files",
+        "icon": "$(go-to-file)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "capix.workspace.refreshSessions",
+          "when": "view == capix.workspace.sessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.workspace.reconnect",
+          "when": "view == capix.workspace.sessions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.workspace.disconnect",
+          "when": "view == capix.workspace.sessions",
+          "group": "navigation@3"
+        },
+        {
+          "command": "capix.workspace.refreshPorts",
+          "when": "view == capix.workspace.ports",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "capix.workspace.connect",
+          "when": "viewItem == capix-session",
+          "group": "inline@1"
+        },
+        {
+          "command": "capix.workspace.forwardPort",
+          "when": "viewItem == capix-session-connected",
+          "group": "inline@2"
+        },
+        {
+          "command": "capix.workspace.openTerminal",
+          "when": "viewItem == capix-session-connected",
+          "group": "inline@3"
+        },
+        {
+          "command": "capix.workspace.openFile",
+          "when": "viewItem == capix-session-connected"
+        },
+        {
+          "command": "capix.workspace.openPreview",
+          "when": "viewItem == capix-port",
+          "group": "inline@1"
+        },
+        {
+          "command": "capix.workspace.closePort",
+          "when": "viewItem == capix-port",
+          "group": "inline@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "eslint": "^9.17.0"
+  }
+}

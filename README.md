@@ -2,7 +2,7 @@
 
 The AI IDE for the Capix protocol — built on the [Void editor](https://github.com/voideditor/void) (a VS Code fork) with a Capix-branded sidebar extension for LLM deploys, cloud panels, a native SSH terminal, Covenant memory, and seamless profile sync between the web console and the IDE.
 
-CapixIDE is digitally signed and notarized (coming soon). For development builds, use `npm run dev`.
+CapixIDE builds are **unsigned**. On macOS, right-click the app → **Open** on first launch (Gatekeeper will warn that the app is unverified).
 
 ## Download
 

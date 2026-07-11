@@ -49,6 +49,7 @@ export class TerminalManager {
   // Persistent known_hosts file — survives across sessions so pinned host
   // keys can be verified on every connect after the initial TOFU add.
   private knownHostsPath: string;
+  private bundledCapixCodePath: string;
 
   /**
    * @param globalStoragePath  The extension's global storage directory
@@ -56,8 +57,11 @@ export class TerminalManager {
    *                          known_hosts file is stored here so it persists
    *                          across sessions.
    */
-  constructor(globalStoragePath: string) {
+  constructor(globalStoragePath: string, extensionPath?: string) {
     this.knownHostsPath = path.join(globalStoragePath, "known_hosts");
+    this.bundledCapixCodePath = extensionPath
+      ? path.join(extensionPath, "tools", "capix-code", "bin", "capix-code")
+      : "capix-code";
     this.ensureKnownHostsFile();
   }
 
@@ -102,7 +106,10 @@ export class TerminalManager {
     // /proc/<shell_pid>/environ stays clean. capix-code reads
     // process.env.CAPIX_API_KEY itself (capix-code/src/plugin.ts:50).
     setTimeout(() => {
-      terminal.sendText('CAPIX_API_KEY="$(cat "$CAPIX_API_KEY_FILE")" capix-code');
+      const executable = this.bundledCapixCodePath === "capix-code"
+        ? "capix-code"
+        : `"${this.bundledCapixCodePath.replace(/(["\\$`])/g, "\\$1")}"`;
+      terminal.sendText(`CAPIX_API_KEY="$(cat "$CAPIX_API_KEY_FILE")" ${executable}`);
     }, 500);
 
     // Sweep the temp key file shortly after launch. capix-code has long

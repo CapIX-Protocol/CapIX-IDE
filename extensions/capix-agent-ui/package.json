@@ -1,0 +1,118 @@
+{
+  "name": "capix-agent-ui",
+  "displayName": "Capix Agent",
+  "description": "Chat view, agent sessions and tool approval for the bundled Capix Agent Runtime.",
+  "version": "1.0.0",
+  "publisher": "capix",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Machine Learning", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "capix-agent",
+          "title": "Capix Agent",
+          "icon": "$(comment-discussion)"
+        }
+      ],
+      "panel": [
+        {
+          "id": "capix-agent-panel",
+          "title": "Capix Chat",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "capix-agent": [
+        {
+          "id": "capix.agent.sessions",
+          "name": "Sessions"
+        }
+      ],
+      "capix-agent-panel": [
+        {
+          "id": "capix.agent.chat",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "capix.agent.refreshSessions",
+        "title": "Capix: Refresh Agent Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.agent.openChat",
+        "title": "Capix: Open Agent Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "capix.agent.startSession",
+        "title": "Capix: Start Agent Session…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.agent.resumeSession",
+        "title": "Capix: Resume Agent Session",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "capix.agent.selectModel",
+        "title": "Capix: Select Model…",
+        "icon": "$(symbol-method)"
+      },
+      {
+        "command": "capix.agent.cancel",
+        "title": "Capix: Cancel Stream",
+        "icon": "$(debug-stop)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "capix.agent.startSession",
+          "when": "view == capix.agent.sessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.agent.refreshSessions",
+          "when": "view == capix.agent.sessions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.agent.cancel",
+          "when": "view == capix.agent.chat",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "capix.agent.resumeSession",
+          "when": "viewItem == capix-agent-session",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "eslint": "^9.17.0"
+  }
+}

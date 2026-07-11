@@ -25,8 +25,8 @@ directories:
 # Publish to GitHub Releases for the auto-updater.
 publish:
   provider: github
-  owner: Ritzky
-  repo: CapixIDE
+  owner: CapIX-Protocol
+  repo: CapIX-IDE
   releaseType: release
 
 mac:
@@ -35,13 +35,11 @@ mac:
   target:
     - target: dmg
       arch: [arm64, x64]
-  identity: "Developer ID Application: Capix Protocol (XXXXXXXXXX)"
+  identity: null
   hardenedRuntime: true
-  gatekeeperAssess: true
+  gatekeeperAssess: false
   entitlements: resources/mac/entitlements.plist
   entitlementsInherit: resources/mac/entitlements.plist
-  notarize:
-    teamId: "XXXXXXXXXX"
 
 win:
   icon: resources/icons/code.ico

@@ -2,9 +2,14 @@
 vscode/
 VSCode-*/
 dist/
+extensions/capix-llm/tools/
 
 # Node
 node_modules/
+node_modules
+out/
+out-*/
+.build/
 *.log
 
 # OS

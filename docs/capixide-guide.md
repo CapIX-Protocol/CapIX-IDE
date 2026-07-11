@@ -13,7 +13,7 @@ CapixIDE is the open-source AI IDE for the Capix protocol: a VS Code-compatible 
 
 Get the latest from [github.com/Ritzky/CapixIDE/releases](https://github.com/Ritzky/CapixIDE/releases) or [capix.network/ide](https://capix.network/ide).
 
-- **Mac:** Open the `.dmg`, drag CapixIDE to Applications. The build is notarized — Gatekeeper will allow it without warnings once notarization is configured. If the build is not yet notarized (pre-release/self-built), right-click → Open on first launch.
+- **Mac:** Open the `.dmg`, drag CapixIDE to Applications. The build is **unsigned** — right-click → **Open** on first launch to bypass Gatekeeper.
 - **Windows:** Run the `.exe` NSIS installer — it lets you pick the install directory.
 - **Linux:** `chmod +x CapixIDE-*.AppImage` and run, or install the `.deb` / `.rpm`.
 

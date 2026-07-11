@@ -58,7 +58,7 @@ export function activate(context: vscode.ExtensionContext) {
   jobsProvider = new JobsTreeProvider(client);
   apiKeysProvider = new ApiKeysTreeProvider(client);
   profileProvider = new ProfileViewProvider(client, context.extensionUri);
-  terminalManager = new TerminalManager(context.globalStorageUri.fsPath);
+  terminalManager = new TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
   autoConnect = new AutoConnectManager(client);
   covenant = new CovenantManager(context);
   devTokens = new DevTokenManager(client);
@@ -95,6 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
   const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()),
     deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView,
     vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider),
   );
@@ -185,23 +186,19 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()),
   );
 
-  // ── URI Handler: capix://capix.capix-llm/session?token=… ────────────────
-  // Allows the web console to push the session token to the IDE with one
-  // click — no manual copy-paste.  The handler validates the token format
-  // and stores it via the same SecretStorage path as cmdConnectWallet.
-  context.subscriptions.push(
-    vscode.window.registerUriHandler({
-      handleUri(uri: vscode.Uri) {
-        if (uri.path !== "/session") return;
-        const token = new URLSearchParams(uri.query).get("token");
-        if (!token || !token.startsWith("cpx_session.")) {
-          vscode.window.showErrorMessage("Capix: invalid session token in deep link.");
-          return;
-        }
-        applySessionToken(token);
-      },
-    }),
-  );
+}
+
+async function cmdLaunchCentre(): Promise<void> {
+  const action = await vscode.window.showQuickPick([
+    { label: "$(credit-card) Deposit", description: "Add funds securely", command: "capix.topUp" },
+    { label: "$(pulse) Balance & usage", description: "Review balance, invoices and consumption", command: "capix.refreshProfile" },
+    { label: "$(server) Deploy GPU", description: "Provision Capix accelerated compute", command: "capix.deployModel" },
+    { label: "$(vm) Deploy VPS", description: "Provision Capix general compute", command: "capix.cloud.createDeployment" },
+    { label: "$(sparkle) Deploy LLM", description: "Provision a remote model on the Capix GPU network", command: "capix.deployModel" },
+    { label: "$(terminal) Run Capix Code", description: "Open the bundled coding environment", command: "capix.launchCapixCode" },
+    { label: "$(graph) Detailed usage", description: "Open metering and billing", command: "capix.openBilling" },
+  ], { placeHolder: "What would you like to do?" });
+  if (action) await vscode.commands.executeCommand(action.command);
 }
 
 export function deactivate() {
@@ -839,26 +836,13 @@ async function cmdCovenantRemember() {
   devTokens.onDecision();
 }
 
-// Save a session token to SecretStorage, refresh views, and auto-connect.
-// Shared by the manual "Connect Wallet" command and the deep-link URI handler.
-async function applySessionToken(token: string): Promise<void> {
-  await client.saveSessionToken(token);
-  vscode.window.showInformationMessage("✓ Capix session token saved securely. Your profile, deploys, and instances are now synced.");
-  refreshAll();
-  autoConnect.checkExistingDeploys();
-}
-
-// Connect wallet / set session token — shared across web and IDE
+// Authentication is owned by the native main-process PKCE broker. The legacy
+// extension must never accept bearer credentials from a query string,
+// clipboard, input box or workspace setting.
 async function cmdConnectWallet() {
-  const token = await vscode.window.showInputBox({
-    prompt: "Paste your Capix session token (cpx_session.…)",
-    password: true,
-    placeHolder: "cpx_session.eyJ...",
-    ignoreFocusOut: true,
-    validateInput: (v) => v.startsWith("cpx_session.") ? null : "Token must start with 'cpx_session.'",
-  });
-  if (!token) return;
-  await applySessionToken(token);
+  vscode.window.showErrorMessage(
+    "Capix sign-in is unavailable because the native PKCE broker is not registered. No credential was requested or stored.",
+  );
 }
 
 // Top up wallet balance — shared across web and IDE

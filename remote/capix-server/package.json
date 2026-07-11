@@ -1,0 +1,29 @@
+{
+  "name": "capix-server",
+  "version": "1.0.0",
+  "description": "Capix-owned matching Code-OSS remote server for CapixIDE remote development (architecture §11.6). Installed/updated by the signed workspace agent; must match the desktop compatibility manifest.",
+  "publisher": "capix",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "out/server.js",
+  "bin": {
+    "capix-server": "out/server.js"
+  },
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "start": "node out/server.js",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "eslint": "^9.17.0"
+  }
+}

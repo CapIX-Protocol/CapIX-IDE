@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const mockCreateTerminal = vi.fn();
-const mockShowWarningMessage = vi.fn();
-const mockOnDidCloseTerminal = vi.fn();
+const { mockCreateTerminal, mockShowWarningMessage, mockOnDidCloseTerminal,
+  mockWriteFileSync, mockExistsSync, mockMkdirSync, mockUnlinkSync, mockExecFile } = vi.hoisted(() => ({
+  mockCreateTerminal: vi.fn(), mockShowWarningMessage: vi.fn(), mockOnDidCloseTerminal: vi.fn(),
+  mockWriteFileSync: vi.fn(), mockExistsSync: vi.fn(() => false), mockMkdirSync: vi.fn(),
+  mockUnlinkSync: vi.fn(), mockExecFile: vi.fn(),
+}));
 
 vi.mock("vscode", () => ({
   window: {
@@ -16,19 +19,12 @@ vi.mock("vscode", () => ({
   Terminal: vi.fn(),
 }));
 
-const mockWriteFileSync = vi.fn();
-const mockExistsSync = vi.fn(() => false);
-const mockMkdirSync = vi.fn();
-const mockUnlinkSync = vi.fn();
-
 vi.mock("fs", () => ({
   writeFileSync: mockWriteFileSync,
   existsSync: mockExistsSync,
   mkdirSync: mockMkdirSync,
   unlinkSync: mockUnlinkSync,
 }));
-
-const mockExecFile = vi.fn();
 
 vi.mock("child_process", () => ({
   execFile: mockExecFile,
@@ -94,7 +90,7 @@ describe("TerminalManager", () => {
     it("should create the global storage directory if it does not exist", () => {
       mockExistsSync.mockReturnValue(false);
       new TerminalManager("/another/path");
-      expect(mockMkdirSync).toHaveBeenCalledWith("/another", { recursive: true });
+      expect(mockMkdirSync).toHaveBeenCalledWith("/another/path", { recursive: true });
     });
 
     it("should not recreate known_hosts if it already exists", () => {
@@ -140,7 +136,7 @@ describe("TerminalManager", () => {
         if (cmd === "ssh-keygen") {
           cb(null, "# Host knownhost found\nknownhost ssh-rsa AAAA", "");
         } else {
-          cb(new Error("Host key verification failed"), "", "Host key verification failed");
+          cb(null, "", "");
         }
       });
 
@@ -185,9 +181,7 @@ describe("TerminalManager", () => {
 
       const call = mockCreateTerminal.mock.calls[0][0];
       const sshArgs = call.shellArgs;
-      const knownHostsIdx = sshArgs.indexOf("-o");
-      const knownHostsArg = sshArgs[knownHostsIdx + 1];
-      expect(knownHostsArg).toContain("UserKnownHostsFile=/global/storage/known_hosts");
+      expect(sshArgs).toContain("UserKnownHostsFile=/global/storage/known_hosts");
     });
   });
 

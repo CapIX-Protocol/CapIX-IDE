@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const mockShowInfoMsg = vi.fn();
-const mockShowErrorMsg = vi.fn();
-const mockShowWarnMsg = vi.fn();
-const mockShowQuickPick = vi.fn();
-const mockWithProgress = vi.fn();
+const { mockShowInfoMsg, mockShowErrorMsg, mockShowWarnMsg, mockShowQuickPick,
+  mockWithProgress, mockExistsSync, mockReadFileSync, mockWriteFileSync, mockMkdirSync } = vi.hoisted(() => ({
+  mockShowInfoMsg: vi.fn(), mockShowErrorMsg: vi.fn(), mockShowWarnMsg: vi.fn(),
+  mockShowQuickPick: vi.fn(), mockWithProgress: vi.fn(), mockExistsSync: vi.fn(() => false),
+  mockReadFileSync: vi.fn(), mockWriteFileSync: vi.fn(), mockMkdirSync: vi.fn(),
+}));
 
 vi.mock("vscode", () => ({
   window: {
@@ -24,11 +25,6 @@ vi.mock("vscode", () => ({
   ConfigurationTarget: { Global: 1 },
   ProgressLocation: { Notification: 1 },
 }));
-
-const mockExistsSync = vi.fn(() => false);
-const mockReadFileSync = vi.fn();
-const mockWriteFileSync = vi.fn();
-const mockMkdirSync = vi.fn();
 
 vi.mock("node:fs", () => ({
   existsSync: mockExistsSync,

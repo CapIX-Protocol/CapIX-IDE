@@ -46,17 +46,13 @@ describe("CapixClient", () => {
   });
 
   describe("baseUrl", () => {
-    it("should return the configured baseUrl", () => {
+    it("ignores a workspace-controlled baseUrl", () => {
       mockGetConfig.mockReturnValue(createConfigMock("https://custom.capix.network"));
-      expect(client.baseUrl).toBe("https://custom.capix.network");
+      expect(client.baseUrl).toBe("https://www.capix.network");
     });
 
-    it("should fall back to default when config returns undefined", () => {
-      mockGetConfig.mockReturnValue({
-        get: vi.fn((_key: string, defaultValue?: unknown) => defaultValue),
-        update: vi.fn(),
-      });
-      expect(client.baseUrl).toBe("https://capix.network");
+    it("uses the compiled production origin", () => {
+      expect(client.baseUrl).toBe(CapixClient.PRODUCTION_BASE_URL);
     });
   });
 
@@ -140,7 +136,7 @@ describe("CapixClient", () => {
       await client.get("/api/llm/models");
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://capix.network/api/llm/models",
+        "https://www.capix.network/api/llm/models",
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: "Bearer cpx_session.get-token",
@@ -153,7 +149,7 @@ describe("CapixClient", () => {
       await client.get("/api/cloud/billing");
 
       const url = fetchMock.mock.calls[0][0];
-      expect(url).toBe("https://capix.network/api/cloud/billing");
+      expect(url).toBe("https://www.capix.network/api/cloud/billing");
     });
 
     it("should parse JSON response", async () => {
@@ -176,7 +172,7 @@ describe("CapixClient", () => {
       await client.post("/api/llm/deploy", { modelId: "test-model" });
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://capix.network/api/llm/deploy",
+        "https://www.capix.network/api/llm/deploy",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({
@@ -204,7 +200,7 @@ describe("CapixClient", () => {
       await client.delete("/api/llm/42");
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://capix.network/api/llm/42",
+        "https://www.capix.network/api/llm/42",
         expect.objectContaining({
           method: "DELETE",
           headers: expect.objectContaining({
@@ -244,40 +240,6 @@ describe("CapixClient", () => {
     });
   });
 
-  describe("saveSessionToken", () => {
-    it("should store token in SecretStorage and clear plaintext setting", async () => {
-      const secretStorage = createMockSecretStorage();
-      client.setSecretStorage(secretStorage);
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      mockGetConfig.mockReturnValue({
-        get: vi.fn(),
-        update: mockUpdate,
-      });
-
-      await client.saveSessionToken("cpx_session.new-token");
-
-      expect(secretStorage.store).toHaveBeenCalledWith("capix.sessionToken", "cpx_session.new-token");
-      expect(mockUpdate).toHaveBeenCalledWith("sessionToken", undefined, 1);
-    });
-
-    it("should cache the token in memory after saving", async () => {
-      const secretStorage = createMockSecretStorage();
-      client.setSecretStorage(secretStorage);
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      mockGetConfig.mockReturnValue({
-        get: vi.fn(),
-        update: mockUpdate,
-      });
-
-      await client.saveSessionToken("cpx_session.cached");
-
-      await client.get("/api/test");
-
-      const headers = fetchMock.mock.calls[0][1].headers;
-      expect(headers.Authorization).toBe("Bearer cpx_session.cached");
-    });
-  });
-
   describe("chat method", () => {
     it("should use the provided API key when passed", async () => {
       await client.chat(
@@ -306,21 +268,16 @@ describe("CapixClient", () => {
       );
 
       const url = fetchMock.mock.calls[0][0];
-      expect(url).toBe("https://capix.network/api/v1/chat/completions");
+      expect(url).toBe("https://www.capix.network/api/v1/chat/completions");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
       expect(body.model).toBe("gpt-4");
     });
   });
 
-  describe("baseUrl validation (W3-T3)", () => {
-    it("should validate HTTPS baseUrl", () => {
-      mockGetConfig.mockReturnValue(createConfigMock("https://secure.capix.network"));
-      expect(client.baseUrl).toBe("https://secure.capix.network");
-    });
-
-    it("should throw on non-HTTPS baseUrl", () => {
+  describe("baseUrl trust boundary (W3-T3)", () => {
+    it("ignores an insecure workspace override", () => {
       mockGetConfig.mockReturnValue(createConfigMock("http://insecure.capix.network"));
-      expect(() => client.baseUrl).toThrow("baseUrl must use HTTPS");
+      expect(client.baseUrl).toBe("https://www.capix.network");
     });
   });
 
