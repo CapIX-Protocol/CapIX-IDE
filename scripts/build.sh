@@ -14,7 +14,7 @@ fi
 cd "$VSCODE"
 export NODE_OPTIONS="--max-old-space-size=8192"
 
-# Capture the exact source commit being built from. This is the Void/Capix
+# Capture the exact source commit being built from. This is the Capix
 # overlay tree, NOT an upstream clone — build.sh never fetches anything.
 SOURCE_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
 echo "=== Capix IDE build (UNSIGNED) ==="

@@ -6,7 +6,7 @@
  *
  *  This module connects the CapixIDE graphitor/agent UI to the real Capix inference
  *  provider through the generated Capix SDK and the bundled Capix Agent Runtime. It does
- *  NOT use Void's provider path, a handwritten `fetch`, or an OpenAI-compatible shim that
+ *  NOT use the inherited provider path, a handwritten `fetch`, or an OpenAI-compatible shim that
  *  would lose tool-call streaming, cancellation, typed errors, receipt metadata or usage
  *  (architecture §11.5, §6.5; master prompt I5).
  *

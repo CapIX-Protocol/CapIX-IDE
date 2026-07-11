@@ -204,9 +204,9 @@ async function viewReceipt(
 
 async function pickResourceKind(): Promise<"dedicated-gpu" | "private-llm" | "cpu-vps" | undefined> {
 	const items: vscode.QuickPickItem[] = [
-		{ label: "Dedicated GPU", description: "dedicated-gpu", detail: "Bare-metal GPU instance (Vast)." },
+		{ label: "Dedicated GPU", description: "dedicated-gpu", detail: "Bare-metal GPU instance." },
 		{ label: "Private LLM", description: "private-llm", detail: "Dedicated private model endpoint." },
-		{ label: "CPU VPS", description: "cpu-vps", detail: "CPU virtual private server (Hetzner)." },
+		{ label: "CPU VPS", description: "cpu-vps", detail: "CPU virtual private server." },
 	];
 	const choice = await vscode.window.showQuickPick(items, { placeHolder: "Resource kind" });
 	const desc = choice?.description;
