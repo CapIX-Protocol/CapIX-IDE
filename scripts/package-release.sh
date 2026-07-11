@@ -22,7 +22,7 @@ elif [ "$PLATFORM" = win32 ]; then
   }
 else
   CONTENT="$BUILD_ROOT"
-  find "$CONTENT" -maxdepth 2 -type f -name 'capixide' -perm -111 -print -quit | grep -q . || {
+  find "$CONTENT" -maxdepth 3 -type f \( -name 'capix' -o -name 'capixide' \) -perm -111 -print -quit | grep -q . || {
     echo "ERROR: missing Linux executable"; exit 1;
   }
 fi
