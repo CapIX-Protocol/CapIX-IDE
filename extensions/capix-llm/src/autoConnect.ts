@@ -32,6 +32,9 @@ export class AutoConnectManager {
    * the chat provider settings.
    */
   watchDeploy(instanceId: number, modelLabel: string): void {
+    // Canonical saga deployments use opaque saga IDs and are observed through
+    // `/api/v1/gpu`; never poll the retired numeric legacy route.
+    if (instanceId <= 0) return;
     if (this.watched.has(instanceId)) return;
     this.watched.add(instanceId);
 
@@ -112,6 +115,7 @@ export class AutoConnectManager {
    * auto-configure from the most recent one.
    */
   async checkExistingDeploys(): Promise<void> {
+    if (!await this.client.checkConfigured()) return;
     try {
       const res = await this.client.listDeploys();
       if (!res.ok) return;
@@ -131,6 +135,11 @@ export class AutoConnectManager {
           this.watchDeploy(d.live.instanceId, d.live.modelLabel);
         }
       }
-    } catch (err) { logger.error("checkExistingDeploys failed", { error: String(err) }); }
+    } catch (err) {
+      const status=(err as {status?:number}).status;
+      if(status===401) logger.info("Auto-connect is waiting for a refreshed Capix session");
+      else if(status===503) logger.info("Auto-connect is waiting for the deployment service");
+      else logger.error("checkExistingDeploys failed", { error: String(err) });
+    }
   }
 }

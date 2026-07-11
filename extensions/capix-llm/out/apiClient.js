@@ -181,7 +181,24 @@ class CapixClient {
     }
     // ── List + status of user's deploys ────────────────────────────────────
     async listDeploys() {
-        return this.get("/api/llm/0?action=list");
+        const result = await this.get("/api/v1/gpu");
+        return {
+            ok: result.ok,
+            deploys: (result.sagas || []).map((saga) => ({
+                instance: { id: saga.sagaId, tier: saga.workload === "llm" ? `LLM · ${saga.modelId || "Private model"}` : "Dedicated GPU", status: saga.state.toLowerCase(), expiresAt: saga.expiresAt },
+                live: {
+                    instanceId: 0,
+                    modelLabel: saga.modelId || (saga.workload === "llm" ? "Private model" : "Dedicated GPU"),
+                    state: saga.state === "ACTIVE" ? "running" : saga.state === "TERMINATED" || saga.state === "COMPENSATED" ? "stopped" : "loading",
+                    endpoint: null,
+                    ready: false,
+                    apiKey: null,
+                    gpu: "",
+                    location: "",
+                    pricePerHr: 0,
+                },
+            })),
+        };
     }
     async getDeployStatus(instanceId) {
         return this.get(`/api/llm/${instanceId}?action=status`);

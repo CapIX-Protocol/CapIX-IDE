@@ -103,7 +103,13 @@ class DeploysTreeProvider {
             this.refresh();
         }
         catch (err) {
-            logger_1.logger.error("DeploysTreeProvider.load failed", { error: String(err) });
+            const status = err.status;
+            if (status === 401)
+                logger_1.logger.info("Deploys are waiting for a refreshed Capix session");
+            else if (status === 503)
+                logger_1.logger.info("Deploys are temporarily unavailable");
+            else
+                logger_1.logger.error("DeploysTreeProvider.load failed", { error: String(err) });
             this.deploys = [];
             this.refresh();
         }

@@ -98,12 +98,9 @@ export class AgentsTreeProvider implements vscode.TreeDataProvider<CloudItem> {
   refresh(): void { this._onDidChange.fire(); }
 
   async load(): Promise<void> {
-    try {
-      const res = await this.client.getAgents();
-      if (res.ok && (res as { agents?: CloudAgent[] }).agents) {
-        this.agents = (res as { agents: CloudAgent[] }).agents;
-      }
-    } catch (err) { logger.error("AgentsTreeProvider.load failed", { error: String(err) }); this.agents = []; }
+    // Customer launch: agent deployment is intentionally disabled. Do not hit
+    // a disabled production route and misreport that expected state as a fault.
+    this.agents = [];
     this.refresh();
   }
 
@@ -113,9 +110,7 @@ export class AgentsTreeProvider implements vscode.TreeDataProvider<CloudItem> {
     if (!await this.client.checkConfigured()) {
       return [CloudItem.info("Connect wallet to view agents")];
     }
-    if (this.agents.length === 0) {
-      return [CloudItem.info("No agent deploys — deploy a GitHub repo")];
-    }
+    if (this.agents.length === 0) return [CloudItem.info("Agent deployment — coming later")];
     return this.agents.map((a) => {
       const item = new CloudItem(a.repoName, "capix-agent", vscode.TreeItemCollapsibleState.None);
       item.description = `${a.status} · ${a.nodeGpu} · ${a.nodeLocation}`;
@@ -138,12 +133,7 @@ export class JobsTreeProvider implements vscode.TreeDataProvider<CloudItem> {
   refresh(): void { this._onDidChange.fire(); }
 
   async load(): Promise<void> {
-    try {
-      const res = await this.client.getJobs();
-      if (res.ok && (res as { jobs?: CloudJob[] }).jobs) {
-        this.jobs = (res as { jobs: CloudJob[] }).jobs;
-      }
-    } catch (err) { logger.error("JobsTreeProvider.load failed", { error: String(err) }); this.jobs = []; }
+    this.jobs = [];
     this.refresh();
   }
 
@@ -151,7 +141,7 @@ export class JobsTreeProvider implements vscode.TreeDataProvider<CloudItem> {
 
   async getChildren(): Promise<CloudItem[]> {
     if (!await this.client.checkConfigured()) return [CloudItem.info("Connect wallet to view jobs")];
-    if (this.jobs.length === 0) return [CloudItem.info("No serverless jobs")];
+    if (this.jobs.length === 0) return [CloudItem.info("Serverless jobs — coming later")];
     return this.jobs.map((j) => {
       const item = new CloudItem(j.name, "capix-job", vscode.TreeItemCollapsibleState.None);
       item.description = `${j.status} · ${j.nodeGpu}`;
@@ -174,12 +164,9 @@ export class ApiKeysTreeProvider implements vscode.TreeDataProvider<CloudItem> {
   refresh(): void { this._onDidChange.fire(); }
 
   async load(): Promise<void> {
-    try {
-      const res = await this.client.getApiKeys();
-      if (res.ok && (res as { keys?: CloudApiKey[] }).keys) {
-        this.keys = (res as { keys: CloudApiKey[] }).keys;
-      }
-    } catch (err) { logger.error("ApiKeysTreeProvider.load failed", { error: String(err) }); this.keys = []; }
+    // Desktop chat uses the short-lived OAuth session; customers do not need
+    // to create or paste a portal API key.
+    this.keys = [];
     this.refresh();
   }
 
@@ -187,7 +174,7 @@ export class ApiKeysTreeProvider implements vscode.TreeDataProvider<CloudItem> {
 
   async getChildren(): Promise<CloudItem[]> {
     if (!await this.client.checkConfigured()) return [CloudItem.info("Connect wallet to view API keys")];
-    if (this.keys.length === 0) return [CloudItem.info("No API keys — create one for chat")];
+    if (this.keys.length === 0) return [CloudItem.info("OAuth connected · no API key required")];
     return this.keys.map((k) => {
       const item = new CloudItem(k.name, "capix-apikey", vscode.TreeItemCollapsibleState.None);
       item.description = `${k.keyPrefix} · ${k.status} · ${k.totalRequests} reqs`;
