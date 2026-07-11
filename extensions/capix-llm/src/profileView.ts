@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { CapixClient } from "./apiClient";
+import { CapixApiError, CapixClient } from "./apiClient";
 import { logger } from "./logger";
 
 interface BillingData {
@@ -36,6 +36,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
   private billing: BillingData | null = null;
   private baseTreasury: BaseTreasury | null = null;
   private loading = false;
+  private billingError: string | null = null;
 
   constructor(
     private client: CapixClient,
@@ -56,7 +57,9 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
   async refresh() {
     if (!this.view) return;
     this.loading = true;
+    this.billingError = null;
     this.view.webview.postMessage({ type: "loading", value: true });
+    this.view.webview.postMessage({ type: "billingError", value: null });
 
     try {
       const configured = await this.client.checkConfigured();
@@ -85,11 +88,17 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       }
     } catch (err) {
       logger.error("ProfileViewProvider.refresh failed", { error: String(err) });
+      this.billingError = err instanceof CapixApiError && err.status === 401
+        ? "Your Capix session expired. Select Connect Wallet to sign in again."
+        : err instanceof CapixApiError && err.status === 503
+          ? "Billing is temporarily unavailable. Your balance is safe; retry shortly."
+          : "Billing could not be loaded. Check your connection and retry.";
     } finally {
       this.loading = false;
       this.view.webview.postMessage({ type: "loading", value: false });
       this.view.webview.postMessage({ type: "billing", value: this.billing });
       this.view.webview.postMessage({ type: "treasury", value: this.baseTreasury });
+      this.view.webview.postMessage({ type: "billingError", value: this.billingError });
     }
   }
 
@@ -394,6 +403,8 @@ ${cspMeta}
         document.body.classList.toggle('loading', msg.value);
       } else if (msg.type === 'billing') {
         render(msg.value);
+      } else if (msg.type === 'billingError' && msg.value) {
+        document.getElementById('content').innerHTML = '<div class="connect-prompt"><p>' + esc(msg.value) + '</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'topUp\' })">Connect Wallet</button></div>';
       } else if (msg.type === 'auth') {
         isConfigured = Boolean(msg.configured);
       } else if (msg.type === 'treasury') {

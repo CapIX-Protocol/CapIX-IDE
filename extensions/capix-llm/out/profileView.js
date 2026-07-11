@@ -42,6 +42,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProfileViewProvider = void 0;
 const vscode = __importStar(require("vscode"));
+const apiClient_1 = require("./apiClient");
+const logger_1 = require("./logger");
 class ProfileViewProvider {
     client;
     extensionUri;
@@ -49,6 +51,7 @@ class ProfileViewProvider {
     billing = null;
     baseTreasury = null;
     loading = false;
+    billingError = null;
     constructor(client, extensionUri) {
         this.client = client;
         this.extensionUri = extensionUri;
@@ -67,8 +70,16 @@ class ProfileViewProvider {
         if (!this.view)
             return;
         this.loading = true;
+        this.billingError = null;
         this.view.webview.postMessage({ type: "loading", value: true });
+        this.view.webview.postMessage({ type: "billingError", value: null });
         try {
+            const configured = await this.client.checkConfigured();
+            this.view.webview.postMessage({ type: "auth", configured });
+            if (!configured) {
+                this.billing = null;
+                return;
+            }
             const [billingRes, treasuryRes] = await Promise.all([
                 this.client.getBalance(),
                 this.client.getBaseTreasury().catch(() => ({ ok: false })),
@@ -86,14 +97,20 @@ class ProfileViewProvider {
                 this.baseTreasury = treasuryRes;
             }
         }
-        catch {
-            // network error — show retry
+        catch (err) {
+            logger_1.logger.error("ProfileViewProvider.refresh failed", { error: String(err) });
+            this.billingError = err instanceof apiClient_1.CapixApiError && err.status === 401
+                ? "Your Capix session expired. Select Connect Wallet to sign in again."
+                : err instanceof apiClient_1.CapixApiError && err.status === 503
+                    ? "Billing is temporarily unavailable. Your balance is safe; retry shortly."
+                    : "Billing could not be loaded. Check your connection and retry.";
         }
         finally {
             this.loading = false;
             this.view.webview.postMessage({ type: "loading", value: false });
             this.view.webview.postMessage({ type: "billing", value: this.billing });
             this.view.webview.postMessage({ type: "treasury", value: this.baseTreasury });
+            this.view.webview.postMessage({ type: "billingError", value: this.billingError });
         }
     }
     handleMessage(msg) {
@@ -396,6 +413,10 @@ ${cspMeta}
         document.body.classList.toggle('loading', msg.value);
       } else if (msg.type === 'billing') {
         render(msg.value);
+      } else if (msg.type === 'billingError' && msg.value) {
+        document.getElementById('content').innerHTML = '<div class="connect-prompt"><p>' + esc(msg.value) + '</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'topUp\' })">Connect Wallet</button></div>';
+      } else if (msg.type === 'auth') {
+        isConfigured = Boolean(msg.configured);
       } else if (msg.type === 'treasury') {
         renderTreasury(msg.value);
       }

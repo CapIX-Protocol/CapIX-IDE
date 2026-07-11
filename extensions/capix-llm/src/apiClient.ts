@@ -61,7 +61,7 @@ export class CapixClient {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  private async refreshOAuthToken(): Promise<boolean> {
+  private async refreshOAuthToken(recoverCrossWindow = true): Promise<boolean> {
     const refreshToken = await this._secretStorage?.get("capix.refreshToken");
     if (!refreshToken) return false;
     const response = await fetch(`${CapixClient.PRODUCTION_BASE_URL}/oauth/token`, {
@@ -70,7 +70,27 @@ export class CapixClient {
       body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: "capix-ide" }),
     });
     const tokens = await response.json() as { access_token?: string; refresh_token?: string };
-    if (!response.ok || !tokens.access_token) { this._sessionToken = null; return false; }
+    if (!response.ok || !tokens.access_token) {
+      // SecretStorage is shared by all CapixIDE windows, but each extension host
+      // has its own in-memory token cache. A second window can lose the refresh
+      // rotation race after the first window has already stored fresh tokens.
+      // Adopt those credentials instead of leaving this window permanently 401.
+      if (recoverCrossWindow && this._secretStorage) {
+        const [storedAccess, storedRefresh] = await Promise.all([
+          this._secretStorage.get("capix.sessionToken"),
+          this._secretStorage.get("capix.refreshToken"),
+        ]);
+        if (storedAccess && storedAccess !== this._sessionToken) {
+          this._sessionToken = storedAccess;
+          return true;
+        }
+        if (storedRefresh && storedRefresh !== refreshToken) {
+          return this.refreshOAuthToken(false);
+        }
+      }
+      this._sessionToken = null;
+      return false;
+    }
     await this.saveOAuthTokens(tokens.access_token, tokens.refresh_token || refreshToken);
     return true;
   }
@@ -98,7 +118,9 @@ export class CapixClient {
 
   async get<T = unknown>(path: string): Promise<T> {
     const res = await this.authenticatedFetch(`${this.baseUrl}${path}`);
-    return res.json() as Promise<T>;
+    const data = await res.json().catch(() => ({})) as T & { error?: string };
+    if (res.ok === false) throw new CapixApiError(res.status, data.error || `request_failed_${res.status}`);
+    return data;
   }
 
   async post<T = unknown>(path: string, body: unknown): Promise<T> {
@@ -304,5 +326,12 @@ export class CapixClient {
 
   async mintDevTokens(reason: string, proof: { sessionId?: string; repoHash?: string; commitSha?: string; toolUsed: "capix-code" | "capix-ide" }): Promise<{ ok: boolean; mint?: unknown; message?: string; error?: string }> {
     return this.post("/api/devtokens", { reason, proof });
+  }
+}
+
+export class CapixApiError extends Error {
+  constructor(public readonly status: number, public readonly code: string) {
+    super(code);
+    this.name = "CapixApiError";
   }
 }

@@ -5,7 +5,8 @@
  * never be able to redirect an authenticated request.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CapixClient = void 0;
+exports.CapixApiError = exports.CapixClient = void 0;
+const node_crypto_1 = require("node:crypto");
 class CapixClient {
     static PRODUCTION_BASE_URL = "https://www.capix.network";
     /** Cached session token (loaded from SecretStorage on first use) */
@@ -57,7 +58,7 @@ class CapixClient {
         const token = await this.getStoredToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
     }
-    async refreshOAuthToken() {
+    async refreshOAuthToken(recoverCrossWindow = true) {
         const refreshToken = await this._secretStorage?.get("capix.refreshToken");
         if (!refreshToken)
             return false;
@@ -68,6 +69,23 @@ class CapixClient {
         });
         const tokens = await response.json();
         if (!response.ok || !tokens.access_token) {
+            // SecretStorage is shared by all CapixIDE windows, but each extension host
+            // has its own in-memory token cache. A second window can lose the refresh
+            // rotation race after the first window has already stored fresh tokens.
+            // Adopt those credentials instead of leaving this window permanently 401.
+            if (recoverCrossWindow && this._secretStorage) {
+                const [storedAccess, storedRefresh] = await Promise.all([
+                    this._secretStorage.get("capix.sessionToken"),
+                    this._secretStorage.get("capix.refreshToken"),
+                ]);
+                if (storedAccess && storedAccess !== this._sessionToken) {
+                    this._sessionToken = storedAccess;
+                    return true;
+                }
+                if (storedRefresh && storedRefresh !== refreshToken) {
+                    return this.refreshOAuthToken(false);
+                }
+            }
             this._sessionToken = null;
             return false;
         }
@@ -81,22 +99,28 @@ class CapixClient {
         return response;
     }
     get isConfigured() {
-        return Boolean(this._sessionToken && this._sessionToken.startsWith("cpx_session."));
+        return Boolean(this._sessionToken && this.isOAuthAccessToken(this._sessionToken));
     }
     /** Async config check (used by tools that can await) */
     async checkConfigured() {
         const token = await this.getStoredToken();
         this._sessionToken = token;
-        return token.startsWith("cpx_session.");
+        return this.isOAuthAccessToken(token);
+    }
+    isOAuthAccessToken(token) {
+        return token.startsWith("cpxs_") || token.startsWith("cpx_session.");
     }
     async get(path) {
         const res = await this.authenticatedFetch(`${this.baseUrl}${path}`);
-        return res.json();
+        const data = await res.json().catch(() => ({}));
+        if (res.ok === false)
+            throw new CapixApiError(res.status, data.error || `request_failed_${res.status}`);
+        return data;
     }
     async post(path, body) {
         const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "Idempotency-Key": (0, node_crypto_1.randomUUID)() },
             body: JSON.stringify(body),
         });
         return res.json();
@@ -104,6 +128,7 @@ class CapixClient {
     async delete(path) {
         const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
             method: "DELETE",
+            headers: { "Idempotency-Key": (0, node_crypto_1.randomUUID)() },
         });
         return res.json();
     }
@@ -163,7 +188,12 @@ class CapixClient {
     }
     // ── Wallet balance ────────────────────────────────────────────────────
     async getBalance() {
-        return this.get("/api/cloud/billing");
+        const result = await this.get("/api/v1/billing");
+        if (!result.ok)
+            return result;
+        const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
+        const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
+        return { ok: true, balance: { usd: usdc, sol, usdc }, activeInstances: 0, totalSpent: 0 };
     }
     // ── Billing: base treasury address for USDC on Base ───────────────────
     async getBaseTreasury() {
@@ -256,4 +286,15 @@ class CapixClient {
     }
 }
 exports.CapixClient = CapixClient;
+class CapixApiError extends Error {
+    status;
+    code;
+    constructor(status, code) {
+        super(code);
+        this.status = status;
+        this.code = code;
+        this.name = "CapixApiError";
+    }
+}
+exports.CapixApiError = CapixApiError;
 //# sourceMappingURL=apiClient.js.map

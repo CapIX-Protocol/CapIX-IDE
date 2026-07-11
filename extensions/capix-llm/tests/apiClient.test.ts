@@ -306,6 +306,36 @@ describe("CapixClient", () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
+    it("recovers when another IDE window wins refresh-token rotation", async () => {
+      const secrets = new Map([["capix.sessionToken", "cpxs_expired"], ["capix.refreshToken", "cpxsr_old"]]);
+      const storage = {
+        get: vi.fn(async (key: string) => secrets.get(key)),
+        store: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+      };
+      client.setSecretStorage(storage);
+      fetchMock
+        .mockResolvedValueOnce({ status: 401, ok: false, json: vi.fn().mockResolvedValue({ error: "unauthorized" }) })
+        .mockImplementationOnce(async () => {
+          // Simulate a different extension host completing rotation while this
+          // request was in flight and receiving invalid_grant for the old token.
+          secrets.set("capix.sessionToken", "cpxs_rotated_elsewhere");
+          secrets.set("capix.refreshToken", "cpxsr_rotated_elsewhere");
+          return { status: 400, ok: false, json: vi.fn().mockResolvedValue({ error: "invalid_grant" }) };
+        })
+        .mockResolvedValueOnce({ status: 200, ok: true, json: vi.fn().mockResolvedValue({ ok: true }) });
+
+      await expect(client.get("/api/v1/billing")).resolves.toEqual({ ok: true });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect((fetchMock.mock.calls[2]?.[1]?.headers as Record<string, string>).Authorization)
+        .toBe("Bearer cpxs_rotated_elsewhere");
+    });
+
+    it("surfaces an unauthorized API response instead of treating it as billing data", async () => {
+      client.setSecretStorage(createMockSecretStorage("cpxs_expired"));
+      fetchMock.mockResolvedValue({ status: 401, ok: false, json: vi.fn().mockResolvedValue({ error: "unauthorized" }) });
+      await expect(client.get("/api/v1/billing")).rejects.toMatchObject({ status: 401, code: "unauthorized" });
+    });
+
     it("getSecret should delegate to the secret storage", async () => {
       const secretStorage = createMockSecretStorage();
       secretStorage.get.mockResolvedValue("stored-secret-value");
