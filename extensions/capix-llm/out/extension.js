@@ -1,0 +1,922 @@
+"use strict";
+/**
+ * Capix LLM Extension — entry point.
+ *
+ * Registers three sidebar tree views (deploys, catalog, hosted) and all
+ * commands: deploy, deploy custom, destroy, stop, start, view logs, exec,
+ * copy endpoint, copy API key, connect wallet, refresh, open console.
+ *
+ * The extension talks to capix.network /api/llm/* using the session token
+ * from Settings. No local server needed — it's a thin API client.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.activate = activate;
+exports.deactivate = deactivate;
+const vscode = __importStar(require("vscode"));
+const apiClient_1 = require("./apiClient");
+const treeViews_1 = require("./treeViews");
+const cloudPanels_1 = require("./cloudPanels");
+const profileView_1 = require("./profileView");
+const terminalManager_1 = require("./terminalManager");
+const autoConnect_1 = require("./autoConnect");
+const covenant_1 = require("./covenant");
+const devTokenManager_1 = require("./devTokenManager");
+const smartRouterManager_1 = require("./smartRouterManager");
+let client;
+let deploysProvider;
+let catalogProvider;
+let hostedProvider;
+let instancesProvider;
+let agentsProvider;
+let jobsProvider;
+let apiKeysProvider;
+let profileProvider;
+let terminalManager;
+let autoConnect;
+let covenant;
+let devTokens;
+let smartRouter;
+let refreshTimer = null;
+function activate(context) {
+    client = new apiClient_1.CapixClient();
+    // Security: use VS Code SecretStorage for the session token instead of plaintext settings.json
+    client.setSecretStorage({
+        get: (key) => Promise.resolve(context.secrets.get(key)),
+        store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
+    });
+    // ── Tree views ────────────────────────────────────────────────────────
+    deploysProvider = new treeViews_1.DeploysTreeProvider(client);
+    catalogProvider = new treeViews_1.CatalogTreeProvider(client);
+    hostedProvider = new treeViews_1.HostedTreeProvider(client);
+    instancesProvider = new cloudPanels_1.InstancesTreeProvider(client);
+    agentsProvider = new cloudPanels_1.AgentsTreeProvider(client);
+    jobsProvider = new cloudPanels_1.JobsTreeProvider(client);
+    apiKeysProvider = new cloudPanels_1.ApiKeysTreeProvider(client);
+    profileProvider = new profileView_1.ProfileViewProvider(client, context.extensionUri);
+    terminalManager = new terminalManager_1.TerminalManager(context.globalStorageUri.fsPath);
+    autoConnect = new autoConnect_1.AutoConnectManager(client);
+    covenant = new covenant_1.CovenantManager(context);
+    devTokens = new devTokenManager_1.DevTokenManager(client);
+    smartRouter = new smartRouterManager_1.SmartRouterManager(client);
+    // ── Dev Token: auto-mint on git commits ────────────────────────────────
+    // Watch the VS Code SCM (git) state — when HEAD changes, a commit happened.
+    let lastHead;
+    const gitWatcher = vscode.commands.registerCommand("capix.checkCommits", async () => {
+        try {
+            const gitExt = vscode.extensions.getExtension("vscode.git");
+            if (!gitExt?.isActive)
+                return;
+            const gitApi = gitExt.exports.getAPI(1);
+            const repo = gitApi?.repositories?.[0];
+            if (!repo)
+                return;
+            const head = repo.state.HEAD?.commit;
+            if (head && head !== lastHead && lastHead !== undefined) {
+                // A new commit was made — mint tokens.
+                await devTokens.onCommit(head, repo.state.HEAD?.name);
+            }
+            lastHead = head;
+        }
+        catch { /* git extension not available */ }
+    });
+    context.subscriptions.push(gitWatcher);
+    // Poll git state every 10s (lightweight).
+    setInterval(() => vscode.commands.executeCommand("capix.checkCommits"), 10_000);
+    const deploysView = vscode.window.createTreeView("capix.llm.deploys", { treeDataProvider: deploysProvider });
+    const catalogView = vscode.window.createTreeView("capix.llm.catalog", { treeDataProvider: catalogProvider });
+    const hostedView = vscode.window.createTreeView("capix.llm.hosted", { treeDataProvider: hostedProvider });
+    const instancesView = vscode.window.createTreeView("capix.llm.instances", { treeDataProvider: instancesProvider });
+    const agentsView = vscode.window.createTreeView("capix.llm.agents", { treeDataProvider: agentsProvider });
+    const jobsView = vscode.window.createTreeView("capix.llm.jobs", { treeDataProvider: jobsProvider });
+    const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
+    context.subscriptions.push(deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider));
+    // ── Auto-refresh ───────────────────────────────────────────────────────
+    setupAutoRefresh(context);
+    // ── Auto-connect: check for ready deploys on startup ────────────────────
+    autoConnect.checkExistingDeploys();
+    // ── Branded status bar item ────────────────────────────────────────────
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 50);
+    statusBarItem.text = "$(symbol-color) Capix";
+    statusBarItem.tooltip = "Capix — Route compute, inference, and agents";
+    statusBarItem.command = "capix.refreshProfile";
+    statusBarItem.show();
+    context.subscriptions.push(statusBarItem);
+    // Update status bar text when connection state changes
+    updateStatusBar(statusBarItem);
+    // Initial load
+    refreshAll();
+    // ── Commands ──────────────────────────────────────────────────────────
+    context.subscriptions.push(
+    // LLM commands
+    vscode.commands.registerCommand("capix.deployModel", (model) => cmdDeployModel(model)), vscode.commands.registerCommand("capix.deployCustomModel", () => cmdDeployCustomModel()), vscode.commands.registerCommand("capix.destroyDeploy", (item) => cmdDestroyDeploy(item)), vscode.commands.registerCommand("capix.stopDeploy", (item) => cmdStopDeploy(item)), vscode.commands.registerCommand("capix.startDeploy", (item) => cmdStartDeploy(item)), vscode.commands.registerCommand("capix.viewLogs", (item) => cmdViewLogs(item)), vscode.commands.registerCommand("capix.execOnInstance", (item) => cmdExecOnInstance(item)), vscode.commands.registerCommand("capix.copyEndpoint", (item) => cmdCopyEndpoint(item)), vscode.commands.registerCommand("capix.copyApiKey", (item) => cmdCopyApiKey(item)), 
+    // Refresh commands
+    vscode.commands.registerCommand("capix.refreshDeploys", () => { deploysProvider.load(); }), vscode.commands.registerCommand("capix.refreshCatalog", () => { catalogProvider.load(); }), vscode.commands.registerCommand("capix.refreshInstances", () => { instancesProvider.load(); }), vscode.commands.registerCommand("capix.refreshAgents", () => { agentsProvider.load(); }), vscode.commands.registerCommand("capix.refreshJobs", () => { jobsProvider.load(); }), vscode.commands.registerCommand("capix.refreshApiKeys", () => { apiKeysProvider.load(); }), vscode.commands.registerCommand("capix.refreshProfile", () => { profileProvider.refresh(); }), 
+    // Navigation
+    vscode.commands.registerCommand("capix.openConsole", () => {
+        vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/llm`));
+    }), vscode.commands.registerCommand("capix.openBilling", () => {
+        vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
+    }), vscode.commands.registerCommand("capix.openInstance", (instanceId) => {
+        vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/instances/${instanceId}`));
+    }), vscode.commands.registerCommand("capix.connectWallet", () => cmdConnectWallet()), 
+    // Profile
+    vscode.commands.registerCommand("capix.topUp", () => cmdTopUp()), 
+    // Cloud panels
+    vscode.commands.registerCommand("capix.deployAgent", () => cmdDeployAgent()), vscode.commands.registerCommand("capix.triggerJob", () => cmdTriggerJob()), vscode.commands.registerCommand("capix.createApiKey", () => cmdCreateApiKey()), 
+    // Terminal
+    vscode.commands.registerCommand("capix.openTerminal", (item) => cmdOpenTerminal(item)), 
+    // Covenant
+    vscode.commands.registerCommand("capix.covenantEdit", () => covenant.createSpiritFile()), vscode.commands.registerCommand("capix.covenantRemember", () => cmdCovenantRemember()), vscode.commands.registerCommand("capix.covenantClear", () => {
+        covenant.clearMemory();
+        vscode.window.showInformationMessage("Capix: Memory cleared.");
+    }), 
+    // Launch Capix Code (the CLI coding assistant) in a terminal
+    vscode.commands.registerCommand("capix.launchCapixCode", () => cmdLaunchCapixCode()), 
+    // Smart Router: routing mode, private LLM deploy/destroy, memory
+    vscode.commands.registerCommand("capix.setRouteMode", () => cmdSetRouteMode()), vscode.commands.registerCommand("capix.deployPrivateLlm", () => cmdDeployPrivateLlm()), vscode.commands.registerCommand("capix.destroyPrivateLlm", () => cmdDestroyPrivateLlm()), vscode.commands.registerCommand("capix.routerMemory", () => cmdRouterMemory()), vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()), vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()), vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()));
+    // ── URI Handler: capix://capix.capix-llm/session?token=… ────────────────
+    // Allows the web console to push the session token to the IDE with one
+    // click — no manual copy-paste.  The handler validates the token format
+    // and stores it via the same SecretStorage path as cmdConnectWallet.
+    context.subscriptions.push(vscode.window.registerUriHandler({
+        handleUri(uri) {
+            if (uri.path !== "/session")
+                return;
+            const token = new URLSearchParams(uri.query).get("token");
+            if (!token || !token.startsWith("cpx_session.")) {
+                vscode.window.showErrorMessage("Capix: invalid session token in deep link.");
+                return;
+            }
+            applySessionToken(token);
+        },
+    }));
+}
+function deactivate() {
+    refreshTimer?.dispose();
+    terminalManager?.disposeAll();
+}
+// Update the Capix branded status bar item with connection state.
+async function updateStatusBar(item) {
+    try {
+        const configured = await client.checkConfigured();
+        if (configured) {
+            item.text = "$(check) Capix";
+            item.tooltip = "Capix — Connected. Click to refresh profile.";
+            item.command = "capix.refreshProfile";
+        }
+        else {
+            item.text = "$(circle-slash) Capix";
+            item.tooltip = "Capix — Not connected. Click to connect your wallet.";
+            item.command = "capix.connectWallet";
+        }
+        item.show();
+    }
+    catch {
+        item.hide();
+    }
+}
+let statusBarItem = null;
+// ── Helpers ───────────────────────────────────────────────────────────────
+function refreshAll() {
+    deploysProvider.load();
+    catalogProvider.load();
+    hostedProvider.load();
+    instancesProvider.load();
+    agentsProvider.load();
+    jobsProvider.load();
+    apiKeysProvider.load();
+    profileProvider.refresh();
+    if (statusBarItem)
+        updateStatusBar(statusBarItem);
+}
+function setupAutoRefresh(context) {
+    refreshTimer?.dispose();
+    const checkConfig = () => {
+        const interval = vscode.workspace.getConfiguration("capix").get("autoRefreshSeconds") || 30;
+        if (interval <= 0) {
+            refreshTimer = null;
+            return;
+        }
+        const handle = setInterval(() => {
+            deploysProvider.load();
+            hostedProvider.load();
+            instancesProvider.load();
+            agentsProvider.load();
+            jobsProvider.load();
+            profileProvider.refresh();
+        }, interval * 1000);
+        refreshTimer = new vscode.Disposable(() => clearInterval(handle));
+    };
+    checkConfig();
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration("capix.autoRefreshSeconds"))
+            checkConfig();
+    }));
+}
+function checkConfigured() {
+    if (!client.isConfigured) {
+        vscode.window.showWarningMessage("Capix LLM: Not connected. Set your session token in Settings to deploy and manage LLMs.", "Connect now").then((action) => {
+            if (action === "Connect now")
+                vscode.commands.executeCommand("capix.connectWallet");
+        });
+        return false;
+    }
+    return true;
+}
+// Get the deploy data from a tree item (arg) or prompt the user to pick.
+function getDeployFromItem(item) {
+    const deploy = item?._deploy;
+    if (deploy && deploy.instanceId > 0)
+        return deploy;
+    // If no item or destroyed, prompt to pick from deploys list
+    const deploys = deploysProvider.deploys.filter((d) => d.instanceId > 0);
+    if (deploys.length === 0) {
+        vscode.window.showInformationMessage("No active deploys.");
+        return null;
+    }
+    const pick = vscode.window.showQuickPick(deploys.map((d) => ({ label: d.modelLabel, description: `${d.state} · ${d.location}`, instanceId: d.instanceId, modelLabel: d.modelLabel, instanceRecordId: d.instanceRecordId })), { placeHolder: "Select a deploy" });
+    return pick.then((p) => p || null);
+}
+// ── Commands ──────────────────────────────────────────────────────────────
+// Deploy a model: model → region → GPU offer → duration → confirm
+async function cmdDeployModel(model) {
+    if (!checkConfigured())
+        return;
+    // Pick model if not passed from the catalog click
+    if (!model) {
+        const catalog = await client.getCatalog();
+        if (!catalog.ok || !catalog.models?.length) {
+            vscode.window.showErrorMessage("Failed to load model catalog.");
+            return;
+        }
+        const picked = await vscode.window.showQuickPick(catalog.models.map((m) => ({ label: m.label, description: `${m.paramB}B · ${m.minVramGb}GB VRAM`, detail: m.tagline, model: m })), { placeHolder: "Select a model to deploy" });
+        if (!picked)
+            return;
+        model = picked.model;
+    }
+    // Pick region
+    const regionPick = await vscode.window.showQuickPick([
+        { label: "Global (auto)", value: "global" },
+        { label: "Europe", value: "eu" },
+        { label: "North America", value: "us" },
+        { label: "Asia-Pacific", value: "asia" },
+    ], { placeHolder: "Select a GPU region" });
+    if (!regionPick)
+        return;
+    // Fetch offers + pick one
+    const offersRes = await client.getOffers(model.id, regionPick.value);
+    if (!offersRes.ok || !offersRes.offers?.length) {
+        vscode.window.showErrorMessage(`No live GPUs fit ${model.label} right now. Try another region or check back shortly.`);
+        return;
+    }
+    const offerPick = await vscode.window.showQuickPick(offersRes.offers.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${o.roundedPricePerHr.toFixed(2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location} · ${(o.reliability * 100).toFixed(0)}% reliability`, offer: o })), { placeHolder: "Select a GPU offer" });
+    if (!offerPick)
+        return;
+    // Pick duration
+    const durPick = await vscode.window.showQuickPick([
+        { label: "1 hour", value: 1 },
+        { label: "6 hours", value: 6 },
+        { label: "1 day", value: 24 },
+        { label: "1 week", value: 168 },
+    ], { placeHolder: "Select duration" });
+    if (!durPick)
+        return;
+    const cost = offerPick.offer.roundedPricePerHr * durPick.value;
+    // HF token for gated models
+    let hfToken;
+    if (model.gated) {
+        hfToken = await vscode.window.showInputBox({
+            prompt: "This model is gated on Hugging Face. Enter your HF token (hf_...).",
+            password: true,
+            placeHolder: "hf_...",
+            ignoreFocusOut: true,
+        });
+        if (!hfToken)
+            return;
+    }
+    // Confirm + deploy
+    const confirm = await vscode.window.showWarningMessage(`Deploy ${model.label} on ${offerPick.label} in ${offerPick.offer.location} for ${durPick.label}?\n\nCost: $${cost.toFixed(2)} (billed from your wallet balance)`, { modal: true }, "Deploy");
+    if (confirm !== "Deploy")
+        return;
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Deploying ${model.label}…`, cancellable: false }, async (progress) => {
+        progress.report({ message: "Renting GPU + booting vLLM…" });
+        const res = await client.deployModel(model.id, offerPick.offer.askId, durPick.value, undefined, hfToken);
+        if (res.ok) {
+            vscode.window.showInformationMessage(`✓ ${model.label} is provisioning (instance #${res.instanceId}).\nEndpoint will be ready in 2–10 min — check "My Deploys" for status.`, "Copy API key now").then((action) => {
+                if (action === "Copy API key now") {
+                    vscode.env.clipboard.writeText(res.apiKey);
+                    vscode.window.showInformationMessage("API key copied to clipboard.");
+                }
+            });
+            deploysProvider.load();
+        }
+        else {
+            vscode.window.showErrorMessage(res.error || "Deploy failed.");
+        }
+    });
+}
+// Deploy a custom model: paste HF link → discover specs → region → GPU → deploy
+async function cmdDeployCustomModel() {
+    if (!checkConfigured())
+        return;
+    const link = await vscode.window.showInputBox({
+        prompt: "Enter a Hugging Face model repo or URL",
+        placeHolder: "e.g. Qwen/Qwen2.5-7B-Instruct",
+        ignoreFocusOut: true,
+    });
+    if (!link)
+        return;
+    // Discover specs
+    const discovered = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Detecting model specs…" }, async () => client.discoverCustom(link));
+    let minVramGb;
+    let gpuCount;
+    let quantization = "none";
+    let gated = false;
+    if (discovered.ok && discovered.spec) {
+        const spec = discovered.spec;
+        vscode.window.showInformationMessage(`✓ Detected: ${spec.label} · ${spec.paramB ? `${spec.paramB}B params` : "unknown size"} · ${spec.minVramGb}GB VRAM required`);
+        minVramGb = spec.minVramGb;
+        gpuCount = spec.gpuCount;
+        quantization = spec.quantization;
+        gated = spec.gated;
+    }
+    else if (discovered.fallback === "manual") {
+        vscode.window.showWarningMessage("Couldn't auto-detect specs. Enter them manually.");
+        const vramPick = await vscode.window.showQuickPick(["8", "12", "16", "24", "40", "48", "80", "160"].map((v) => ({ label: `${v} GB`, value: Number(v) })), { placeHolder: "Minimum VRAM required" });
+        if (!vramPick)
+            return;
+        minVramGb = vramPick.value;
+        gpuCount = minVramGb > 80 ? 2 : 1;
+    }
+    else {
+        vscode.window.showErrorMessage(discovered.error || "Discovery failed.");
+        return;
+    }
+    // Region
+    const regionPick = await vscode.window.showQuickPick([{ label: "Global", value: "global" }, { label: "Europe", value: "eu" }, { label: "North America", value: "us" }, { label: "Asia-Pacific", value: "asia" }], { placeHolder: "Select a GPU region" });
+    if (!regionPick)
+        return;
+    // Offers
+    const offersRes = await client.getOffers("qwen2.5-3b", regionPick.value);
+    if (!offersRes.ok || !offersRes.offers?.length) {
+        vscode.window.showErrorMessage("No live GPUs fit this model right now.");
+        return;
+    }
+    const filtered = offersRes.offers.filter((o) => o.totalVramGb >= minVramGb && o.numGpus >= gpuCount);
+    if (filtered.length === 0) {
+        vscode.window.showErrorMessage(`No GPUs with ≥${minVramGb}GB VRAM available right now.`);
+        return;
+    }
+    const offerPick = await vscode.window.showQuickPick(filtered.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${o.roundedPricePerHr.toFixed(2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location}`, offer: o })), { placeHolder: "Select a GPU offer" });
+    if (!offerPick)
+        return;
+    // Duration
+    const durPick = await vscode.window.showQuickPick([{ label: "1 hour", value: 1 }, { label: "6 hours", value: 6 }, { label: "1 day", value: 24 }, { label: "1 week", value: 168 }], { placeHolder: "Select duration" });
+    if (!durPick)
+        return;
+    // HF token if gated
+    let hfToken;
+    if (gated) {
+        hfToken = await vscode.window.showInputBox({ prompt: "Gated model — enter HF token", password: true, placeHolder: "hf_...", ignoreFocusOut: true });
+        if (!hfToken)
+            return;
+    }
+    const cost = offerPick.offer.roundedPricePerHr * durPick.value;
+    const confirm = await vscode.window.showWarningMessage(`Deploy custom model from ${link}?\n\nGPU: ${offerPick.label} · Duration: ${durPick.label} · Cost: $${cost.toFixed(2)}`, { modal: true }, "Deploy");
+    if (confirm !== "Deploy")
+        return;
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Deploying custom model…" }, async () => {
+        const res = await client.deployCustomModel({
+            link, askId: offerPick.offer.askId, durationHours: durPick.value,
+            minVramGb, gpuCount, quantization, gated, hfToken,
+            manual: !discovered.ok,
+        });
+        if (res.ok) {
+            vscode.window.showInformationMessage(`✓ Custom model provisioning (instance #${res.instanceId}). Check "My Deploys" for status.`);
+            vscode.env.clipboard.writeText(res.apiKey);
+            vscode.window.showInformationMessage("API key copied to clipboard.");
+            deploysProvider.load();
+        }
+        else {
+            vscode.window.showErrorMessage(res.error || "Deploy failed.");
+        }
+    });
+}
+// Destroy a deploy (with confirmation)
+async function cmdDestroyDeploy(item) {
+    if (!checkConfigured())
+        return;
+    const deploy = getDeployFromItem(item);
+    // Handle async quickPick
+    const resolved = await Promise.resolve(deploy);
+    if (!resolved)
+        return;
+    const confirm = await vscode.window.showWarningMessage(`Destroy "${resolved.modelLabel}"?\n\nThis terminates the GPU instance and stops billing immediately. The endpoint and API key will stop working.`, { modal: true }, "Destroy");
+    if (confirm !== "Destroy")
+        return;
+    const res = await client.destroyDeploy(resolved.instanceId);
+    if (res.ok) {
+        vscode.window.showInformationMessage(`✓ Destroyed ${resolved.modelLabel} — billing stopped.`);
+        deploysProvider.load();
+    }
+    else {
+        vscode.window.showErrorMessage("Destroy failed.");
+    }
+}
+// Stop a deploy (pause without destroying)
+async function cmdStopDeploy(item) {
+    if (!checkConfigured())
+        return;
+    const deploy = await Promise.resolve(getDeployFromItem(item));
+    if (!deploy)
+        return;
+    const res = await client.stopInstance(deploy.instanceRecordId);
+    if (res.ok) {
+        vscode.window.showInformationMessage(`⏸ Stopped ${deploy.modelLabel}.`);
+        deploysProvider.load();
+    }
+    else {
+        vscode.window.showErrorMessage("Stop failed.");
+    }
+}
+// Start a stopped deploy
+async function cmdStartDeploy(item) {
+    if (!checkConfigured())
+        return;
+    const deploy = await Promise.resolve(getDeployFromItem(item));
+    if (!deploy)
+        return;
+    const res = await client.startInstance(deploy.instanceRecordId);
+    if (res.ok) {
+        vscode.window.showInformationMessage(`▶ Started ${deploy.modelLabel}.`);
+        deploysProvider.load();
+    }
+    else {
+        vscode.window.showErrorMessage("Start failed.");
+    }
+}
+// View vLLM boot/server logs
+async function cmdViewLogs(item) {
+    if (!checkConfigured())
+        return;
+    const deploy = await Promise.resolve(getDeployFromItem(item));
+    if (!deploy)
+        return;
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Fetching logs for ${deploy.modelLabel}…` }, async () => {
+        const res = await client.getLogs(deploy.instanceId);
+        if (res.ok && res.logs) {
+            // Show in an output channel
+            const channel = vscode.window.createOutputChannel(`Capix LLM: ${deploy.modelLabel} Logs`, "log");
+            channel.clear();
+            channel.appendLine(`# Logs for ${deploy.modelLabel} (instance #${deploy.instanceId})`);
+            channel.appendLine(`# Source: ${res.source}`);
+            channel.appendLine("");
+            channel.append(res.logs);
+            channel.show();
+        }
+        else {
+            vscode.window.showWarningMessage(res.error || "No logs available yet — the instance may still be booting.");
+        }
+    });
+}
+// Commands that are safe to execute without explicit confirmation.
+const EXEC_ALLOWLIST = new Set([
+    "nvidia-smi",
+    "docker ps",
+    "docker logs",
+    "df -h",
+    "free -h",
+    "ps aux",
+    "uptime",
+    "whoami",
+    "hostname",
+    "ls",
+    "cat /etc/os-release",
+]);
+// Run a debug command on the GPU instance
+async function cmdExecOnInstance(item) {
+    if (!checkConfigured())
+        return;
+    const deploy = await Promise.resolve(getDeployFromItem(item));
+    if (!deploy)
+        return;
+    // Quick presets + custom
+    const presets = [
+        { label: "nvidia-smi", detail: "GPU utilization + memory" },
+        { label: "docker ps", detail: "Running containers" },
+        { label: "docker logs vllm --tail 100", detail: "vLLM container logs" },
+        { label: "ps aux | head -20", detail: "Top processes" },
+        { label: "df -h", detail: "Disk usage" },
+        { label: "free -h", detail: "Memory usage" },
+        { label: "$(custom)", detail: "Enter a custom command" },
+    ];
+    const pick = await vscode.window.showQuickPick(presets, { placeHolder: `Run a command on ${deploy.modelLabel}` });
+    if (!pick)
+        return;
+    let command = pick.label;
+    if (pick.label === "$(custom)") {
+        command = await vscode.window.showInputBox({ prompt: "Enter a shell command", placeHolder: "nvidia-smi", ignoreFocusOut: true }) || "";
+        if (!command)
+            return;
+    }
+    // Require explicit confirmation for any command not on the safe allowlist.
+    if (!EXEC_ALLOWLIST.has(command.trim())) {
+        const confirm = await vscode.window.showWarningMessage("This will execute an arbitrary command on your GPU instance. Continue?", "Run it", "Cancel");
+        if (confirm !== "Run it")
+            return;
+    }
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Running: ${command}` }, async () => {
+        const res = await client.execOnInstance(deploy.instanceId, command);
+        const channel = vscode.window.createOutputChannel(`Capix LLM: ${deploy.modelLabel} Shell`, "shell");
+        channel.clear();
+        channel.appendLine(`$ ${command}`);
+        if (res.ok) {
+            channel.append(res.stdout);
+            if (res.stderr)
+                channel.append(`\n[stderr]\n${res.stderr}`);
+        }
+        else {
+            channel.append(`[error] ${res.error || "Command failed"}`);
+        }
+        channel.show();
+    });
+}
+// Copy the OpenAI base URL to clipboard
+async function cmdCopyEndpoint(item) {
+    const deploy = await Promise.resolve(getDeployFromItem(item));
+    if (!deploy)
+        return;
+    const status = await client.getDeployStatus(deploy.instanceId);
+    if (status.ok && status.baseOpenAiUrl) {
+        vscode.env.clipboard.writeText(status.baseOpenAiUrl);
+        vscode.window.showInformationMessage(`Endpoint copied: ${status.baseOpenAiUrl}`);
+    }
+    else if (status.ok && status.endpoint) {
+        vscode.env.clipboard.writeText(`${status.endpoint}/v1`);
+        vscode.window.showInformationMessage(`Endpoint copied: ${status.endpoint}/v1`);
+    }
+    else {
+        vscode.window.showWarningMessage("Endpoint not ready yet — the model is still provisioning.");
+    }
+}
+// Copy the API key
+async function cmdCopyApiKey(modelId) {
+    // If called from a hosted endpoint item, modelId is a string
+    if (typeof modelId === "string") {
+        const res = await client.revealHostedKey(modelId);
+        if (res.ok && res.apiKey) {
+            vscode.env.clipboard.writeText(res.apiKey);
+            vscode.window.showInformationMessage("Hosted endpoint API key copied.");
+        }
+        else {
+            vscode.window.showErrorMessage(res.error || "Failed to reveal key.");
+        }
+        return;
+    }
+    // Otherwise it's a deploy item — get the key from status
+    const deploy = await Promise.resolve(getDeployFromItem(modelId));
+    if (!deploy)
+        return;
+    const status = await client.getDeployStatus(deploy.instanceId);
+    if (status.ok && status.apiKey) {
+        vscode.env.clipboard.writeText(status.apiKey);
+        vscode.window.showInformationMessage("API key copied to clipboard.");
+    }
+    else {
+        vscode.window.showWarningMessage("No API key available for this deploy.");
+    }
+}
+// ── Cloud panel commands ──────────────────────────────────────────────────
+// Deploy an agent (GitHub repo → pod)
+async function cmdDeployAgent() {
+    if (!checkConfigured())
+        return;
+    const repoUrl = await vscode.window.showInputBox({
+        prompt: "GitHub repository URL",
+        placeHolder: "https://github.com/owner/repo",
+        ignoreFocusOut: true,
+        validateInput: (v) => v.startsWith("https://github.com/") ? null : "Must be a GitHub URL",
+    });
+    if (!repoUrl)
+        return;
+    const branch = await vscode.window.showInputBox({ prompt: "Branch", placeHolder: "main", ignoreFocusOut: true }) || "main";
+    const useInference = await vscode.window.showQuickPick([{ label: "Yes", value: true }, { label: "No", value: false }], { placeHolder: "Route LLM calls via Capix Unified Inference?" });
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Deploying ${repoUrl.split("/").pop()}…` }, async () => {
+        const res = await client.deployAgent(repoUrl, branch, {}, useInference?.value || false);
+        if (res.ok) {
+            vscode.window.showInformationMessage("✓ Agent deployed — check the Agents panel.");
+            agentsProvider.load();
+            devTokens.onDeploy();
+        }
+        else {
+            vscode.window.showErrorMessage(res.error || "Agent deploy failed.");
+        }
+    });
+}
+// Trigger a serverless job
+async function cmdTriggerJob() {
+    if (!checkConfigured())
+        return;
+    const yaml = await vscode.window.showInputBox({
+        prompt: "Paste your capix-job.yml",
+        placeHolder: "apiVersion: capix/v1\nkind: ServerlessJob",
+        ignoreFocusOut: true,
+    });
+    if (!yaml)
+        return;
+    const res = await client.triggerJob(yaml);
+    if (res.ok) {
+        vscode.window.showInformationMessage("✓ Serverless job triggered — check the Jobs panel.");
+        jobsProvider.load();
+        devTokens.onDeploy();
+    }
+    else {
+        vscode.window.showErrorMessage(res.error || "Job trigger failed.");
+    }
+}
+// Create an API key (for the chat gateway)
+async function cmdCreateApiKey() {
+    if (!checkConfigured())
+        return;
+    const name = await vscode.window.showInputBox({ prompt: "API key name", placeHolder: "IDE Chat", ignoreFocusOut: true });
+    if (!name)
+        return;
+    const res = await client.createApiKey(name);
+    if (res.ok && res.secret) {
+        vscode.env.clipboard.writeText(res.secret);
+        vscode.window.showInformationMessage("✓ API key created and copied to clipboard.", res.warning || "");
+        apiKeysProvider.load();
+    }
+    else {
+        vscode.window.showErrorMessage(res.error || "Failed to create API key.");
+    }
+}
+// Open an SSH terminal to a deployed instance/agent/job
+async function cmdOpenTerminal(item) {
+    // Check if the item has SSH info (from instances or agents trees)
+    const sshHost = item?._sshHost;
+    const sshPort = item?._sshPort;
+    const sshCommand = item?._sshCommand;
+    const label = item?.label || "instance";
+    if (sshHost && sshPort) {
+        await terminalManager.openSshSession({ host: sshHost, port: sshPort, label });
+        return;
+    }
+    // If it's a plain command string (agents/jobs store full ssh commands)
+    if (sshCommand) {
+        // Parse "ssh -p PORT root@HOST"
+        const match = sshCommand.match(/ssh\s+(?:-p\s+(\d+)\s+)?(\w+)@([\w.-]+)/);
+        if (match) {
+            await terminalManager.openSshSession({ host: match[3], port: Number(match[1]) || 22, user: match[2], label });
+            return;
+        }
+    }
+    // No item — prompt the user to pick from instances
+    if (!checkConfigured())
+        return;
+    await instancesProvider.load();
+    if (instancesProvider.instances.length === 0) {
+        vscode.window.showInformationMessage("No instances available to SSH into.");
+        return;
+    }
+    const pick = await vscode.window.showQuickPick(instancesProvider.instances.map((inst) => {
+        const node = inst.nodes.find((n) => n.sshHost);
+        return {
+            label: inst.tier,
+            description: `${inst.status} · ${node?.location || ""}`,
+            host: node?.sshHost,
+            port: node?.sshPort,
+        };
+    }).filter((p) => p.host), { placeHolder: "Select an instance to SSH into" });
+    if (pick?.host && pick.port) {
+        await terminalManager.openSshSession({ host: pick.host, port: pick.port, label: pick.label });
+    }
+}
+// Covenant: add a memory entry
+async function cmdCovenantRemember() {
+    const content = await vscode.window.showInputBox({
+        prompt: "What should I remember?",
+        placeHolder: "e.g. We use Drizzle ORM, not Prisma, for this project.",
+        ignoreFocusOut: true,
+    });
+    if (!content)
+        return;
+    const typePick = await vscode.window.showQuickPick([
+        { label: "Decision", value: "decision" },
+        { label: "Pattern", value: "pattern" },
+        { label: "Feedback", value: "feedback" },
+        { label: "Context", value: "context" },
+    ], { placeHolder: "Memory type" });
+    if (!typePick)
+        return;
+    await covenant.remember({ type: typePick.value, content, source: "user" });
+    vscode.window.showInformationMessage("✓ Remembered. This will be included in future chat context.");
+    devTokens.onDecision();
+}
+// Save a session token to SecretStorage, refresh views, and auto-connect.
+// Shared by the manual "Connect Wallet" command and the deep-link URI handler.
+async function applySessionToken(token) {
+    await client.saveSessionToken(token);
+    vscode.window.showInformationMessage("✓ Capix session token saved securely. Your profile, deploys, and instances are now synced.");
+    refreshAll();
+    autoConnect.checkExistingDeploys();
+}
+// Connect wallet / set session token — shared across web and IDE
+async function cmdConnectWallet() {
+    const token = await vscode.window.showInputBox({
+        prompt: "Paste your Capix session token (cpx_session.…)",
+        password: true,
+        placeHolder: "cpx_session.eyJ...",
+        ignoreFocusOut: true,
+        validateInput: (v) => v.startsWith("cpx_session.") ? null : "Token must start with 'cpx_session.'",
+    });
+    if (!token)
+        return;
+    await applySessionToken(token);
+}
+// Top up wallet balance — shared across web and IDE
+async function cmdTopUp() {
+    if (!checkConfigured())
+        return;
+    const pick = await vscode.window.showQuickPick([
+        { label: "SOL (Solana)", description: "Deposit with your Solana wallet", value: "sol" },
+        { label: "USDC (Solana)", description: "Stablecoin on Solana", value: "usdc" },
+        { label: "USDC on Base", description: "Send from any EVM wallet", value: "usdc_base" },
+    ], { placeHolder: "Select a deposit method" });
+    if (!pick)
+        return;
+    if (pick.value === "usdc_base") {
+        const treasuryRes = await client.getBaseTreasury().catch(() => ({ ok: false }));
+        if (!treasuryRes.ok || !treasuryRes.treasury) {
+            vscode.window.showErrorMessage("Base deposits not configured. Use SOL or USDC, or top up at the web billing page.");
+            return;
+        }
+        const treasury = treasuryRes.treasury;
+        const amount = await vscode.window.showInputBox({ prompt: "Amount in USD", placeHolder: "10", ignoreFocusOut: true, validateInput: (v) => Number(v) > 0 ? null : "Enter a positive number" });
+        if (!amount)
+            return;
+        const copied = await vscode.window.showInformationMessage(`Send ${amount} USDC on Base to:\n${treasury}\n\nThen submit the tx hash.`, "Copy address", "Open Billing Page");
+        if (copied === "Copy address") {
+            vscode.env.clipboard.writeText(treasury);
+        }
+        const evmAddress = await vscode.window.showInputBox({ prompt: "Your EVM sender address (0x...)", placeHolder: "0x...", ignoreFocusOut: true, validateInput: (v) => /^0x[a-fA-F0-9]{40}$/.test(v) ? null : "Must be 0x + 40 hex chars" });
+        if (!evmAddress)
+            return;
+        const txHash = await vscode.window.showInputBox({ prompt: "Paste your Base tx hash (0x...)", placeHolder: "0x...", ignoreFocusOut: true, validateInput: (v) => v.startsWith("0x") && v.length > 20 ? null : "Must be a 0x hash" });
+        if (!txHash)
+            return;
+        await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Verifying Base transaction…" }, async () => {
+            const res = await client.submitBaseDeposit(txHash, Number(amount));
+            if (res.ok) {
+                vscode.window.showInformationMessage(`✓ Deposited $${Number(amount).toFixed(2)} — balance $${(res.balanceUsd || 0).toFixed(2)}.`);
+                profileProvider.refresh();
+            }
+            else {
+                vscode.window.showErrorMessage(res.error || "Verification failed.");
+            }
+        });
+    }
+    else {
+        vscode.window.showInformationMessage(`Open the billing page to deposit ${pick.label}.`, "Open Billing Page").then((action) => {
+            if (action === "Open Billing Page")
+                vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
+        });
+    }
+}
+// Launch capix-code (the CLI coding assistant) in a terminal, pre-configured
+// with the user's Capix endpoint + API key from SecretStorage.
+async function cmdLaunchCapixCode() {
+    // Read the auto-configured endpoint (set by auto-connect when a deploy goes live)
+    const config = vscode.workspace.getConfiguration("capix");
+    const baseUrl = config.get("ai.baseUrl") || `${client.getBaseUrl()}/api/v1`;
+    const model = config.get("ai.model") || "auto";
+    // Get the API key from SecretStorage
+    let apiKey = await client.getSecret("capix.ai.apiKey") || "";
+    // If no key from a deployed LLM, try the session token for the gateway
+    if (!apiKey) {
+        const token = await client.getStoredToken();
+        if (token.startsWith("cpx_session.")) {
+            apiKey = token;
+        }
+        else {
+            vscode.window.showWarningMessage("Capix Code: no API key configured. Set one with 'Capix: Connect Wallet' or deploy an LLM first.", "Connect Wallet").then((action) => {
+                if (action === "Connect Wallet")
+                    vscode.commands.executeCommand("capix.connectWallet");
+            });
+            return;
+        }
+    }
+    // Pass the routing mode to capix-code as an env var
+    const routeMode = smartRouter.getMode();
+    await terminalManager.openCapixCode(baseUrl, apiKey, model);
+}
+// ── Smart Router commands ─────────────────────────────────────────────────
+// Set routing mode: Auto / Private / Loop
+async function cmdSetRouteMode() {
+    const current = smartRouter.getMode();
+    const pick = await vscode.window.showQuickPick([
+        { label: "Auto", description: "Dynamically pick best model per task (reasoning vs coding)", value: "auto", picked: current === "auto" },
+        { label: "Private", description: "Use a deployed private uncensored LLM — no filters", value: "private", picked: current === "private" },
+        { label: "Loop", description: "Private LLM + continuous build until task complete, then destroy", value: "loop", picked: current === "loop" },
+    ], { placeHolder: `Current: ${current.toUpperCase()} — select a routing mode` });
+    if (!pick)
+        return;
+    await smartRouter.setMode(pick.value);
+    if (pick.value === "private" && !smartRouter.hasPrivateEndpoint()) {
+        const deploy = await vscode.window.showInformationMessage("No private LLM is deployed. Deploy one now?", "Deploy");
+        if (deploy === "Deploy") {
+            vscode.commands.executeCommand("capix.deployPrivateLlm");
+        }
+    }
+}
+// Deploy a private uncensored LLM via the Capix API
+async function cmdDeployPrivateLlm() {
+    if (!client.isConfigured) {
+        vscode.window.showWarningMessage("Connect your wallet first.", "Connect Wallet").then((a) => {
+            if (a === "Connect Wallet")
+                vscode.commands.executeCommand("capix.connectWallet");
+        });
+        return;
+    }
+    const result = await smartRouter.deployPrivateLlm();
+    if (result) {
+        // Set context key so the "Destroy Private LLM" toolbar button appears
+        vscode.commands.executeCommand("setContext", "capix.privateLlmActive", true);
+        // Update the status bar
+        if (statusBarItem) {
+            statusBarItem.text = `$(shield) Capix · ${result.modelLabel}`;
+            statusBarItem.tooltip = `Capix — Private LLM active: ${result.modelLabel}\nEndpoint: ${result.baseUrl}\nMode: ${smartRouter.getMode().toUpperCase()}\nClick to check balance.`;
+        }
+        devTokens.onDeploy();
+    }
+}
+// Destroy the private LLM + stop billing
+async function cmdDestroyPrivateLlm() {
+    await smartRouter.destroyPrivateLlm();
+    // Clear context key so the Destroy button disappears
+    vscode.commands.executeCommand("setContext", "capix.privateLlmActive", false);
+    if (statusBarItem)
+        updateStatusBar(statusBarItem);
+}
+// Show smart router memory (learned preferences)
+function cmdRouterMemory() {
+    const summary = smartRouter.getMemorySummary();
+    const channel = vscode.window.createOutputChannel("Capix Smart Router", "log");
+    channel.clear();
+    channel.append(summary);
+    channel.show();
+}
+// Block a model (never suggest again)
+async function cmdRouterBlockModel() {
+    const model = await vscode.window.showInputBox({
+        prompt: "Model ID to block (e.g. 'openai/gpt-3.5-turbo')",
+        placeHolder: "provider/model-name",
+        ignoreFocusOut: true,
+    });
+    if (model)
+        smartRouter.blockModel(model);
+}
+// Favor a model (always prefer)
+async function cmdRouterFavorModel() {
+    const model = await vscode.window.showInputBox({
+        prompt: "Model ID to favor (e.g. 'deepseek/deepseek-r1')",
+        placeHolder: "provider/model-name",
+        ignoreFocusOut: true,
+    });
+    if (model)
+        smartRouter.favorModel(model);
+}
+//# sourceMappingURL=extension.js.map

@@ -1,0 +1,13 @@
+CapixIDE is a derivative work.
+
+This product includes software developed by:
+  - Glass Devtools, Inc. (the Void editor — https://github.com/voideditor/void)
+  - Microsoft Corporation (Visual Studio Code — https://github.com/microsoft/vscode)
+
+CapixIDE-authored modifications (rebrand kit, JetBrains settings importer,
+build pipeline, packaging config) are Copyright © 2026 Capix and licensed
+under the Apache License, Version 2.0.
+
+"Void", "Visual Studio Code", and "VS Code" are trademarks of their
+respective owners and are NOT used by CapixIDE. CapixIDE ships under its
+own name and branding (see Apache-2.0 §6 — Trademarks).

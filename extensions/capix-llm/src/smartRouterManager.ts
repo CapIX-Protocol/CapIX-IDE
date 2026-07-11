@@ -1,0 +1,300 @@
+/**
+ * Capix IDE — Smart Router + Private LLM + Loop Engineering integration.
+ *
+ * This is the IDE-side counterpart to capix-code's smartRouter.ts.
+ * It mirrors the same Covenant memory system so the IDE and CLI
+ * share learned preferences.
+ *
+ * Three modes:
+ * 1. AUTO — dynamically picks the best model from OpenRouter + Surplus
+ * 2. PRIVATE — uses the user's deployed private LLM (or deploys one via MCP)
+ * 3. LOOP — same as PRIVATE, agent builds until done, then destroys LLM
+ *
+ * The router is born with memory — loads from
+ * ~/.config/capix-code/smart-router-memory.json so it knows what it
+ * learned in previous sessions (including from capix-code CLI usage).
+ */
+
+import * as vscode from "vscode";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, dirname } from "node:path";
+import { logger } from "./logger";
+
+export type TaskType = "reasoning" | "coding";
+export type RouteMode = "auto" | "private" | "loop";
+
+interface ModelRating {
+  score: number;
+  selections: number;
+  overrides: number;
+  lastUsed?: string;
+}
+
+interface SmartRouterMemory {
+  ratings: Record<string, Record<TaskType, ModelRating>>;
+  blockedModels: string[];
+  favoredModels: string[];
+  preferredProvider?: string;
+  lastPrivateEndpoint?: { baseUrl: string; instanceId: number; modelLabel: string };
+  updatedAt: string;
+}
+
+function getConfigDir(): string {
+  switch (process.platform) {
+    case "darwin": return join(homedir(), "Library", "Application Support", "capix-code");
+    case "win32": return join(homedir(), "AppData", "Roaming", "capix-code");
+    default: return join(homedir(), ".config", "capix-code");
+  }
+}
+
+const MEMORY_FILE = join(getConfigDir(), "smart-router-memory.json");
+
+function loadMemory(): SmartRouterMemory {
+  try {
+    if (!existsSync(MEMORY_FILE)) return blankMemory();
+    return JSON.parse(readFileSync(MEMORY_FILE, "utf-8")) as SmartRouterMemory;
+  } catch (err) { logger.error("loadMemory failed", { error: String(err) }); return blankMemory(); }
+}
+
+function saveMemory(mem: SmartRouterMemory): void {
+  try {
+    mkdirSync(dirname(MEMORY_FILE), { recursive: true });
+    mem.updatedAt = new Date().toISOString();
+    writeFileSync(MEMORY_FILE, JSON.stringify(mem, null, 2), "utf-8");
+  } catch (err) { logger.error("saveMemory failed", { error: String(err) }); }
+}
+
+function blankMemory(): SmartRouterMemory {
+  return { ratings: {}, blockedModels: [], favoredModels: [], updatedAt: new Date().toISOString() };
+}
+
+export class SmartRouterManager {
+  private memory: SmartRouterMemory;
+  private activePrivateEndpoint?: { baseUrl: string; apiKey: string; instanceId: number; modelLabel: string };
+
+  constructor(private client: { get: (path: string) => Promise<unknown>; post: (path: string, body: unknown) => Promise<unknown>; delete: (path: string) => Promise<unknown>; getBaseUrl: () => string; storeSecret: (key: string, value: string) => Promise<void> }) {
+    this.memory = loadMemory();
+  }
+
+  // ── Mode ────────────────────────────────────────────────────────────────
+
+  getMode(): RouteMode {
+    const env = (process.env.CAPIX_ROUTE_MODE || "auto").toLowerCase();
+    if (env === "private") return "private";
+    if (env === "loop") return "loop";
+    return "auto";
+  }
+
+  async setMode(mode: RouteMode): Promise<void> {
+    // Set the env var for child processes (capix-code terminals)
+    process.env.CAPIX_ROUTE_MODE = mode;
+    // Update VS Code terminal env
+    const config = vscode.workspace.getConfiguration("capix");
+    await config.update("routeMode", mode, vscode.ConfigurationTarget.Global);
+    vscode.window.showInformationMessage(`Capix: routing mode set to ${mode.toUpperCase()}.`);
+  }
+
+  // ── Private endpoint lifecycle ──────────────────────────────────────────
+
+  hasPrivateEndpoint(): boolean {
+    return Boolean(this.activePrivateEndpoint);
+  }
+
+  getPrivateEndpoint() {
+    return this.activePrivateEndpoint;
+  }
+
+  setPrivateEndpoint(endpoint: { baseUrl: string; apiKey: string; instanceId: number; modelLabel: string }): void {
+    this.activePrivateEndpoint = endpoint;
+    this.memory.lastPrivateEndpoint = { baseUrl: endpoint.baseUrl, instanceId: endpoint.instanceId, modelLabel: endpoint.modelLabel };
+    saveMemory(this.memory);
+  }
+
+  clearPrivateEndpoint(): void {
+    this.activePrivateEndpoint = undefined;
+    this.memory.lastPrivateEndpoint = undefined;
+    saveMemory(this.memory);
+  }
+
+  // ── Deploy a private LLM (via the Capix API) ────────────────────────────
+
+  /**
+   * Deploy a private uncensored LLM for the user's coding session.
+   * Picks the best Jiunsong model based on available GPU offers.
+   * Returns when the endpoint is ready.
+   */
+  async deployPrivateLlm(): Promise<{ baseUrl: string; apiKey: string; instanceId: number; modelLabel: string } | null> {
+    const baseUrl = this.client.getBaseUrl();
+
+    // Step 1: find uncensored models in the catalog.
+    const catalogRes = await this.client.get("/api/llm/models") as { ok: boolean; models?: Array<{ id: string; label: string; minVramGb: number; uncensored?: boolean }> };
+    if (!catalogRes.ok || !catalogRes.models) return null;
+
+    const uncensored = catalogRes.models.filter((m) => m.uncensored);
+    if (uncensored.length === 0) {
+      vscode.window.showErrorMessage("No uncensored models available in the catalog.");
+      return null;
+    }
+
+    // Step 2: let the user pick (or auto-pick the first).
+    const pick = await vscode.window.showQuickPick(
+      uncensored.map((m) => ({ label: m.label, description: `${m.minVramGb}GB VRAM`, modelId: m.id })),
+      { placeHolder: "Select a private uncensored model to deploy" },
+    );
+    if (!pick) return null;
+
+    // Step 3: find GPU offers for the selected model.
+    const offersRes = await this.client.get(`/api/llm/offers?modelId=${pick.modelId}`) as { ok: boolean; offers?: Array<{ askId: number; gpu: string; pricePerHr: number; location: string }> };
+    if (!offersRes.ok || !offersRes.offers?.length) {
+      vscode.window.showErrorMessage("No live GPU offers for that model right now.");
+      return null;
+    }
+
+    // Step 4: pick the cheapest offer.
+    const cheapest = offersRes.offers.sort((a, b) => a.pricePerHr - b.pricePerHr)[0];
+    const confirm = await vscode.window.showWarningMessage(
+      `Deploy ${pick.label} on ${cheapest.gpu} in ${cheapest.location}?\n$${cheapest.pricePerHr.toFixed(2)}/hr`,
+      { modal: true },
+      "Deploy",
+    );
+    if (confirm !== "Deploy") return null;
+
+    // Step 5: deploy + wait for ready.
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Deploying ${pick.label}...`, cancellable: false },
+      async (progress) => {
+        progress.report({ message: "Renting GPU + booting vLLM..." });
+        const deployRes = await this.client.post("/api/llm/deploy", {
+          modelId: pick.modelId,
+          askId: cheapest.askId,
+          durationHours: 1,
+        }) as { ok: boolean; instanceId?: number; apiKey?: string; error?: string };
+
+        if (!deployRes.ok || !deployRes.instanceId) {
+          throw new Error(deployRes.error || "Deploy failed");
+        }
+
+        // Poll until ready.
+        progress.report({ message: "Model downloading + booting (2-10 min)..." });
+        for (let i = 0; i < 80; i++) {
+          const status = await this.client.get(`/api/llm/${deployRes.instanceId}?action=status`) as { ok: boolean; ready?: boolean; baseOpenAiUrl?: string; modelLabel?: string };
+          if (status.ok && status.ready && status.baseOpenAiUrl) {
+            return {
+              baseUrl: status.baseOpenAiUrl,
+              apiKey: deployRes.apiKey!,
+              instanceId: deployRes.instanceId,
+              modelLabel: status.modelLabel || pick.label,
+            };
+          }
+          await new Promise((r) => setTimeout(r, 15000));
+          progress.report({ message: `Waiting for model... (${i * 15}s elapsed)` });
+        }
+        throw new Error("Timed out waiting for model to boot.");
+      },
+    );
+
+    if (result) {
+      this.setPrivateEndpoint(result);
+      vscode.window.showInformationMessage(`✓ ${result.modelLabel} is ready! Private endpoint: ${result.baseUrl}`);
+      // Mint dev tokens for the deploy.
+      this.client.storeSecret("capix.ai.apiKey", result.apiKey);
+      const config = vscode.workspace.getConfiguration("capix");
+      await config.update("ai.baseUrl", result.baseUrl, vscode.ConfigurationTarget.Global);
+      await config.update("ai.model", result.modelLabel, vscode.ConfigurationTarget.Global);
+    }
+
+    return result;
+  }
+
+  /**
+   * Destroy the active private LLM endpoint and stop billing.
+   */
+  async destroyPrivateLlm(): Promise<void> {
+    if (!this.activePrivateEndpoint) {
+      vscode.window.showInformationMessage("No private LLM endpoint active.");
+      return;
+    }
+
+    const confirm = await vscode.window.showWarningMessage(
+      `Destroy ${this.activePrivateEndpoint.modelLabel}?\nBilling stops immediately.`,
+      { modal: true },
+      "Destroy",
+    );
+    if (confirm !== "Destroy") return;
+
+    const instanceId = this.activePrivateEndpoint.instanceId;
+    const baseUrl = this.client.getBaseUrl();
+
+    try {
+      const deleteRes = await this.client.delete(`/api/llm/${instanceId}`) as { ok: boolean; error?: string };
+      if (!deleteRes.ok) {
+        throw new Error(deleteRes.error || "Destroy request failed");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to destroy LLM: ${msg}. Billing may continue — check ${baseUrl}/cloud/billing`);
+      return;
+    }
+
+    const modelLabel = this.activePrivateEndpoint.modelLabel;
+    this.clearPrivateEndpoint();
+    vscode.window.showInformationMessage(`✓ Destroyed ${modelLabel}. Billing stopped.`);
+  }
+
+  // ── Learning ────────────────────────────────────────────────────────────
+
+  recordOverride(rejectedModel: string, chosenModel: string, taskType: TaskType): void {
+    if (!this.memory.ratings[rejectedModel]) this.memory.ratings[rejectedModel] = { reasoning: { score: 0, selections: 0, overrides: 0 }, coding: { score: 0, selections: 0, overrides: 0 } };
+    this.memory.ratings[rejectedModel][taskType].overrides++;
+    if (!this.memory.ratings[chosenModel]) this.memory.ratings[chosenModel] = { reasoning: { score: 0, selections: 0, overrides: 0 }, coding: { score: 0, selections: 0, overrides: 0 } };
+    this.memory.ratings[chosenModel][taskType].selections++;
+    saveMemory(this.memory);
+  }
+
+  blockModel(model: string): void {
+    if (!this.memory.blockedModels.includes(model)) {
+      this.memory.blockedModels.push(model);
+      saveMemory(this.memory);
+      vscode.window.showInformationMessage(`Capix: blocked model '${model}'. Won't be suggested again.`);
+    }
+  }
+
+  favorModel(model: string): void {
+    if (!this.memory.favoredModels.includes(model)) {
+      this.memory.favoredModels.push(model);
+      saveMemory(this.memory);
+      vscode.window.showInformationMessage(`Capix: favored model '${model}'. Will be preferred.`);
+    }
+  }
+
+  // ── Memory inspection ──────────────────────────────────────────────────
+
+  getMemorySummary(): string {
+    const m = this.memory;
+    const topModels = Object.entries(m.ratings)
+      .sort(([, a], [, b]) => {
+        const aScore = (a.coding.selections - a.coding.overrides * 2) + (a.reasoning.selections - a.reasoning.overrides * 2);
+        const bScore = (b.coding.selections - b.coding.overrides * 2) + (b.reasoning.selections - b.reasoning.overrides * 2);
+        return bScore - aScore;
+      })
+      .slice(0, 5)
+      .map(([model, r]) => `  ${model}: coding ${r.coding.selections}× (${r.coding.overrides} overrides), reasoning ${r.reasoning.selections}× (${r.reasoning.overrides} overrides)`);
+
+    return [
+      `Routing mode: ${this.getMode().toUpperCase()}`,
+      `Private endpoint: ${this.activePrivateEndpoint ? this.activePrivateEndpoint.modelLabel : "none"}`,
+      `Blocked: ${m.blockedModels.length > 0 ? m.blockedModels.join(", ") : "none"}`,
+      `Favored: ${m.favoredModels.length > 0 ? m.favoredModels.join(", ") : "none"}`,
+      `Top models:`,
+      ...topModels,
+    ].join("\n");
+  }
+
+  resetMemory(): void {
+    this.memory = blankMemory();
+    this.activePrivateEndpoint = undefined;
+    saveMemory(this.memory);
+    vscode.window.showInformationMessage("Capix: Smart Router memory cleared.");
+  }
+}

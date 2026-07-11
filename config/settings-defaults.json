@@ -1,0 +1,24 @@
+{
+  "//": "CapixIDE default AI provider settings. Applied on first launch if the user has no existing settings.json. Users override anything here in Settings → AI.",
+  "capix.ai.enabled": true,
+  "capix.ai.defaultProvider": "capix",
+  "capix.ai.providers": {
+    "capix": {
+      "label": "Capix (self-hosted endpoint)",
+      "enabled": true,
+      "openAICompatible": true,
+      "baseURL": "",
+      "apiKey": "",
+      "note": "Paste the Base URL + API key from your LLM deploy at capix.network/cloud/llm"
+    }
+  },
+  "capix.ai.chat.model": "",
+  "capix.ai.autocomplete.enabled": false,
+  "capix.ai.autocomplete.model": "",
+  "editor.inlineSuggest.enabled": true,
+  "workbench.colorTheme": "CapixIDE Dark",
+  "chat.editor.fontSize": 13,
+  "github.copilot.advanced": { "debug.overrideChatEngine": "disabled" },
+  "telemetry.telemetryLevel": "off",
+  "telemetry.feedback.enabled": false
+}

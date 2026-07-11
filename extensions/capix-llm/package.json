@@ -1,0 +1,403 @@
+{
+  "name": "capix-llm",
+  "displayName": "Capix LLM",
+  "description": "Deploy and manage LLM endpoints on the Capix GPU network — right from the IDE.",
+  "version": "1.0.0",
+  "publisher": "capix",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Machine Learning", "Other"],
+  "icon": "resources/capix-icon.png",
+  "activationEvents": ["onStartupFinished", "onUri"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "capix-llm",
+          "title": "Capix",
+          "icon": "resources/capix-activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "capix-llm": [
+        {
+          "id": "capix.llm.profile",
+          "name": "Profile",
+          "type": "webview"
+        },
+        {
+          "id": "capix.llm.deploys",
+          "name": "My Deploys"
+        },
+        {
+          "id": "capix.llm.instances",
+          "name": "Instances"
+        },
+        {
+          "id": "capix.llm.agents",
+          "name": "Agents"
+        },
+        {
+          "id": "capix.llm.jobs",
+          "name": "Serverless Jobs"
+        },
+        {
+          "id": "capix.llm.apikeys",
+          "name": "API Keys"
+        },
+        {
+          "id": "capix.llm.catalog",
+          "name": "Model Catalog"
+        },
+        {
+          "id": "capix.llm.hosted",
+          "name": "Ready Now (Hosted)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "capix.deployModel",
+        "title": "Capix: Deploy LLM…",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "capix.deployCustomModel",
+        "title": "Capix: Deploy Custom Model (Hugging Face link)…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.destroyDeploy",
+        "title": "Capix: Destroy Deploy",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "capix.stopDeploy",
+        "title": "Capix: Stop Deploy",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "capix.startDeploy",
+        "title": "Capix: Start Deploy",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "capix.viewLogs",
+        "title": "Capix: View Deploy Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "capix.copyEndpoint",
+        "title": "Capix: Copy Endpoint URL"
+      },
+      {
+        "command": "capix.copyApiKey",
+        "title": "Capix: Copy API Key"
+      },
+      {
+        "command": "capix.refreshDeploys",
+        "title": "Capix: Refresh Deploys",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.refreshCatalog",
+        "title": "Capix: Refresh Catalog",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.openConsole",
+        "title": "Capix: Open Web Console",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "capix.connectWallet",
+        "title": "Capix: Connect Wallet / Set Session Token"
+      },
+      {
+        "command": "capix.execOnInstance",
+        "title": "Capix: Run Command on GPU Instance…",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "capix.topUp",
+        "title": "Capix: Top Up Wallet Balance…",
+        "icon": "$(credit-card)"
+      },
+      {
+        "command": "capix.refreshProfile",
+        "title": "Capix: Refresh Profile",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.openBilling",
+        "title": "Capix: Open Billing Page",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "capix.openInstance",
+        "title": "Capix: Open Instance Detail",
+        "icon": "$(link)"
+      },
+      {
+        "command": "capix.openTerminal",
+        "title": "Capix: Open SSH Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "capix.refreshInstances",
+        "title": "Capix: Refresh Instances",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.refreshAgents",
+        "title": "Capix: Refresh Agents",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.refreshJobs",
+        "title": "Capix: Refresh Jobs",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.refreshApiKeys",
+        "title": "Capix: Refresh API Keys",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.deployAgent",
+        "title": "Capix: Deploy Agent (GitHub repo)…",
+        "icon": "$(github)"
+      },
+      {
+        "command": "capix.triggerJob",
+        "title": "Capix: Trigger Serverless Job…",
+        "icon": "$(play)"
+      },
+      {
+        "command": "capix.createApiKey",
+        "title": "Capix: Create API Key…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.covenantEdit",
+        "title": "Capix: Edit Covenant (Spirit Prompt)",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "capix.covenantRemember",
+        "title": "Capix: Remember (Save to Memory)…"
+      },
+      {
+        "command": "capix.covenantClear",
+        "title": "Capix: Clear All Memory"
+      },
+      {
+        "command": "capix.launchCapixCode",
+        "title": "Capix: Launch Capix Code (CLI Assistant)",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "capix.setRouteMode",
+        "title": "Capix: Set Routing Mode (Auto / Private / Loop)…"
+      },
+      {
+        "command": "capix.deployPrivateLlm",
+        "title": "Capix: Deploy Private LLM (Uncensored)…",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "capix.destroyPrivateLlm",
+        "title": "Capix: Destroy Private LLM (Stop Billing)",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "capix.routerMemory",
+        "title": "Capix: Show Smart Router Memory"
+      },
+      {
+        "command": "capix.routerReset",
+        "title": "Capix: Reset Smart Router Memory"
+      },
+      {
+        "command": "capix.routerBlockModel",
+        "title": "Capix: Block Model (Never Suggest)…"
+      },
+      {
+        "command": "capix.routerFavorModel",
+        "title": "Capix: Favor Model (Always Prefer)…"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "capix.deployModel",
+          "when": "view == capix.llm.catalog",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.deployCustomModel",
+          "when": "view == capix.llm.catalog",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.refreshCatalog",
+          "when": "view == capix.llm.catalog",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.refreshDeploys",
+          "when": "view == capix.llm.deploys",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.setRouteMode",
+          "when": "view == capix.llm.deploys",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.deployPrivateLlm",
+          "when": "view == capix.llm.deploys",
+          "group": "navigation@3"
+        },
+        {
+          "command": "capix.destroyPrivateLlm",
+          "when": "view == capix.llm.deploys && capix.privateLlmActive",
+          "group": "navigation@4"
+        },
+        {
+          "command": "capix.routerMemory",
+          "when": "view == capix.llm.deploys",
+          "group": "navigation@5"
+        },
+        {
+          "command": "capix.launchCapixCode",
+          "when": "view == capix.llm.deploys",
+          "group": "navigation@6"
+        },
+        {
+          "command": "capix.refreshInstances",
+          "when": "view == capix.llm.instances",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.refreshAgents",
+          "when": "view == capix.llm.agents",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.refreshJobs",
+          "when": "view == capix.llm.jobs",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.refreshApiKeys",
+          "when": "view == capix.llm.apikeys",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "capix.destroyDeploy",
+          "when": "viewItem == capix-deploy",
+          "group": "inline"
+        },
+        {
+          "command": "capix.stopDeploy",
+          "when": "viewItem == capix-deploy-running",
+          "group": "inline"
+        },
+        {
+          "command": "capix.startDeploy",
+          "when": "viewItem == capix-deploy-stopped",
+          "group": "inline"
+        },
+        {
+          "command": "capix.viewLogs",
+          "when": "viewItem =~ /^capix-deploy/",
+          "group": "inline"
+        },
+        {
+          "command": "capix.copyEndpoint",
+          "when": "viewItem =~ /^capix-deploy/"
+        },
+        {
+          "command": "capix.copyApiKey",
+          "when": "viewItem =~ /^capix-deploy/"
+        },
+        {
+          "command": "capix.execOnInstance",
+          "when": "viewItem =~ /^capix-deploy/"
+        },
+        {
+          "command": "capix.destroyDeploy",
+          "when": "viewItem =~ /^capix-deploy/"
+        },
+        {
+          "command": "capix.openTerminal",
+          "when": "viewItem =~ /^capix-deploy/ || viewItem =~ /^capix-instance/ || viewItem =~ /^capix-agent/ || viewItem =~ /^capix-job/",
+          "group": "inline"
+        },
+        {
+          "command": "capix.routerBlockModel",
+          "when": "viewItem == capix-model"
+        },
+        {
+          "command": "capix.routerFavorModel",
+          "when": "viewItem == capix-model"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Capix LLM",
+      "properties": {
+        "capix.baseUrl": {
+          "type": "string",
+          "default": "https://capix.network",
+          "description": "Capix network base URL (use https://capix.network for production)."
+        },
+        "capix.autoRefreshSeconds": {
+          "type": "number",
+          "default": 30,
+          "description": "How often to auto-refresh deploy statuses (seconds). Set to 0 to disable."
+        },
+        "capix.routeMode": {
+          "type": "string",
+          "enum": ["auto", "private", "loop"],
+          "default": "auto",
+          "description": "Smart router mode: 'auto' (dynamic model selection), 'private' (use deployed private LLM), 'loop' (private + continuous build until done)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint:fix": "eslint --fix src/"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,js}": ["prettier --write", "eslint --fix"],
+    "*.{json,md}": ["prettier --write"]
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "eslint": "^9.17.0",
+    "typescript-eslint": "^8.18.0",
+    "@eslint/js": "^9.17.0",
+    "vitest": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "husky": "^9.1.0",
+    "lint-staged": "^15.3.0"
+  }
+}

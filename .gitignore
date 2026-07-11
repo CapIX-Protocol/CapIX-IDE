@@ -1,0 +1,24 @@
+# Cloned VS Code / Void source tree (~1GB) — produced by scripts/bootstrap.sh
+vscode/
+VSCode-*/
+dist/
+
+# Node
+node_modules/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Build artifacts
+*.dmg
+*.exe
+*.deb
+*.rpm
+*.AppImage
+*.snap

@@ -1,0 +1,83 @@
+# electron-builder config for CapixIDE.
+#
+# This wraps the gulp-produced VS Code `out/` + Electron into distributable
+# installers (.dmg / .exe / .deb / .rpm / AppImage). CapixIDE can also be
+# built with the VSCodium-style gulp pipeline (see scripts/build.sh); this
+# config is the path of least resistance for a small team that wants
+# electron-builder's straightforward cross-platform output.
+#
+# Usage (from the vscode/ dir after scripts/build.sh has produced the app):
+#   npx electron-builder --mac --arm64 --config ../electron-builder.yml
+#   npx electron-builder --win --x64 --config ../electron-builder.yml
+#   npx electron-builder --linux --x64 --config ../electron-builder.yml
+
+appId: network.capix.ide
+productName: CapixIDE
+copyright: Copyright © 2026 Capix
+artifactName: CapixIDE-${version}-${arch}.${ext}
+
+# The app directory produced by `npm run gulp vscode-<platform>-<arch>-min-ci`.
+# After build.sh completes, this lives at ../VSCode-<platform>-<arch>/.
+directories:
+  output: ../dist
+  buildResources: resources
+
+# Publish to GitHub Releases for the auto-updater.
+publish:
+  provider: github
+  owner: Ritzky
+  repo: CapixIDE
+  releaseType: release
+
+mac:
+  category: public.app-category.developer-tools
+  icon: resources/icons/code.icns
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/mac/entitlements.plist
+  entitlementsInherit: resources/mac/entitlements.plist
+  notarize:
+    teamId: ${env.APPLE_TEAM_ID}
+  identity: ${env.APPLE_DEVELOPER_ID}
+
+win:
+  icon: resources/icons/code.ico
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/icons/code.ico
+  uninstallerIcon: resources/icons/code.ico
+
+linux:
+  icon: resources/icons/code.png
+  category: Development
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+  maintainer: Capix <hello@capix.network>
+  desktop:
+    MimeType: text/plain;
+
+deb:
+  depends:
+    - libsecret-1-0
+    - libx11-6
+    - libxkbfile1
+
+rpm:
+  depends:
+    - libsecret
+    - libX11
+    - libxkbfile
