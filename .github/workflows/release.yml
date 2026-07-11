@@ -9,6 +9,9 @@ on:
       version:
         description: "Version to build (e.g. 1.0.0)"
         required: true
+      release_tag:
+        description: "Existing release tag to update (e.g. v1.1.0)"
+        required: true
 
 permissions:
   contents: write
@@ -24,11 +27,11 @@ jobs:
       - name: Verify customer documentation branding
         run: node scripts/scan-customer-branding.mjs --source-only
 
-      - name: Create release
+      - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Capix IDE ${{ github.ref_name }} (UNSIGNED)
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          name: Capix IDE ${{ inputs.release_tag || github.ref_name }} (UNSIGNED)
           body: |
             ## Capix IDE ${{ github.ref_name }} — UNSIGNED
 
@@ -73,7 +76,7 @@ jobs:
             If checksums do not match, the artifact may be tampered with — **do not install**.
 
             Source commit: ${{ github.sha }}
-          draft: true
+          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -130,6 +133,10 @@ jobs:
           VSCODE_DIR: ${{ github.workspace }}/vscode
           VSCODE_ARCH: ${{ matrix.arch }}
 
+      - name: Package and statically verify release artifact
+        shell: bash
+        run: bash scripts/package-release.sh "${{ inputs.version || github.ref_name }}" "${{ matrix.platform }}" "${{ matrix.arch }}"
+
       - name: Notarize macOS app
         if: runner.os == 'macOS'
         run: |
@@ -141,11 +148,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd vscode/dist
-          find . -maxdepth 2 -type f \( \
-            -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o \
-            -name "*.rpm" -o -name "*.exe" -o -name "*.zip" -o -name "*.tar.gz" \
-          \) -exec sha256sum {} \; > checksums.sha256
+          cd release-artifacts
+          find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec sha256sum {} \; > checksums.sha256
           if [ -s checksums.sha256 ]; then
             echo "=== SHA-256 Checksums ==="
             cat checksums.sha256
@@ -160,9 +164,7 @@ jobs:
         with:
           name: CapixIDE-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            vscode/dist/
-            VSCode-*/
-            vscode/out/
+            release-artifacts/
           retention-days: 7
 
   publish:
@@ -179,7 +181,7 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: dist/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
