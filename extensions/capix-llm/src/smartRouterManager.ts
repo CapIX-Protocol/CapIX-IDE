@@ -73,7 +73,7 @@ export class SmartRouterManager {
   private memory: SmartRouterMemory;
   private activePrivateEndpoint?: { baseUrl: string; apiKey: string; instanceId: number; modelLabel: string };
 
-  constructor(private client: { get: (path: string) => Promise<unknown>; post: (path: string, body: unknown) => Promise<unknown>; delete: (path: string) => Promise<unknown>; getBaseUrl: () => string; storeSecret: (key: string, value: string) => Promise<void> }) {
+  constructor(private client: { get: (path: string) => Promise<unknown>; post: (path: string, body: unknown) => Promise<unknown>; delete: (path: string) => Promise<unknown>; getBaseUrl: () => string; storeSecret: (key: string, value: string) => Promise<void>; restoreRoutedChat: () => Promise<void> }) {
     this.memory = loadMemory();
   }
 

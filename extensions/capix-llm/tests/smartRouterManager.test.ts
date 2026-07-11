@@ -50,6 +50,7 @@ interface MockClient {
   delete: ReturnType<typeof vi.fn>;
   getBaseUrl: ReturnType<typeof vi.fn>;
   storeSecret: ReturnType<typeof vi.fn>;
+  restoreRoutedChat: ReturnType<typeof vi.fn>;
 }
 
 function createMockClient(overrides: Partial<MockClient> = {}): MockClient {
@@ -59,6 +60,7 @@ function createMockClient(overrides: Partial<MockClient> = {}): MockClient {
     delete: vi.fn().mockResolvedValue({ ok: true }),
     getBaseUrl: vi.fn().mockReturnValue("https://capix.network"),
     storeSecret: vi.fn().mockResolvedValue(undefined),
+    restoreRoutedChat: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -278,6 +280,7 @@ describe("SmartRouterManager", () => {
       await router.destroyPrivateLlm();
 
       expect(router.hasPrivateEndpoint()).toBe(false);
+      expect(client.restoreRoutedChat).toHaveBeenCalledOnce();
       expect(mockShowInfoMsg).toHaveBeenCalledWith(expect.stringContaining("Destroyed MyLlm"));
     });
 

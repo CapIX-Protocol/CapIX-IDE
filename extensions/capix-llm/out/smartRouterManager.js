@@ -197,6 +197,7 @@ class SmartRouterManager {
             const config = vscode.workspace.getConfiguration("capix");
             await config.update("ai.baseUrl", result.baseUrl, vscode.ConfigurationTarget.Global);
             await config.update("ai.model", result.modelLabel, vscode.ConfigurationTarget.Global);
+            await vscode.commands.executeCommand("capix.chat.configure", result.apiKey, result.baseUrl, result.modelLabel);
         }
         return result;
     }
@@ -226,6 +227,7 @@ class SmartRouterManager {
         }
         const modelLabel = this.activePrivateEndpoint.modelLabel;
         this.clearPrivateEndpoint();
+        await this.client.restoreRoutedChat();
         vscode.window.showInformationMessage(`✓ Destroyed ${modelLabel}. Billing stopped.`);
     }
     // ── Learning ────────────────────────────────────────────────────────────
