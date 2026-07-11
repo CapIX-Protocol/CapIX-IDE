@@ -282,6 +282,24 @@ describe("CapixClient", () => {
   });
 
   describe("secret storage convenience methods", () => {
+    it("rotates a refresh token after a cold-start 401 and retries once", async () => {
+      const secrets = new Map([["capix.sessionToken", "cpxs_expired"], ["capix.refreshToken", "cpxsr_old"]]);
+      const storage = {
+        get: vi.fn(async (key: string) => secrets.get(key)),
+        store: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+      };
+      client.setSecretStorage(storage);
+      fetchMock
+        .mockResolvedValueOnce({ status: 401, ok: false, json: vi.fn().mockResolvedValue({ error: "unauthorized" }) })
+        .mockResolvedValueOnce({ status: 200, ok: true, json: vi.fn().mockResolvedValue({ access_token: "cpxs_new", refresh_token: "cpxsr_new" }) })
+        .mockResolvedValueOnce({ status: 200, ok: true, json: vi.fn().mockResolvedValue({ ok: true }) });
+
+      await expect(client.get("/api/v1/account")).resolves.toEqual({ ok: true });
+      expect(secrets.get("capix.sessionToken")).toBe("cpxs_new");
+      expect(secrets.get("capix.refreshToken")).toBe("cpxsr_new");
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
     it("getSecret should delegate to the secret storage", async () => {
       const secretStorage = createMockSecretStorage();
       secretStorage.get.mockResolvedValue("stored-secret-value");

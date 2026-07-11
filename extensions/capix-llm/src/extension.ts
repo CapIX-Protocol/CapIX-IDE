@@ -10,6 +10,8 @@
  */
 
 import * as vscode from "vscode";
+import { createHash, randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import { CapixClient } from "./apiClient";
 import { DeploysTreeProvider, CatalogTreeProvider, HostedTreeProvider } from "./treeViews";
 import { InstancesTreeProvider, AgentsTreeProvider, JobsTreeProvider, ApiKeysTreeProvider } from "./cloudPanels";
@@ -840,9 +842,44 @@ async function cmdCovenantRemember() {
 // extension must never accept bearer credentials from a query string,
 // clipboard, input box or workspace setting.
 async function cmdConnectWallet() {
-  vscode.window.showErrorMessage(
-    "Capix sign-in is unavailable because the native PKCE broker is not registered. No credential was requested or stored.",
-  );
+  const verifier = randomBytes(48).toString("base64url");
+  const state = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  let timeout: NodeJS.Timeout | undefined;
+  const server = createServer(async (request, response) => {
+    try {
+      const callback = new URL(request.url || "/", "http://127.0.0.1");
+      const code = callback.searchParams.get("code");
+      if (!code || callback.searchParams.get("state") !== state) throw new Error("OAuth callback validation failed");
+      const redirectUri = `http://127.0.0.1:${(server.address() as { port: number }).port}/oauth/callback`;
+      const tokenResponse = await fetch("https://www.capix.network/oauth/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+        body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
+      });
+      const tokens = await tokenResponse.json() as { access_token?: string; refresh_token?: string; error?: string };
+      if (!tokenResponse.ok || !tokens.access_token) throw new Error(tokens.error || `Token exchange failed (${tokenResponse.status})`);
+      await client.saveOAuthTokens(tokens.access_token, tokens.refresh_token);
+      response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+      response.end("Capix sign-in complete. Return to CapixIDE.");
+      vscode.window.showInformationMessage("Capix sign-in complete.");
+      refreshAll();
+    } catch (error) {
+      response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
+      response.end("Capix sign-in failed. Return to CapixIDE.");
+      vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      if (timeout) clearTimeout(timeout); server.close();
+    }
+  });
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
+  const address = server.address();
+  if (!address || typeof address === "string") { server.close(); throw new Error("Unable to create secure sign-in callback"); }
+  timeout = setTimeout(() => server.close(), 120_000);
+  const redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`;
+  const authorize = new URL("https://www.capix.network/oauth/authorize");
+  Object.entries({ response_type: "code", client_id: "capix-ide", redirect_uri: redirectUri, scope: "openid account catalog", code_challenge: challenge, code_challenge_method: "S256", state, nonce: randomBytes(24).toString("base64url") }).forEach(([key, value]) => authorize.searchParams.set(key, value));
+  await vscode.env.openExternal(vscode.Uri.parse(authorize.toString()));
 }
 
 // Top up wallet balance — shared across web and IDE

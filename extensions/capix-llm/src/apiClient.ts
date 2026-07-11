@@ -28,6 +28,15 @@ export class CapixClient {
     await this._secretStorage?.store(key, value);
   }
 
+  /** Persist tokens obtained only through the native OAuth PKCE flow. */
+  async saveOAuthTokens(accessToken: string, refreshToken?: string): Promise<void> {
+    if (!accessToken.startsWith("cpxs_")) throw new Error("Invalid Capix OAuth access token");
+    this._sessionToken = accessToken;
+    if (!this._secretStorage) throw new Error("OS SecretStorage is unavailable");
+    await this._secretStorage.store("capix.sessionToken", accessToken);
+    if (refreshToken) await this._secretStorage.store("capix.refreshToken", refreshToken);
+  }
+
   get baseUrl(): string {
     return CapixClient.PRODUCTION_BASE_URL;
   }
@@ -51,6 +60,26 @@ export class CapixClient {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  private async refreshOAuthToken(): Promise<boolean> {
+    const refreshToken = await this._secretStorage?.get("capix.refreshToken");
+    if (!refreshToken) return false;
+    const response = await fetch(`${CapixClient.PRODUCTION_BASE_URL}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: "capix-ide" }),
+    });
+    const tokens = await response.json() as { access_token?: string; refresh_token?: string };
+    if (!response.ok || !tokens.access_token) { this._sessionToken = null; return false; }
+    await this.saveOAuthTokens(tokens.access_token, tokens.refresh_token || refreshToken);
+    return true;
+  }
+
+  private async authenticatedFetch(url: string, init: RequestInit = {}, retry = true): Promise<Response> {
+    const response = await fetch(url, { ...init, headers: { ...(init.headers || {}), ...(await this.getAuthHeaders()) } });
+    if (response.status === 401 && retry && await this.refreshOAuthToken()) return this.authenticatedFetch(url, init, false);
+    return response;
+  }
+
   get isConfigured(): boolean {
     return Boolean(this._sessionToken && this._sessionToken.startsWith("cpx_session."));
   }
@@ -63,25 +92,22 @@ export class CapixClient {
   }
 
   async get<T = unknown>(path: string): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      headers: { ...(await this.getAuthHeaders()) },
-    });
+    const res = await this.authenticatedFetch(`${this.baseUrl}${path}`);
     return res.json() as Promise<T>;
   }
 
   async post<T = unknown>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
+    const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(await this.getAuthHeaders()) },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     return res.json() as Promise<T>;
   }
 
   async delete<T = unknown>(path: string): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
+    const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
       method: "DELETE",
-      headers: { ...(await this.getAuthHeaders()) },
     });
     return res.json() as Promise<T>;
   }

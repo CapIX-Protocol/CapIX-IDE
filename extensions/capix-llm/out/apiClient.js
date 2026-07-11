@@ -1,45 +1,13 @@
 "use strict";
 /**
  * Capix API client — wraps fetch calls to capix.network /api/llm/* routes.
- * Uses the session token from VS Code settings as a Bearer header.
+ * The production origin is compiled into the product. Workspace settings must
+ * never be able to redirect an authenticated request.
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CapixClient = void 0;
-const vscode = __importStar(require("vscode"));
 class CapixClient {
+    static PRODUCTION_BASE_URL = "https://www.capix.network";
     /** Cached session token (loaded from SecretStorage on first use) */
     _sessionToken = null;
     _secretStorage;
@@ -55,8 +23,19 @@ class CapixClient {
     async storeSecret(key, value) {
         await this._secretStorage?.store(key, value);
     }
+    /** Persist tokens obtained only through the native OAuth PKCE flow. */
+    async saveOAuthTokens(accessToken, refreshToken) {
+        if (!accessToken.startsWith("cpxs_"))
+            throw new Error("Invalid Capix OAuth access token");
+        this._sessionToken = accessToken;
+        if (!this._secretStorage)
+            throw new Error("OS SecretStorage is unavailable");
+        await this._secretStorage.store("capix.sessionToken", accessToken);
+        if (refreshToken)
+            await this._secretStorage.store("capix.refreshToken", refreshToken);
+    }
     get baseUrl() {
-        return vscode.workspace.getConfiguration("capix").get("baseUrl") || "https://capix.network";
+        return CapixClient.PRODUCTION_BASE_URL;
     }
     getBaseUrl() {
         return this.baseUrl;
@@ -74,17 +53,32 @@ class CapixClient {
         }
         return "";
     }
-    /** Save the session token to SecretStorage + clear plaintext settings */
-    async saveSessionToken(token) {
-        this._sessionToken = token;
-        if (this._secretStorage) {
-            await this._secretStorage.store("capix.sessionToken", token);
-        }
-        await vscode.workspace.getConfiguration("capix").update("sessionToken", undefined, vscode.ConfigurationTarget.Global);
-    }
     async getAuthHeaders() {
         const token = await this.getStoredToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+    async refreshOAuthToken() {
+        const refreshToken = await this._secretStorage?.get("capix.refreshToken");
+        if (!refreshToken)
+            return false;
+        const response = await fetch(`${CapixClient.PRODUCTION_BASE_URL}/oauth/token`, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+            body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: "capix-ide" }),
+        });
+        const tokens = await response.json();
+        if (!response.ok || !tokens.access_token) {
+            this._sessionToken = null;
+            return false;
+        }
+        await this.saveOAuthTokens(tokens.access_token, tokens.refresh_token || refreshToken);
+        return true;
+    }
+    async authenticatedFetch(url, init = {}, retry = true) {
+        const response = await fetch(url, { ...init, headers: { ...(init.headers || {}), ...(await this.getAuthHeaders()) } });
+        if (response.status === 401 && retry && await this.refreshOAuthToken())
+            return this.authenticatedFetch(url, init, false);
+        return response;
     }
     get isConfigured() {
         return Boolean(this._sessionToken && this._sessionToken.startsWith("cpx_session."));
@@ -96,23 +90,20 @@ class CapixClient {
         return token.startsWith("cpx_session.");
     }
     async get(path) {
-        const res = await fetch(`${this.baseUrl}${path}`, {
-            headers: { ...(await this.getAuthHeaders()) },
-        });
+        const res = await this.authenticatedFetch(`${this.baseUrl}${path}`);
         return res.json();
     }
     async post(path, body) {
-        const res = await fetch(`${this.baseUrl}${path}`, {
+        const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", ...(await this.getAuthHeaders()) },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
         return res.json();
     }
     async delete(path) {
-        const res = await fetch(`${this.baseUrl}${path}`, {
+        const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
             method: "DELETE",
-            headers: { ...(await this.getAuthHeaders()) },
         });
         return res.json();
     }

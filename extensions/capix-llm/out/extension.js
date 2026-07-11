@@ -46,6 +46,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const node_crypto_1 = require("node:crypto");
+const node_http_1 = require("node:http");
 const apiClient_1 = require("./apiClient");
 const treeViews_1 = require("./treeViews");
 const cloudPanels_1 = require("./cloudPanels");
@@ -55,6 +57,8 @@ const autoConnect_1 = require("./autoConnect");
 const covenant_1 = require("./covenant");
 const devTokenManager_1 = require("./devTokenManager");
 const smartRouterManager_1 = require("./smartRouterManager");
+const logger_1 = require("./logger");
+const telemetry_1 = require("./telemetry");
 let client;
 let deploysProvider;
 let catalogProvider;
@@ -71,6 +75,7 @@ let devTokens;
 let smartRouter;
 let refreshTimer = null;
 function activate(context) {
+    (0, telemetry_1.initTelemetry)(context);
     client = new apiClient_1.CapixClient();
     // Security: use VS Code SecretStorage for the session token instead of plaintext settings.json
     client.setSecretStorage({
@@ -86,7 +91,7 @@ function activate(context) {
     jobsProvider = new cloudPanels_1.JobsTreeProvider(client);
     apiKeysProvider = new cloudPanels_1.ApiKeysTreeProvider(client);
     profileProvider = new profileView_1.ProfileViewProvider(client, context.extensionUri);
-    terminalManager = new terminalManager_1.TerminalManager(context.globalStorageUri.fsPath);
+    terminalManager = new terminalManager_1.TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
     autoConnect = new autoConnect_1.AutoConnectManager(client);
     covenant = new covenant_1.CovenantManager(context);
     devTokens = new devTokenManager_1.DevTokenManager(client);
@@ -110,7 +115,9 @@ function activate(context) {
             }
             lastHead = head;
         }
-        catch { /* git extension not available */ }
+        catch (err) {
+            logger_1.logger.error("capix.checkCommits failed", { error: String(err) });
+        }
     });
     context.subscriptions.push(gitWatcher);
     // Poll git state every 10s (lightweight).
@@ -122,7 +129,7 @@ function activate(context) {
     const agentsView = vscode.window.createTreeView("capix.llm.agents", { treeDataProvider: agentsProvider });
     const jobsView = vscode.window.createTreeView("capix.llm.jobs", { treeDataProvider: jobsProvider });
     const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
-    context.subscriptions.push(deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider));
+    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider));
     // ── Auto-refresh ───────────────────────────────────────────────────────
     setupAutoRefresh(context);
     // ── Auto-connect: check for ready deploys on startup ────────────────────
@@ -167,22 +174,19 @@ function activate(context) {
     vscode.commands.registerCommand("capix.launchCapixCode", () => cmdLaunchCapixCode()), 
     // Smart Router: routing mode, private LLM deploy/destroy, memory
     vscode.commands.registerCommand("capix.setRouteMode", () => cmdSetRouteMode()), vscode.commands.registerCommand("capix.deployPrivateLlm", () => cmdDeployPrivateLlm()), vscode.commands.registerCommand("capix.destroyPrivateLlm", () => cmdDestroyPrivateLlm()), vscode.commands.registerCommand("capix.routerMemory", () => cmdRouterMemory()), vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()), vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()), vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()));
-    // ── URI Handler: capix://capix.capix-llm/session?token=… ────────────────
-    // Allows the web console to push the session token to the IDE with one
-    // click — no manual copy-paste.  The handler validates the token format
-    // and stores it via the same SecretStorage path as cmdConnectWallet.
-    context.subscriptions.push(vscode.window.registerUriHandler({
-        handleUri(uri) {
-            if (uri.path !== "/session")
-                return;
-            const token = new URLSearchParams(uri.query).get("token");
-            if (!token || !token.startsWith("cpx_session.")) {
-                vscode.window.showErrorMessage("Capix: invalid session token in deep link.");
-                return;
-            }
-            applySessionToken(token);
-        },
-    }));
+}
+async function cmdLaunchCentre() {
+    const action = await vscode.window.showQuickPick([
+        { label: "$(credit-card) Deposit", description: "Add funds securely", command: "capix.topUp" },
+        { label: "$(pulse) Balance & usage", description: "Review balance, invoices and consumption", command: "capix.refreshProfile" },
+        { label: "$(server) Deploy GPU", description: "Provision Capix accelerated compute", command: "capix.deployModel" },
+        { label: "$(vm) Deploy VPS", description: "Provision Capix general compute", command: "capix.cloud.createDeployment" },
+        { label: "$(sparkle) Deploy LLM", description: "Provision a remote model on the Capix GPU network", command: "capix.deployModel" },
+        { label: "$(terminal) Run Capix Code", description: "Open the bundled coding environment", command: "capix.launchCapixCode" },
+        { label: "$(graph) Detailed usage", description: "Open metering and billing", command: "capix.openBilling" },
+    ], { placeHolder: "What would you like to do?" });
+    if (action)
+        await vscode.commands.executeCommand(action.command);
 }
 function deactivate() {
     refreshTimer?.dispose();
@@ -204,7 +208,8 @@ async function updateStatusBar(item) {
         }
         item.show();
     }
-    catch {
+    catch (err) {
+        logger_1.logger.error("updateStatusBar failed", { error: String(err) });
         item.hide();
     }
 }
@@ -746,26 +751,57 @@ async function cmdCovenantRemember() {
     vscode.window.showInformationMessage("✓ Remembered. This will be included in future chat context.");
     devTokens.onDecision();
 }
-// Save a session token to SecretStorage, refresh views, and auto-connect.
-// Shared by the manual "Connect Wallet" command and the deep-link URI handler.
-async function applySessionToken(token) {
-    await client.saveSessionToken(token);
-    vscode.window.showInformationMessage("✓ Capix session token saved securely. Your profile, deploys, and instances are now synced.");
-    refreshAll();
-    autoConnect.checkExistingDeploys();
-}
-// Connect wallet / set session token — shared across web and IDE
+// Authentication is owned by the native main-process PKCE broker. The legacy
+// extension must never accept bearer credentials from a query string,
+// clipboard, input box or workspace setting.
 async function cmdConnectWallet() {
-    const token = await vscode.window.showInputBox({
-        prompt: "Paste your Capix session token (cpx_session.…)",
-        password: true,
-        placeHolder: "cpx_session.eyJ...",
-        ignoreFocusOut: true,
-        validateInput: (v) => v.startsWith("cpx_session.") ? null : "Token must start with 'cpx_session.'",
+    const verifier = (0, node_crypto_1.randomBytes)(48).toString("base64url");
+    const state = (0, node_crypto_1.randomBytes)(32).toString("base64url");
+    const challenge = (0, node_crypto_1.createHash)("sha256").update(verifier).digest("base64url");
+    let timeout;
+    const server = (0, node_http_1.createServer)(async (request, response) => {
+        try {
+            const callback = new URL(request.url || "/", "http://127.0.0.1");
+            const code = callback.searchParams.get("code");
+            if (!code || callback.searchParams.get("state") !== state)
+                throw new Error("OAuth callback validation failed");
+            const redirectUri = `http://127.0.0.1:${server.address().port}/oauth/callback`;
+            const tokenResponse = await fetch("https://www.capix.network/oauth/token", {
+                method: "POST",
+                headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+                body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
+            });
+            const tokens = await tokenResponse.json();
+            if (!tokenResponse.ok || !tokens.access_token)
+                throw new Error(tokens.error || `Token exchange failed (${tokenResponse.status})`);
+            await client.saveOAuthTokens(tokens.access_token, tokens.refresh_token);
+            response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+            response.end("Capix sign-in complete. Return to CapixIDE.");
+            vscode.window.showInformationMessage("Capix sign-in complete.");
+            refreshAll();
+        }
+        catch (error) {
+            response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
+            response.end("Capix sign-in failed. Return to CapixIDE.");
+            vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        finally {
+            if (timeout)
+                clearTimeout(timeout);
+            server.close();
+        }
     });
-    if (!token)
-        return;
-    await applySessionToken(token);
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
+    const address = server.address();
+    if (!address || typeof address === "string") {
+        server.close();
+        throw new Error("Unable to create secure sign-in callback");
+    }
+    timeout = setTimeout(() => server.close(), 120_000);
+    const redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`;
+    const authorize = new URL("https://www.capix.network/oauth/authorize");
+    Object.entries({ response_type: "code", client_id: "capix-ide", redirect_uri: redirectUri, scope: "openid account catalog", code_challenge: challenge, code_challenge_method: "S256", state, nonce: (0, node_crypto_1.randomBytes)(24).toString("base64url") }).forEach(([key, value]) => authorize.searchParams.set(key, value));
+    await vscode.env.openExternal(vscode.Uri.parse(authorize.toString()));
 }
 // Top up wallet balance — shared across web and IDE
 async function cmdTopUp() {
