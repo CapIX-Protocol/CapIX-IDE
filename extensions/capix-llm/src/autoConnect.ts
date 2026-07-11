@@ -89,6 +89,7 @@ export class AutoConnectManager {
       // API key: store in SecretStorage via the extension context.
       // The chat panel reads it via the same secret key.
       await this.client.storeSecret("capix.ai.apiKey", keyRes.apiKey);
+      await vscode.commands.executeCommand("capix.chat.configure", keyRes.apiKey, baseUrl, modelLabel);
 
       vscode.window.showInformationMessage(
         `✓ ${modelLabel} is ready! Chat panel auto-configured with your endpoint.`,

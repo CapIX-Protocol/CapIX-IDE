@@ -529,6 +529,7 @@ async function cmdDestroyDeploy(item?: unknown) {
 
   const res = await client.destroyDeploy(resolved.instanceId);
   if (res.ok) {
+    await client.restoreRoutedChat();
     vscode.window.showInformationMessage(`✓ Destroyed ${resolved.modelLabel} — billing stopped.`);
     deploysProvider.load();
   } else {

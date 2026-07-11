@@ -48,6 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DevTokenManager = void 0;
 const vscode = __importStar(require("vscode"));
+const logger_1 = require("./logger");
 class DevTokenManager {
     client;
     sessionTurns = 0;
@@ -71,7 +72,9 @@ class DevTokenManager {
                 vscode.window.showInformationMessage(`◆ Capix Dev Token: +${res.mint?.amount || 1} DEV minted for committing with Capix IDE.`);
             }
         }
-        catch { /* silent — don't interrupt the user */ }
+        catch (err) {
+            logger_1.logger.error("DevTokenManager.onCommit failed", { error: String(err) });
+        }
     }
     /** Call when a deploy succeeds (agent, serverless, LLM, VPS). */
     async onDeploy(sessionId) {
@@ -84,7 +87,9 @@ class DevTokenManager {
                 vscode.window.showInformationMessage(`◆ Capix Dev Token: +${res.mint?.amount || 5} DEV minted for deploying from Capix IDE.`);
             }
         }
-        catch { /* silent */ }
+        catch (err) {
+            logger_1.logger.error("DevTokenManager.onDeploy failed", { error: String(err) });
+        }
     }
     /** Call on each chat turn. Mints at 50 turns. */
     onChatTurn() {
@@ -101,7 +106,9 @@ class DevTokenManager {
                 vscode.window.showInformationMessage(`◆ Capix Dev Token: +${res.mint?.amount || 2} DEV minted for recording a decision.`);
             }
         }
-        catch { /* silent */ }
+        catch (err) {
+            logger_1.logger.error("DevTokenManager.onDecision failed", { error: String(err) });
+        }
     }
     async mintSessionComplete() {
         const key = "session-complete";
@@ -114,7 +121,9 @@ class DevTokenManager {
                 vscode.window.showInformationMessage(`◆ Capix Dev Token: +${res.mint?.amount || 10} DEV minted for completing a productive session!`);
             }
         }
-        catch { /* silent */ }
+        catch (err) {
+            logger_1.logger.error("DevTokenManager.mintSessionComplete failed", { error: String(err) });
+        }
     }
     /** Get the user's DEV token balance for display in the Profile panel. */
     async getBalance() {
@@ -124,7 +133,9 @@ class DevTokenManager {
                 return { balance: res.balance || 0, totalEarned: res.totalEarned || 0 };
             }
         }
-        catch { /* silent */ }
+        catch (err) {
+            logger_1.logger.error("DevTokenManager.getBalance failed", { error: String(err) });
+        }
         return { balance: 0, totalEarned: 0 };
     }
 }

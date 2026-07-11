@@ -1,8 +1,8 @@
 diff --git a/src/vs/workbench/contrib/void/browser/void.contribution.ts b/src/vs/workbench/contrib/void/browser/void.contribution.ts
-index 35c8918..c7aac2f 100644
+index 35c8918..e9d1f94 100644
 --- a/src/vs/workbench/contrib/void/browser/void.contribution.ts
 +++ b/src/vs/workbench/contrib/void/browser/void.contribution.ts
-@@ -83,3 +83,25 @@ import '../common/voidUpdateService.js'
+@@ -83,3 +83,30 @@ import '../common/voidUpdateService.js'
  
  // model service
  import '../common/voidModelService.js'
@@ -15,18 +15,23 @@ index 35c8918..c7aac2f 100644
 +import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 +import { IVoidSettingsService } from '../common/voidSettingsService.js';
 +
-+CommandsRegistry.registerCommand('capix.chat.configure', async (accessor, accessToken: unknown) => {
-+	if (typeof accessToken !== 'string' || (!accessToken.startsWith('cpxs_') && !accessToken.startsWith('cpx_session.'))) {
-+		throw new Error('Capix chat configuration requires a valid OAuth access token.');
++CommandsRegistry.registerCommand('capix.chat.configure', async (accessor, credential: unknown, endpoint?: unknown, model?: unknown) => {
++	if (typeof credential !== 'string' || credential.length < 8) {
++		throw new Error('Capix chat configuration requires a valid credential.');
 +	}
++	const routed = endpoint === undefined;
++	const selectedEndpoint = routed ? 'https://www.capix.network/api/v1' : String(endpoint).replace(/\/$/, '');
++	const selectedModel = routed ? 'auto' : String(model || 'auto');
++	const parsedEndpoint = new URL(selectedEndpoint);
++	if (parsedEndpoint.protocol !== 'https:') throw new Error('Capix chat endpoints must use HTTPS.');
 +
 +	const settings = accessor.get(IVoidSettingsService);
 +	await settings.waitForInitState;
-+	await settings.setSettingOfProvider('openAICompatible', 'endpoint', 'https://www.capix.network/api/v1');
-+	await settings.setSettingOfProvider('openAICompatible', 'apiKey', accessToken);
++	await settings.setSettingOfProvider('openAICompatible', 'endpoint', selectedEndpoint);
++	await settings.setSettingOfProvider('openAICompatible', 'apiKey', credential);
 +	await settings.setSettingOfProvider('openAICompatible', 'headersJSON', '{}');
-+	settings.addModel('openAICompatible', 'auto');
-+	await settings.setModelSelectionOfFeature('Chat', { providerName: 'openAICompatible', modelName: 'auto' });
++	settings.addModel('openAICompatible', selectedModel);
++	await settings.setModelSelectionOfFeature('Chat', { providerName: 'openAICompatible', modelName: selectedModel });
 +});
 diff --git a/src/vs/workbench/contrib/void/browser/voidSettingsPane.ts b/src/vs/workbench/contrib/void/browser/voidSettingsPane.ts
 index b70aef9..c2bb125 100644

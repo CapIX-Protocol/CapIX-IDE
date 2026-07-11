@@ -32,6 +32,14 @@ export class CapixClient {
     this._lastPublishedOAuthAccessToken = accessToken;
   }
 
+  /** Restore the shared Capix router after a private endpoint is removed. */
+  async restoreRoutedChat(): Promise<void> {
+    const accessToken = await this.getStoredToken();
+    if (!this.isOAuthAccessToken(accessToken)) throw new Error("Capix sign-in is required");
+    await this._onOAuthAccessToken?.(accessToken);
+    this._lastPublishedOAuthAccessToken = accessToken;
+  }
+
   /** Read an arbitrary secret from SecretStorage (extension-internal use only) */
   async getSecret(key: string): Promise<string | undefined> {
     return this._secretStorage?.get(key);
@@ -228,12 +236,12 @@ export class CapixClient {
   }
 
   // ── Wallet balance ────────────────────────────────────────────────────
-  async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; activeInstances?: number; totalSpent?: number; error?: string }> {
-    const result = await this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; error?: string }>("/api/v1/billing");
+  async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; transactions?: unknown[]; updatedAt?: string; activeInstances?: number; totalSpent?: number; error?: string }> {
+    const result = await this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; transactions?: unknown[]; error?: string }>("/api/v1/billing");
     if (!result.ok) return result;
     const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
     const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
-    return { ok: true, balance: { usd: usdc, sol, usdc }, activeInstances: 0, totalSpent: 0 };
+    return { ok: true, balance: { usd: usdc, sol, usdc }, transactions: result.transactions || [], updatedAt: new Date().toISOString(), activeInstances: 0, totalSpent: 0 };
   }
 
   // ── Billing: base treasury address for USDC on Base ───────────────────

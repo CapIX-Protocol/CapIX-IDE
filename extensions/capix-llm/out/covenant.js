@@ -54,6 +54,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CovenantManager = void 0;
 const vscode = __importStar(require("vscode"));
+const logger_1 = require("./logger");
 class CovenantManager {
     context;
     SPIRIT_DEFAULT = `You are the Capix coding companion — an autonomous AI pair programmer embedded in the Capix IDE.
@@ -96,8 +97,8 @@ class CovenantManager {
                 const doc = await vscode.workspace.fs.readFile(covenantPath);
                 return new TextDecoder().decode(doc);
             }
-            catch {
-                // File doesn't exist — fall through to default.
+            catch (err) {
+                logger_1.logger.error("CovenantManager.getSpirit failed", { error: String(err) });
             }
         }
         return this.SPIRIT_DEFAULT;
@@ -165,8 +166,8 @@ class CovenantManager {
             const doc = await vscode.workspace.openTextDocument(file);
             vscode.window.showTextDocument(doc);
         }
-        catch {
-            // Create it with the default spirit.
+        catch (err) {
+            logger_1.logger.error("CovenantManager.createSpiritFile failed", { error: String(err) });
             await vscode.workspace.fs.createDirectory(dir);
             await vscode.workspace.fs.writeFile(file, Buffer.from(this.SPIRIT_DEFAULT, "utf-8"));
             const doc = await vscode.workspace.openTextDocument(file);

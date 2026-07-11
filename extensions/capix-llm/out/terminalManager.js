@@ -66,6 +66,7 @@ const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
 const vscode_1 = require("vscode");
+const logger_1 = require("./logger");
 class TerminalManager {
     terminals = new Map();
     // Paths to short-lived temp key files created by openCapixCode() that the
@@ -75,14 +76,18 @@ class TerminalManager {
     // Persistent known_hosts file — survives across sessions so pinned host
     // keys can be verified on every connect after the initial TOFU add.
     knownHostsPath;
+    bundledCapixCodePath;
     /**
      * @param globalStoragePath  The extension's global storage directory
      *                          (context.globalStorageUri.fsPath). The
      *                          known_hosts file is stored here so it persists
      *                          across sessions.
      */
-    constructor(globalStoragePath) {
+    constructor(globalStoragePath, extensionPath) {
         this.knownHostsPath = path.join(globalStoragePath, "known_hosts");
+        this.bundledCapixCodePath = extensionPath
+            ? path.join(extensionPath, "tools", "capix-code", "bin", "capix-code")
+            : "capix-code";
         this.ensureKnownHostsFile();
     }
     /**
@@ -121,7 +126,10 @@ class TerminalManager {
         // /proc/<shell_pid>/environ stays clean. capix-code reads
         // process.env.CAPIX_API_KEY itself (capix-code/src/plugin.ts:50).
         setTimeout(() => {
-            terminal.sendText('CAPIX_API_KEY="$(cat "$CAPIX_API_KEY_FILE")" capix-code');
+            const executable = this.bundledCapixCodePath === "capix-code"
+                ? "capix-code"
+                : `"${this.bundledCapixCodePath.replace(/(["\\$`])/g, "\\$1")}"`;
+            terminal.sendText(`CAPIX_API_KEY="$(cat "$CAPIX_API_KEY_FILE")" ${executable}`);
         }, 500);
         // Sweep the temp key file shortly after launch. capix-code has long
         // since read it into its own environment by now.
@@ -134,8 +142,8 @@ class TerminalManager {
         try {
             fs.unlinkSync(keyPath);
         }
-        catch {
-            // Already gone (double-sweep or manual cleanup) — nothing to do.
+        catch (err) {
+            logger_1.logger.error("deleteKeyFile failed", { error: String(err) });
         }
         this.pendingKeyFiles.delete(keyPath);
     }
@@ -150,9 +158,8 @@ class TerminalManager {
                 fs.writeFileSync(this.knownHostsPath, "", { mode: 0o600 });
             }
         }
-        catch {
-            // Best-effort: if we can't create the file, SSH will fall back to
-            // asking interactively when options allow (TOFU in the terminal).
+        catch (err) {
+            logger_1.logger.error("ensureKnownHostsFile failed", { error: String(err) });
         }
     }
     /** Check whether a host is already pinned in the persistent known_hosts file. */

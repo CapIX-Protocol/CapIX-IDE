@@ -54,6 +54,7 @@ const vscode = __importStar(require("vscode"));
 const node_fs_1 = require("node:fs");
 const node_os_1 = require("node:os");
 const node_path_1 = require("node:path");
+const logger_1 = require("./logger");
 function getConfigDir() {
     switch (process.platform) {
         case "darwin": return (0, node_path_1.join)((0, node_os_1.homedir)(), "Library", "Application Support", "capix-code");
@@ -68,7 +69,8 @@ function loadMemory() {
             return blankMemory();
         return JSON.parse((0, node_fs_1.readFileSync)(MEMORY_FILE, "utf-8"));
     }
-    catch {
+    catch (err) {
+        logger_1.logger.error("loadMemory failed", { error: String(err) });
         return blankMemory();
     }
 }
@@ -78,7 +80,9 @@ function saveMemory(mem) {
         mem.updatedAt = new Date().toISOString();
         (0, node_fs_1.writeFileSync)(MEMORY_FILE, JSON.stringify(mem, null, 2), "utf-8");
     }
-    catch { /* read-only fs */ }
+    catch (err) {
+        logger_1.logger.error("saveMemory failed", { error: String(err) });
+    }
 }
 function blankMemory() {
     return { ratings: {}, blockedModels: [], favoredModels: [], updatedAt: new Date().toISOString() };
@@ -207,17 +211,19 @@ class SmartRouterManager {
         const confirm = await vscode.window.showWarningMessage(`Destroy ${this.activePrivateEndpoint.modelLabel}?\nBilling stops immediately.`, { modal: true }, "Destroy");
         if (confirm !== "Destroy")
             return;
-        const res = await this.client.get(`/api/llm/${this.activePrivateEndpoint.instanceId}`);
-        // Note: DELETE would be ideal but our client only has GET/POST. Use the IDE's own delete.
-        // Actually we can use fetch directly:
+        const instanceId = this.activePrivateEndpoint.instanceId;
+        const baseUrl = this.client.getBaseUrl();
         try {
-            const baseUrl = this.client.getBaseUrl();
-            await fetch(`${baseUrl}/api/llm/${this.activePrivateEndpoint.instanceId}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${process.env.CAPIX_API_KEY}` },
-            });
+            const deleteRes = await this.client.delete(`/api/llm/${instanceId}`);
+            if (!deleteRes.ok) {
+                throw new Error(deleteRes.error || "Destroy request failed");
+            }
         }
-        catch { /* ignore */ }
+        catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`Failed to destroy LLM: ${msg}. Billing may continue — check ${baseUrl}/cloud/billing`);
+            return;
+        }
         const modelLabel = this.activePrivateEndpoint.modelLabel;
         this.clearPrivateEndpoint();
         vscode.window.showInformationMessage(`✓ Destroyed ${modelLabel}. Billing stopped.`);

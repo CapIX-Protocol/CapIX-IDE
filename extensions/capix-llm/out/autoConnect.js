@@ -54,6 +54,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AutoConnectManager = void 0;
 const vscode = __importStar(require("vscode"));
+const logger_1 = require("./logger");
 class AutoConnectManager {
     client;
     watched = new Set();
@@ -84,7 +85,9 @@ class AutoConnectManager {
                     return;
                 }
             }
-            catch { /* network error — retry */ }
+            catch (err) {
+                logger_1.logger.error("AutoConnectManager.poll failed", { error: String(err) });
+            }
             await new Promise((r) => setTimeout(r, pollInterval));
         }
         // Timed out — stop watching silently.
@@ -117,7 +120,8 @@ class AutoConnectManager {
                 }
             });
         }
-        catch {
+        catch (err) {
+            logger_1.logger.error("autoConfigureChat failed", { error: String(err) });
             vscode.window.showInformationMessage(`✓ ${modelLabel} is ready! Endpoint: ${baseUrl} — configure it in Settings → AI.`);
         }
     }
@@ -144,7 +148,9 @@ class AutoConnectManager {
                 }
             }
         }
-        catch { /* silent — user may not be connected yet */ }
+        catch (err) {
+            logger_1.logger.error("checkExistingDeploys failed", { error: String(err) });
+        }
     }
 }
 exports.AutoConnectManager = AutoConnectManager;
