@@ -301,6 +301,13 @@ describe("CapixClient", () => {
   });
 
   describe("secret storage convenience methods", () => {
+    it("lists deployments from the canonical owner-scoped GPU saga endpoint", async () => {
+      client.setSecretStorage(createMockSecretStorage("cpxs_session"));
+      fetchMock.mockResolvedValueOnce({status:200,ok:true,json:vi.fn().mockResolvedValue({ok:true,sagas:[{sagaId:"gpu_1",state:"ALLOCATING",assetId:null,workload:"llm",modelId:"supergemma",expiresAt:"2026-07-12T00:00:00.000Z",createdAt:"2026-07-11T00:00:00.000Z"}]})});
+      const result=await client.listDeploys();
+      expect(fetchMock.mock.calls[0][0]).toBe("https://www.capix.network/api/v1/gpu");
+      expect(result.deploys[0]).toMatchObject({instance:{id:"gpu_1"},live:{instanceId:0,modelLabel:"supergemma",state:"loading"}});
+    });
     it("rotates a refresh token after a cold-start 401 and retries once", async () => {
       const secrets = new Map([["capix.sessionToken", "cpxs_expired"], ["capix.refreshToken", "cpxsr_old"]]);
       const storage = {

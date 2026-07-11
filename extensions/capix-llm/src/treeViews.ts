@@ -73,7 +73,10 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
         );
       this.refresh();
     } catch (err) {
-      logger.error("DeploysTreeProvider.load failed", { error: String(err) });
+      const status=(err as {status?:number}).status;
+      if(status===401) logger.info("Deploys are waiting for a refreshed Capix session");
+      else if(status===503) logger.info("Deploys are temporarily unavailable");
+      else logger.error("DeploysTreeProvider.load failed", { error: String(err) });
       this.deploys = [];
       this.refresh();
     }

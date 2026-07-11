@@ -66,6 +66,10 @@ class AutoConnectManager {
      * the chat provider settings.
      */
     watchDeploy(instanceId, modelLabel) {
+        // Canonical saga deployments use opaque saga IDs and are observed through
+        // `/api/v1/gpu`; never poll the retired numeric legacy route.
+        if (instanceId <= 0)
+            return;
         if (this.watched.has(instanceId))
             return;
         this.watched.add(instanceId);
@@ -114,6 +118,7 @@ class AutoConnectManager {
             // API key: store in SecretStorage via the extension context.
             // The chat panel reads it via the same secret key.
             await this.client.storeSecret("capix.ai.apiKey", keyRes.apiKey);
+            await vscode.commands.executeCommand("capix.chat.configure", keyRes.apiKey, baseUrl, modelLabel);
             vscode.window.showInformationMessage(`✓ ${modelLabel} is ready! Chat panel auto-configured with your endpoint.`, "Start chatting").then((action) => {
                 if (action === "Start chatting") {
                     vscode.commands.executeCommand("workbench.panel.chat");
@@ -130,6 +135,8 @@ class AutoConnectManager {
      * auto-configure from the most recent one.
      */
     async checkExistingDeploys() {
+        if (!await this.client.checkConfigured())
+            return;
         try {
             const res = await this.client.listDeploys();
             if (!res.ok)
@@ -149,7 +156,13 @@ class AutoConnectManager {
             }
         }
         catch (err) {
-            logger_1.logger.error("checkExistingDeploys failed", { error: String(err) });
+            const status = err.status;
+            if (status === 401)
+                logger_1.logger.info("Auto-connect is waiting for a refreshed Capix session");
+            else if (status === 503)
+                logger_1.logger.info("Auto-connect is waiting for the deployment service");
+            else
+                logger_1.logger.error("checkExistingDeploys failed", { error: String(err) });
         }
     }
 }
