@@ -5,6 +5,7 @@
  */
 
 import * as vscode from "vscode";
+import { randomUUID } from "node:crypto";
 import type { CatalogModel, GpuOffer, LlmDeploy, HostedEndpoint, DeployResult } from "./types";
 
 export class CapixClient {
@@ -81,14 +82,18 @@ export class CapixClient {
   }
 
   get isConfigured(): boolean {
-    return Boolean(this._sessionToken && this._sessionToken.startsWith("cpx_session."));
+    return Boolean(this._sessionToken && this.isOAuthAccessToken(this._sessionToken));
   }
 
   /** Async config check (used by tools that can await) */
   async checkConfigured(): Promise<boolean> {
     const token = await this.getStoredToken();
     this._sessionToken = token;
-    return token.startsWith("cpx_session.");
+    return this.isOAuthAccessToken(token);
+  }
+
+  private isOAuthAccessToken(token: string): boolean {
+    return token.startsWith("cpxs_") || token.startsWith("cpx_session.");
   }
 
   async get<T = unknown>(path: string): Promise<T> {
@@ -99,7 +104,7 @@ export class CapixClient {
   async post<T = unknown>(path: string, body: unknown): Promise<T> {
     const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
       body: JSON.stringify(body),
     });
     return res.json() as Promise<T>;
@@ -108,6 +113,7 @@ export class CapixClient {
   async delete<T = unknown>(path: string): Promise<T> {
     const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
       method: "DELETE",
+      headers: { "Idempotency-Key": randomUUID() },
     });
     return res.json() as Promise<T>;
   }

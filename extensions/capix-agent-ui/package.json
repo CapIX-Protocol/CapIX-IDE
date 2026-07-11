@@ -15,14 +15,14 @@
         {
           "id": "capix-agent",
           "title": "Capix Agent",
-          "icon": "$(comment-discussion)"
+          "icon": "resources/capix-activitybar.svg"
         }
       ],
       "panel": [
         {
           "id": "capix-agent-panel",
           "title": "Capix Chat",
-          "icon": "$(comment-discussion)"
+          "icon": "resources/capix-activitybar.svg"
         }
       ]
     },

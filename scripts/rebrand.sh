@@ -110,6 +110,17 @@ if [ -d "$DIR/resources/icons" ]; then
   echo "  done: icons applied"
 fi
 
+# Replace inherited Void/Code workbench artwork, not only the platform icon.
+for workbench_mark in \
+  "$VSCODE/src/vs/workbench/browser/parts/editor/media/void_cube_noshadow.png" \
+  "$VSCODE/src/vs/workbench/browser/media/void-icon-sm.png" \
+  "$VSCODE/resources/win32/logo_cube_noshadow.png" \
+  "$VSCODE/void_icons/logo_cube_noshadow.png" \
+  "$VSCODE/void_icons/cubecircled.png"; do
+  if [ -e "$workbench_mark" ]; then cp "$DIR/resources/icons/capix-ide.png" "$workbench_mark"; fi
+done
+echo "  done: workbench artwork replaced"
+
 # 5. Drop settings defaults into the void contrib dir (unchanged paths).
 mkdir -p "$VSCODE/src/vs/workbench/contrib/void/browser/react/src/void-settings-tsx"
 cp "$DIR/config/settings-defaults.json" "$VSCODE/src/vs/workbench/contrib/void/browser/react/src/void-settings-tsx/capixDefaults.json"

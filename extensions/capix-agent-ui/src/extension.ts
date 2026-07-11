@@ -66,6 +66,10 @@ export function activate(context: vscode.ExtensionContext): void {
 		),
 		vscode.commands.registerCommand("capix.agent.selectModel", () => selectModel()),
 		vscode.commands.registerCommand("capix.agent.cancel", () => chatProvider.cancel()),
+		vscode.commands.registerCommand("capix.agent.refreshAuth", async () => {
+			await sessionsProvider.refresh();
+			await chatProvider.init(true);
+		}),
 	);
 
 	// Deferred tool approvals fan out from the broker; approve/deny is human-confirmed.
@@ -331,8 +335,21 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	async init(): Promise<void> {
-		// Preload model list lazily on first view resolve.
+	async init(force = false): Promise<void> {
+		if (this.session && !force) return;
+		try {
+			const models = (await this.broker.listModels()).models.filter((model) => model.available);
+			const routed = models.find((model) => model.id === "auto" || model.id === "capix/auto" || model.id === "capix-routed") ?? models[0];
+			if (!routed) return;
+			this.setSelectedModel(routed.id);
+			const projectId = await resolveProjectId();
+			if (!projectId) return;
+			const session = await this.broker.startSession(routed.id, projectId);
+			this.setSession(session);
+			await sessionsProvider.refresh();
+		} catch (err) {
+			if (force) handleError(err, "Initialize Capix chat failed");
+		}
 	}
 
 	async cancel(): Promise<void> {
@@ -356,6 +373,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 		view.webview.onDidReceiveMessage((msg) => void this.onMessage(msg));
 		if (this.session) this.notify({ type: "session", session: this.session });
 		if (this._selectedModel) this.notify({ type: "model", modelId: this._selectedModel });
+		void this.init();
 	}
 
 	/** Append a system-level message to the chat log (also used by approval prompts). */

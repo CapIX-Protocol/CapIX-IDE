@@ -231,16 +231,14 @@ async function updateStatusBar(item: vscode.StatusBarItem): Promise<void> {
 let statusBarItem: vscode.StatusBarItem | null = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-function refreshAll() {
-  deploysProvider.load();
-  catalogProvider.load();
-  hostedProvider.load();
-  instancesProvider.load();
-  agentsProvider.load();
-  jobsProvider.load();
-  apiKeysProvider.load();
-  profileProvider.refresh();
-  if (statusBarItem) updateStatusBar(statusBarItem);
+async function refreshAll() {
+  await client.checkConfigured();
+  await Promise.all([
+    deploysProvider.load(), catalogProvider.load(), hostedProvider.load(),
+    instancesProvider.load(), agentsProvider.load(), jobsProvider.load(),
+    apiKeysProvider.load(), profileProvider.refresh(),
+  ]);
+  if (statusBarItem) await updateStatusBar(statusBarItem);
 }
 
 function setupAutoRefresh(context: vscode.ExtensionContext) {
@@ -863,7 +861,8 @@ async function cmdConnectWallet() {
       response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
       response.end("Capix sign-in complete. Return to CapixIDE.");
       vscode.window.showInformationMessage("Capix sign-in complete.");
-      refreshAll();
+      await refreshAll();
+      await vscode.commands.executeCommand("capix.agent.refreshAuth");
     } catch (error) {
       response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
       response.end("Capix sign-in failed. Return to CapixIDE.");

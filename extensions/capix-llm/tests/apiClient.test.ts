@@ -31,6 +31,12 @@ function createMockSecretStorage(token?: string) {
 }
 
 describe("CapixClient", () => {
+  it("recognizes native OAuth access tokens as configured", async () => {
+    const client = new CapixClient();
+    client.setSecretStorage(createMockSecretStorage("cpxs_oauth-access-token"));
+    expect(await client.checkConfigured()).toBe(true);
+    expect(client.isConfigured).toBe(true);
+  });
   let client: CapixClient;
   let fetchMock: ReturnType<typeof vi.fn>;
 
