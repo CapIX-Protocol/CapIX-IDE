@@ -42,10 +42,7 @@ let toolApprovalHandler: vscode.Disposable | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
 	broker = new CapixAgentBroker();
-	// Agent chat is intentionally outside the initial customer launch scope.
-	// Keep the built-in installed/activatable for protocol compatibility, but
-	// do not register any customer-facing views or commands yet.
-	const launchUiEnabled = false;
+	const launchUiEnabled = true;
 	if (!launchUiEnabled) return;
 	sessionsProvider = new SessionsTreeProvider(broker);
 	chatProvider = new ChatViewProvider(broker, context.extensionUri);
@@ -226,6 +223,16 @@ async function resolveProjectId(): Promise<string | undefined> {
 
 // --- error handling ---------------------------------------------------------
 
+function isServiceUnavailable(err: unknown): boolean {
+	const e = err as { capixCode?: string; message?: string };
+	return e?.capixCode === "503" || /temporarily unavailable|service unavailable/i.test(e?.message ?? "");
+}
+
+function isNotImplemented(err: unknown): boolean {
+	const e = err as { capixCode?: string; message?: string };
+	return e?.capixCode === "not-implemented" || /not found|not implemented/i.test(e?.message ?? "");
+}
+
 function handleError(err: unknown, title: string): void {
 	if (err instanceof CapixAgentAuthError) {
 		vscode.window
@@ -233,6 +240,18 @@ function handleError(err: unknown, title: string): void {
 			.then((c) => {
 				if (c === "Sign in") void vscode.commands.executeCommand("capix.onboarding.start");
 			});
+		return;
+	}
+	if (isNotImplemented(err)) {
+		vscode.window.showInformationMessage(
+			`${title}: Capix agent runtime is not available yet. Sessions and chat will be enabled in a future update.`,
+		);
+		return;
+	}
+	if (isServiceUnavailable(err)) {
+		vscode.window.showWarningMessage(
+			`${title}: Capix service is temporarily unavailable. Please try again shortly.`,
+		);
 		return;
 	}
 	const e = err as CapixAgentError;
@@ -248,6 +267,7 @@ class SessionsTreeProvider implements vscode.TreeDataProvider<AgentNode> {
 	private readonly emitter = new vscode.EventEmitter<AgentNode | undefined>();
 	readonly onDidChangeTreeData = this.emitter.event;
 	all: AgentSession[] = [];
+	private placeholderLabel = "No agent sessions. Start one from the chat view.";
 
 	constructor(private readonly broker: CapixAgentBroker) {}
 
@@ -255,9 +275,17 @@ class SessionsTreeProvider implements vscode.TreeDataProvider<AgentNode> {
 		try {
 			const res = await this.broker.listSessions();
 			this.all = res.sessions;
+			this.placeholderLabel = "No agent sessions. Start one from the chat view.";
 		} catch (err) {
 			this.all = [];
-			if (!(err instanceof CapixAgentAuthError)) {
+			if (err instanceof CapixAgentAuthError) {
+				this.placeholderLabel = "Sign in to Capix to view agent sessions.";
+			} else if (isServiceUnavailable(err)) {
+				this.placeholderLabel = "Service temporarily unavailable.";
+			} else if (isNotImplemented(err)) {
+				this.placeholderLabel = "Agent sessions unavailable.";
+			} else {
+				this.placeholderLabel = "Failed to load agent sessions.";
 				void vscode.window.showErrorMessage(
 					`Capix: failed to list agent sessions (${(err as CapixAgentError).message ?? err})`,
 				);
@@ -273,7 +301,7 @@ class SessionsTreeProvider implements vscode.TreeDataProvider<AgentNode> {
 	async getChildren(element?: AgentNode): Promise<AgentNode[]> {
 		if (element) return [];
 		if (this.all.length === 0) {
-			return [new PlaceholderNode("No agent sessions. Start one from the chat view.")];
+			return [new PlaceholderNode(this.placeholderLabel)];
 		}
 		return this.all.map((s) => new SessionNode(s));
 	}
@@ -354,6 +382,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 			await sessionsProvider.refresh();
 		} catch (err) {
 			if (force) handleError(err, "Initialize Capix chat failed");
+			else if (isNotImplemented(err)) this.appendSystem("Capix agent runtime is not available yet. Start session will be enabled in a future update.");
+			else if (isServiceUnavailable(err)) this.appendSystem("Capix service is temporarily unavailable.");
 		}
 	}
 

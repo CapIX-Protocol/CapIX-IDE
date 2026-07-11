@@ -142,6 +142,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.copyEndpoint", (item?: unknown) => cmdCopyEndpoint(item)),
     vscode.commands.registerCommand("capix.copyApiKey", (item?: unknown) => cmdCopyApiKey(item)),
 
+    // Agent bridge stub — returns an empty session list when the main-process
+    // broker has not registered the capix:agent:listSessions channel yet.
+    vscode.commands.registerCommand("capix:agent:listSessions", () => ({ sessions: [] })),
+
     // Refresh commands
     vscode.commands.registerCommand("capix.refreshDeploys", () => { deploysProvider.load(); }),
     vscode.commands.registerCommand("capix.refreshCatalog", () => { catalogProvider.load(); }),

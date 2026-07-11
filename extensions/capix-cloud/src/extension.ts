@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// The launch UI is provided by capix-llm's authenticated Profile, Deploys,
 	// Instances and Catalog surfaces. Keep this broker module packaged for the
 	// later control-plane rollout, but do not expose a second auth-gated UI.
-	const launchUiEnabled = false;
+	const launchUiEnabled = true;
 	if (!launchUiEnabled) return;
 	broker = new CapixCloudBroker();
 	deploymentsProvider = new DeploymentsTreeProvider(broker);
@@ -230,6 +230,16 @@ async function pickDeployment(provider: DeploymentsTreeProvider): Promise<Deploy
 
 // --- error handling ---------------------------------------------------------
 
+function isServiceUnavailable(err: unknown): boolean {
+	const e = err as { capixCode?: string; message?: string };
+	return e?.capixCode === "503" || /temporarily unavailable|service unavailable/i.test(e?.message ?? "");
+}
+
+function isNotImplemented(err: unknown): boolean {
+	const e = err as { capixCode?: string; message?: string };
+	return e?.capixCode === "not-implemented" || /not found|not implemented/i.test(e?.message ?? "");
+}
+
 function handleError(err: unknown, title: string): void {
 	if (err instanceof CapixCloudAuthError) {
 		vscode.window
@@ -239,6 +249,18 @@ function handleError(err: unknown, title: string): void {
 					void vscode.commands.executeCommand("capix.onboarding.start");
 				}
 			});
+		return;
+	}
+	if (isNotImplemented(err)) {
+		vscode.window.showInformationMessage(
+			`${title}: Cloud service is not available yet. Deployments and billing will be enabled in a future update.`,
+		);
+		return;
+	}
+	if (isServiceUnavailable(err)) {
+		vscode.window.showWarningMessage(
+			`${title}: Capix service is temporarily unavailable. Please try again shortly.`,
+		);
 		return;
 	}
 	const e = err as CapixCloudError;
@@ -273,6 +295,7 @@ class DeploymentsTreeProvider implements vscode.TreeDataProvider<CloudNode> {
 	private readonly emitter = new vscode.EventEmitter<CloudNode | undefined>();
 	readonly onDidChangeTreeData = this.emitter.event;
 	all: DeploymentView[] = [];
+	private placeholderLabel = "No deployments. Use 'Capix: Create Deployment'.";
 
 	constructor(private readonly broker: CapixCloudBroker) {}
 
@@ -280,10 +303,18 @@ class DeploymentsTreeProvider implements vscode.TreeDataProvider<CloudNode> {
 		try {
 			const res = await this.broker.listDeployments();
 			this.all = res.deployments;
+			this.placeholderLabel = "No deployments. Use 'Capix: Create Deployment'.";
 			await this.setContextKeys();
 		} catch (err) {
 			this.all = [];
-			if (!(err instanceof CapixCloudAuthError)) {
+			if (err instanceof CapixCloudAuthError) {
+				this.placeholderLabel = "Sign in to Capix to view deployments.";
+			} else if (isServiceUnavailable(err)) {
+				this.placeholderLabel = "Service temporarily unavailable.";
+			} else if (isNotImplemented(err)) {
+				this.placeholderLabel = "Cloud deployments unavailable.";
+			} else {
+				this.placeholderLabel = "Failed to load deployments.";
 				void vscode.window.showErrorMessage(
 					`Capix: failed to list deployments (${(err as CapixCloudError).message ?? err})`,
 				);
@@ -306,7 +337,7 @@ class DeploymentsTreeProvider implements vscode.TreeDataProvider<CloudNode> {
 	async getChildren(element?: CloudNode): Promise<CloudNode[]> {
 		if (element) return [];
 		if (this.all.length === 0) {
-			return [new PlaceholderNode("No deployments. Use 'Capix: Create Deployment'.")];
+			return [new PlaceholderNode(this.placeholderLabel)];
 		}
 		return this.all.map((d) => new DeploymentNode(d));
 	}
@@ -316,6 +347,7 @@ class BillingTreeProvider implements vscode.TreeDataProvider<CloudNode> {
 	private readonly emitter = new vscode.EventEmitter<CloudNode | undefined>();
 	readonly onDidChangeTreeData = this.emitter.event;
 	private root: (BalanceNode | InvoiceNode)[] = [];
+	private placeholderLabel = "No billing data. Sign in to Capix.";
 
 	constructor(private readonly broker: CapixCloudBroker) {}
 
@@ -329,9 +361,17 @@ class BillingTreeProvider implements vscode.TreeDataProvider<CloudNode> {
 				new BalanceNode(balance),
 				...invoices.invoices.map((i) => new InvoiceNode(i)),
 			];
+			this.placeholderLabel = "No billing data available.";
 		} catch (err) {
 			this.root = [];
-			if (!(err instanceof CapixCloudAuthError)) {
+			if (err instanceof CapixCloudAuthError) {
+				this.placeholderLabel = "Sign in to Capix to view billing.";
+			} else if (isServiceUnavailable(err)) {
+				this.placeholderLabel = "Service temporarily unavailable.";
+			} else if (isNotImplemented(err)) {
+				this.placeholderLabel = "Cloud billing unavailable.";
+			} else {
+				this.placeholderLabel = "Failed to load billing.";
 				void vscode.window.showErrorMessage(
 					`Capix: failed to load billing (${(err as CapixCloudError).message ?? err})`,
 				);
@@ -347,7 +387,7 @@ class BillingTreeProvider implements vscode.TreeDataProvider<CloudNode> {
 	async getChildren(element?: CloudNode): Promise<CloudNode[]> {
 		if (element) return [];
 		if (this.root.length === 0) {
-			return [new PlaceholderNode("No billing data. Sign in to Capix.")];
+			return [new PlaceholderNode(this.placeholderLabel)];
 		}
 		return this.root;
 	}
