@@ -28,6 +28,14 @@ class CapixClient {
         await this._onOAuthAccessToken?.(accessToken);
         this._lastPublishedOAuthAccessToken = accessToken;
     }
+    /** Restore the shared Capix router after a private endpoint is removed. */
+    async restoreRoutedChat() {
+        const accessToken = await this.getStoredToken();
+        if (!this.isOAuthAccessToken(accessToken))
+            throw new Error("Capix sign-in is required");
+        await this._onOAuthAccessToken?.(accessToken);
+        this._lastPublishedOAuthAccessToken = accessToken;
+    }
     /** Read an arbitrary secret from SecretStorage (extension-internal use only) */
     async getSecret(key) {
         return this._secretStorage?.get(key);
@@ -209,7 +217,7 @@ class CapixClient {
             return result;
         const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
         const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
-        return { ok: true, balance: { usd: usdc, sol, usdc }, activeInstances: 0, totalSpent: 0 };
+        return { ok: true, balance: { usd: usdc, sol, usdc }, transactions: result.transactions || [], updatedAt: new Date().toISOString(), activeInstances: 0, totalSpent: 0 };
     }
     // ── Billing: base treasury address for USDC on Base ───────────────────
     async getBaseTreasury() {

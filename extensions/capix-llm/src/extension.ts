@@ -133,6 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
     // LLM commands
     vscode.commands.registerCommand("capix.deployModel", (model?: CatalogModel) => cmdDeployModel(model)),
     vscode.commands.registerCommand("capix.deployCustomModel", () => cmdDeployCustomModel()),
+    vscode.commands.registerCommand("capix.deployVps", () => cmdDeployVps()),
     vscode.commands.registerCommand("capix.destroyDeploy", (item?: unknown) => cmdDestroyDeploy(item)),
     vscode.commands.registerCommand("capix.stopDeploy", (item?: unknown) => cmdStopDeploy(item)),
     vscode.commands.registerCommand("capix.startDeploy", (item?: unknown) => cmdStartDeploy(item)),
@@ -201,7 +202,7 @@ async function cmdLaunchCentre(): Promise<void> {
     { label: "$(credit-card) Deposit", description: "Add funds securely", command: "capix.topUp" },
     { label: "$(pulse) Balance & usage", description: "Review balance, invoices and consumption", command: "capix.refreshProfile" },
     { label: "$(server) Deploy GPU", description: "Provision Capix accelerated compute", command: "capix.deployModel" },
-    { label: "$(vm) Deploy VPS", description: "Provision Capix general compute", command: "capix.cloud.createDeployment" },
+    { label: "$(vm) Deploy VPS", description: "Provision Capix general compute", command: "capix.deployVps" },
     { label: "$(sparkle) Deploy LLM", description: "Provision a remote model on the Capix GPU network", command: "capix.deployModel" },
     { label: "$(terminal) Run Capix Code", description: "Open the bundled coding environment", command: "capix.launchCapixCode" },
     { label: "$(graph) Detailed usage", description: "Open metering and billing", command: "capix.openBilling" },
@@ -212,6 +213,38 @@ async function cmdLaunchCentre(): Promise<void> {
 export function deactivate() {
   refreshTimer?.dispose();
   terminalManager?.disposeAll();
+}
+
+async function cmdDeployVps(): Promise<void> {
+  if (!checkConfigured()) return;
+  const tier = await vscode.window.showQuickPick([
+    { label: "Capix Micro", description: "1 vCPU · 2 GB RAM · 25 GB", id: "micro" },
+    { label: "Capix Standard", description: "4 vCPU · 8 GB RAM · 80 GB", id: "standard" },
+    { label: "Capix Pro", description: "8 vCPU · 16 GB RAM · 160 GB", id: "pro" },
+  ], { placeHolder: "Choose VPS capacity" });
+  if (!tier) return;
+  const region = await vscode.window.showQuickPick([
+    { label: "Europe", id: "eu" }, { label: "United States", id: "us" }, { label: "Asia", id: "asia" }, { label: "Best available", id: "global" },
+  ], { placeHolder: "Choose region" });
+  if (!region) return;
+  const duration = await vscode.window.showQuickPick([
+    { label: "1 hour", hours: 1 }, { label: "6 hours", hours: 6 }, { label: "24 hours", hours: 24 }, { label: "7 days", hours: 168 },
+  ], { placeHolder: "Choose maximum runtime" });
+  if (!duration) return;
+  const quote = await client.getQuote(tier.id, duration.hours);
+  if (!quote.ok || !quote.quote) { vscode.window.showErrorMessage("Capix could not quote this VPS."); return; }
+  const confirm = await vscode.window.showWarningMessage(
+    `Provision ${tier.label} for up to ${duration.label} at $${quote.quote.amountUsd.toFixed(2)}?`,
+    { modal: true, detail: "The quoted amount is reserved from your Capix balance. Usage and refunds appear in Billing." }, "Provision",
+  );
+  if (confirm !== "Provision") return;
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Provisioning ${tier.label}…`, cancellable: false },
+    () => client.deployInstance(tier.id, region.id, duration.hours),
+  );
+  if (!result.ok) { vscode.window.showErrorMessage(result.error || "VPS provisioning failed."); return; }
+  vscode.window.showInformationMessage("Capix VPS provisioning started. Refresh Instances to follow progress.");
+  await refreshAll();
 }
 
 // Update the Capix branded status bar item with connection state.

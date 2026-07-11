@@ -90,6 +90,8 @@ class ProfileViewProvider {
                     balance: br.balance,
                     activeInstances: br.activeInstances || 0,
                     totalSpent: br.totalSpent || 0,
+                    updatedAt: br.updatedAt,
+                    transactions: br.transactions || [],
                     instances: (br.instances || []),
                 };
             }
@@ -321,6 +323,13 @@ ${cspMeta}
       const activeCount = instances.filter(i => i.status === 'running').length;
       const hourlyTotal = instances.filter(i => i.status === 'running').reduce((s, i) => s + (i.costUsdPerHour || 0), 0);
       const minuteRate = (hourlyTotal / 60).toFixed(4);
+      const updated = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString() : 'just now';
+      const recentRows = (data.transactions || []).slice(0, 5).map(tx => {
+        const kind = esc(tx.type || tx.kind || tx.description || 'Ledger entry');
+        const amount = esc(tx.amount || tx.amountMinor || tx.amount_minor || '');
+        const asset = esc(tx.asset || tx.currency || '');
+        return '<div class="deploy-row"><span class="deploy-name">' + kind + '</span><span>' + amount + ' ' + asset + '</span></div>';
+      }).join('') || '<div class="empty">No ledger activity yet</div>';
 
       let deployRows = '';
       if (instances.length === 0) {
@@ -365,6 +374,8 @@ ${cspMeta}
             <button class="btn btn-primary" onclick="vscode.postMessage({ type: 'topUp' })">+ Top Up</button>
             <button class="btn btn-secondary" onclick="vscode.postMessage({ type: 'openBilling' })">Billing Page →</button>
           </div>
+          <div class="section-title">Recent activity · updated \${esc(updated)}</div>
+          \${recentRows}
         </div>
 
         <div class="card">
