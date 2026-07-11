@@ -141,11 +141,17 @@ jobs:
       - name: Install deps
         run: npm install
         working-directory: vscode
+        env:
+          # The pinned spdlog/fmt source predates the stricter consteval rules
+          # in the current macOS runner compiler.
+          CXXFLAGS: ${{ runner.os == 'macOS' && '-DFMT_USE_CONSTEXPR=0' || '' }}
 
       - name: Rebuild native modules (macOS)
         run: npx node-gyp rebuild --directory=node_modules/@vscode/spdlog
         working-directory: vscode
         if: runner.os == 'macOS'
+        env:
+          CXXFLAGS: -DFMT_USE_CONSTEXPR=0
 
       - name: Build Capix IDE
         run: bash scripts/build.sh
