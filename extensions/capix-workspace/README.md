@@ -14,7 +14,7 @@ port forwarding and private preview UI** (architecture §11.6; target ownership:
   the `capix-remote+<workspaceId>` authority. No manual token, provider key or
   shell-built SSH command.
 - **Reconnect** — resume after sleep/network restart using sequence numbers and a
-  cursor; never creates a new billable resource.
+  resumable stream position; never creates a new billable resource.
 - **Forward port / open preview** — proxy a listening workspace port through the
   encrypted tunnel to an opaque TLS preview hostname.
 

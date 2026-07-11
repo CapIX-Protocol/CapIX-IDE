@@ -1,13 +1,13 @@
 # Capix Server
 
-The Capix-owned matching Code-OSS remote server for CapixIDE remote development
+The Capix-owned remote workspace server for CapixIDE development
 (architecture §11.6; target ownership: `remote/capix-server/`).
 
 ## Role
 
 `capix-server` is the remote extension host the IDE attaches to through the
-`capix-remote+<workspaceId>` authority. It is **not** an assumed Microsoft
-Remote-SSH dependency. UI extensions remain local; workspace/language extensions
+`capix-remote+<workspaceId>` authority. It has no third-party remote-access
+dependency. UI extensions remain local; workspace/language extensions
 run in this remote host.
 
 It is installed/updated by the **signed workspace agent** and must match the
@@ -18,12 +18,12 @@ desktop compatibility manifest. The agent launches the server by absolute path
 
 - The IDE makes an outbound connection to the Capix tunnel gateway; this server
   also makes an outbound connection. The gateway multiplexes logical streams over
-  one mTLS tunnel using sequence numbers and a resumable cursor.
+  one mTLS tunnel using sequence numbers and a resumable stream position.
 - The server validates the IDE handshake (versions + release manifest + API
   schema), validates the one-use session ticket scope against the control plane,
   then opens only the allowlisted channels (`control | filesystem | file-watch |
   pty | task | logs | port | preview | agent-runtime`).
-- Reconnect uses the cursor and never creates a new billable resource.
+- Reconnect uses the saved stream position and never creates a new billable resource.
 - The server never holds the customer's refresh token, device key, wallet bearer
   or a provider management credential; those live only in the IDE main-process
   broker and the OS credential store.

@@ -1,6 +1,6 @@
 # Capix IDE
 
-The AI IDE for the Capix protocol — built on the [Void editor](https://github.com/voideditor/void) (a VS Code fork) with a Capix-branded sidebar extension for LLM deploys, cloud panels, a native SSH terminal, Covenant memory, and seamless profile sync between the web console and the IDE.
+The AI IDE for the Capix protocol, with routed inference, LLM deploys, cloud panels, a native SSH terminal, Covenant memory, and seamless profile sync between the web console and CapixIDE.
 
 CapixIDE builds are **unsigned**. On macOS, right-click the app → **Open** on first launch (Gatekeeper will warn that the app is unverified).
 
@@ -17,7 +17,7 @@ Pre-built binaries for Mac, Windows, and Linux are on the [Releases page](https:
 
 ## What's in the box?
 
-Capix IDE is a full VS Code-compatible editor with a Capix-branded sidebar extension that includes:
+CapixIDE is a full project editor with an integrated Capix command centre that includes:
 
 ### LLM Deploy + Management
 - **Model Catalog** — browse featured partner + community models; click to deploy on a GPU
@@ -41,14 +41,14 @@ Capix IDE is a full VS Code-compatible editor with a Capix-branded sidebar exten
 - **Total spent** — lifetime billing history
 
 ### Native SSH Terminal
-- Click "Open Terminal" on any instance/agent/job → opens a real VS Code integrated terminal pre-configured with SSH
+- Click "Open Terminal" on any instance or deployment → opens an integrated terminal pre-configured with SSH
 - Reuses existing terminals for the same host
 - Run commands directly on your deployed GPU instances
 
 ### Auto-Connect LLM
 - When an LLM deploy becomes ready (in the IDE or on capix.network), the chat provider is auto-configured with the base URL + API key
 - Checks for existing ready deploys on startup — if any exist, auto-configures from the most recent one
-- API key stored in VS Code SecretStorage (OS keychain), never in plaintext
+- Credentials are stored in the operating system credential store, never in plaintext
 
 ### Profile Sync
 - Same session token = shared balance, deploys, instances across the web console and the IDE
@@ -79,19 +79,19 @@ Capix IDE is a full VS Code-compatible editor with a Capix-branded sidebar exten
 - `capix-code` is the Capix CLI coding assistant — [github.com/Ritzky/capix-code](https://github.com/Ritzky/capix-code)
 
 ### Settings Import
-- **VS Code / Cursor / Windsurf** — copies `settings.json`, `keybindings.json`, and extensions on first launch
-- **JetBrains** — translates IntelliJ / PyCharm / WebStorm keymaps and color schemes into VS Code format
+- **Compatible editors** — imports supported settings, keybindings, themes, and extensions on first launch
+- **Compatible IDEs** — translates supported keymaps and colour schemes into CapixIDE format
 
 ### Other
 - **Capix logo + branding** — the activity bar icon is the real Capix brand mark, the status bar shows connection state, the sidebar is titled "Capix"
 - **Extension marketplace** — uses [Open VSX](https://open-vsx.org) (license-clean)
 - **Cross-platform** — `.dmg`, `.exe`, `.deb`, `.rpm`, AppImage via GitHub Actions
-- **Security** — session tokens + API keys in VS Code SecretStorage (OS keychain), webview CSP with per-render nonce, SSH command allowlist, TOFU-then-pin host key verification (persistent known_hosts, strict on subsequent connects)
+- **Security** — session tokens and API keys remain in the operating system credential store, with webview CSP, per-render nonces, an SSH command allowlist, and pinned host-key verification
 
 ## Quick start (users)
 
 1. Download the installer for your platform from [Releases](https://github.com/Ritzky/CapIX-IDE/releases).
-2. On first launch, Capix IDE asks: "Import from VS Code / JetBrains?" — pick one to pull in your themes, keybindings, and extensions.
+2. On first launch, CapixIDE offers to import compatible themes, keybindings, settings, and extensions.
 3. Run **Capix: Connect Wallet** (Command Palette) and paste your `cpx_session.…` token from capix.network.
 4. Your profile, deploys, and instances sync automatically.
 5. Deploy an LLM from the Model Catalog → when ready, the chat panel auto-configures.
@@ -108,7 +108,7 @@ cd CapixIDE
 ./scripts/dev.sh         # launches the dev build
 ```
 
-This repo is the **brand kit + extension + builder pipeline**. The full source lives in `vscode/` after `bootstrap.sh` clones it.
+This repository contains the CapixIDE product source, integrated modules, brand assets, and release pipeline. The bootstrap script prepares the generated editor-source workspace used by the build.
 
 To package distributable installers:
 
