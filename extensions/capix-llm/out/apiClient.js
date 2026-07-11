@@ -12,9 +12,21 @@ class CapixClient {
     /** Cached session token (loaded from SecretStorage on first use) */
     _sessionToken = null;
     _secretStorage;
+    _onOAuthAccessToken;
+    _lastPublishedOAuthAccessToken = null;
     /** Wire up VS Code SecretStorage for secure (non-plaintext) token storage */
     setSecretStorage(store) {
         this._secretStorage = store;
+    }
+    /** Keep the native chat surface synchronized whenever OAuth rotates. */
+    setOAuthAccessTokenHandler(handler) {
+        this._onOAuthAccessToken = handler;
+    }
+    async publishOAuthAccessToken(accessToken) {
+        if (accessToken === this._lastPublishedOAuthAccessToken)
+            return;
+        await this._onOAuthAccessToken?.(accessToken);
+        this._lastPublishedOAuthAccessToken = accessToken;
     }
     /** Read an arbitrary secret from SecretStorage (extension-internal use only) */
     async getSecret(key) {
@@ -34,6 +46,7 @@ class CapixClient {
         await this._secretStorage.store("capix.sessionToken", accessToken);
         if (refreshToken)
             await this._secretStorage.store("capix.refreshToken", refreshToken);
+        await this.publishOAuthAccessToken(accessToken);
     }
     get baseUrl() {
         return CapixClient.PRODUCTION_BASE_URL;
@@ -105,7 +118,10 @@ class CapixClient {
     async checkConfigured() {
         const token = await this.getStoredToken();
         this._sessionToken = token;
-        return this.isOAuthAccessToken(token);
+        const configured = this.isOAuthAccessToken(token);
+        if (configured)
+            await this.publishOAuthAccessToken(token);
+        return configured;
     }
     isOAuthAccessToken(token) {
         return token.startsWith("cpxs_") || token.startsWith("cpx_session.");

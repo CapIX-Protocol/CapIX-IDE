@@ -1,0 +1,94 @@
+diff --git a/src/vs/workbench/contrib/void/browser/void.contribution.ts b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+index 35c8918..c7aac2f 100644
+--- a/src/vs/workbench/contrib/void/browser/void.contribution.ts
++++ b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+@@ -83,3 +83,25 @@ import '../common/voidUpdateService.js'
+ 
+ // model service
+ import '../common/voidModelService.js'
++
++// CapixIDE owns the routed chat configuration. The built-in Capix extension
++// supplies a short-lived OAuth access token after native sign-in; this command
++// persists it through the encrypted application storage service and selects the
++// router's stable `auto` model. No portal API key or provider credential is
++// copied into workspace/user JSON.
++import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
++import { IVoidSettingsService } from '../common/voidSettingsService.js';
++
++CommandsRegistry.registerCommand('capix.chat.configure', async (accessor, accessToken: unknown) => {
++	if (typeof accessToken !== 'string' || (!accessToken.startsWith('cpxs_') && !accessToken.startsWith('cpx_session.'))) {
++		throw new Error('Capix chat configuration requires a valid OAuth access token.');
++	}
++
++	const settings = accessor.get(IVoidSettingsService);
++	await settings.waitForInitState;
++	await settings.setSettingOfProvider('openAICompatible', 'endpoint', 'https://www.capix.network/api/v1');
++	await settings.setSettingOfProvider('openAICompatible', 'apiKey', accessToken);
++	await settings.setSettingOfProvider('openAICompatible', 'headersJSON', '{}');
++	settings.addModel('openAICompatible', 'auto');
++	await settings.setModelSelectionOfFeature('Chat', { providerName: 'openAICompatible', modelName: 'auto' });
++});
+diff --git a/src/vs/workbench/contrib/void/browser/voidSettingsPane.ts b/src/vs/workbench/contrib/void/browser/voidSettingsPane.ts
+index b70aef9..c2bb125 100644
+--- a/src/vs/workbench/contrib/void/browser/voidSettingsPane.ts
++++ b/src/vs/workbench/contrib/void/browser/voidSettingsPane.ts
+@@ -49,7 +49,7 @@ class VoidSettingsInput extends EditorInput {
+ 	}
+ 
+ 	override getName(): string {
+-		return nls.localize('voidSettingsInputsName', 'Void\'s Settings');
++		return nls.localize('voidSettingsInputsName', 'Capix Settings');
+ 	}
+ 
+ 	override getIcon() {
+@@ -112,7 +112,7 @@ class VoidSettingsPane extends EditorPane {
+ 
+ // register Settings pane
+ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
+-	EditorPaneDescriptor.create(VoidSettingsPane, VoidSettingsPane.ID, nls.localize('VoidSettingsPane', "Void\'s Settings Pane")),
++	EditorPaneDescriptor.create(VoidSettingsPane, VoidSettingsPane.ID, nls.localize('VoidSettingsPane', "Capix Settings Pane")),
+ 	[new SyncDescriptor(VoidSettingsInput)]
+ );
+ 
+@@ -123,7 +123,7 @@ registerAction2(class extends Action2 {
+ 	constructor() {
+ 		super({
+ 			id: VOID_TOGGLE_SETTINGS_ACTION_ID,
+-			title: nls.localize2('voidSettings', "Void: Toggle Settings"),
++			title: nls.localize2('voidSettings', "Capix: Toggle Settings"),
+ 			icon: Codicon.settingsGear,
+ 			menu: [
+ 				{
+@@ -172,7 +172,7 @@ registerAction2(class extends Action2 {
+ 	constructor() {
+ 		super({
+ 			id: VOID_OPEN_SETTINGS_ACTION_ID,
+-			title: nls.localize2('voidSettingsAction2', "Void: Open Settings"),
++			title: nls.localize2('voidSettingsAction2', "Capix: Open Settings"),
+ 			f1: true,
+ 			icon: Codicon.settingsGear,
+ 		});
+@@ -202,7 +202,7 @@ MenuRegistry.appendMenuItem(MenuId.GlobalActivity, {
+ 	group: '0_command',
+ 	command: {
+ 		id: VOID_TOGGLE_SETTINGS_ACTION_ID,
+-		title: nls.localize('voidSettingsActionGear', "Void\'s Settings")
++		title: nls.localize('voidSettingsActionGear', "Capix Settings")
+ 	},
+ 	order: 1
+ });
+diff --git a/src/vs/workbench/contrib/void/common/voidSettingsService.ts b/src/vs/workbench/contrib/void/common/voidSettingsService.ts
+index 3e0c229..50ccc82 100644
+--- a/src/vs/workbench/contrib/void/common/voidSettingsService.ts
++++ b/src/vs/workbench/contrib/void/common/voidSettingsService.ts
+@@ -167,7 +167,9 @@ const _validatedModelState = (state: Omit<VoidSettingsState, '_modelOptions'>):
+ 	// update model options
+ 	let newModelOptions: ModelOption[] = []
+ 	for (const providerName of providerNames) {
+-		const providerTitle = providerName // displayInfoOfProviderName(providerName).title.toLowerCase() // looks better lowercase, best practice to not use raw providerName
++		// The customer-facing routed model is a Capix product capability; do not
++		// expose its protocol-adapter implementation name in the model picker.
++		const providerTitle = providerName === 'openAICompatible' ? 'Capix' : providerName
+ 		if (!newSettingsOfProvider[providerName]._didFillInProviderSettings) continue // if disabled, don't display model options
+ 		for (const { modelName, isHidden } of newSettingsOfProvider[providerName].models) {
+ 			if (isHidden) continue

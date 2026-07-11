@@ -13,10 +13,23 @@ export class CapixClient {
   /** Cached session token (loaded from SecretStorage on first use) */
   private _sessionToken: string | null = null;
   private _secretStorage?: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void> };
+  private _onOAuthAccessToken?: (accessToken: string) => Promise<void>;
+  private _lastPublishedOAuthAccessToken: string | null = null;
 
   /** Wire up VS Code SecretStorage for secure (non-plaintext) token storage */
   setSecretStorage(store: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void> }): void {
     this._secretStorage = store;
+  }
+
+  /** Keep the native chat surface synchronized whenever OAuth rotates. */
+  setOAuthAccessTokenHandler(handler: (accessToken: string) => Promise<void>): void {
+    this._onOAuthAccessToken = handler;
+  }
+
+  private async publishOAuthAccessToken(accessToken: string): Promise<void> {
+    if (accessToken === this._lastPublishedOAuthAccessToken) return;
+    await this._onOAuthAccessToken?.(accessToken);
+    this._lastPublishedOAuthAccessToken = accessToken;
   }
 
   /** Read an arbitrary secret from SecretStorage (extension-internal use only) */
@@ -36,6 +49,7 @@ export class CapixClient {
     if (!this._secretStorage) throw new Error("OS SecretStorage is unavailable");
     await this._secretStorage.store("capix.sessionToken", accessToken);
     if (refreshToken) await this._secretStorage.store("capix.refreshToken", refreshToken);
+    await this.publishOAuthAccessToken(accessToken);
   }
 
   get baseUrl(): string {
@@ -109,7 +123,9 @@ export class CapixClient {
   async checkConfigured(): Promise<boolean> {
     const token = await this.getStoredToken();
     this._sessionToken = token;
-    return this.isOAuthAccessToken(token);
+    const configured = this.isOAuthAccessToken(token);
+    if (configured) await this.publishOAuthAccessToken(token);
+    return configured;
   }
 
   private isOAuthAccessToken(token: string): boolean {

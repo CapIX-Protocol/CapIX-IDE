@@ -37,6 +37,19 @@ describe("CapixClient", () => {
     expect(await client.checkConfigured()).toBe(true);
     expect(client.isConfigured).toBe(true);
   });
+
+  it("publishes the stored OAuth token to native chat exactly once", async () => {
+    const client = new CapixClient();
+    client.setSecretStorage(createMockSecretStorage("cpxs_oauth-access-token"));
+    const configureChat = vi.fn().mockResolvedValue(undefined);
+    client.setOAuthAccessTokenHandler(configureChat);
+
+    await client.checkConfigured();
+    await client.checkConfigured();
+
+    expect(configureChat).toHaveBeenCalledOnce();
+    expect(configureChat).toHaveBeenCalledWith("cpxs_oauth-access-token");
+  });
   let client: CapixClient;
   let fetchMock: ReturnType<typeof vi.fn>;
 

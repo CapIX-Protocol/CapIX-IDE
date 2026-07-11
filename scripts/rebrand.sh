@@ -78,6 +78,15 @@ else
   echo "ERROR: inherited onboarding/telemetry patch no longer applies"
   exit 1
 fi
+if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0004-capix-routed-chat.patch" >/dev/null 2>&1; then
+  echo "  done: Capix routed chat already registered"
+elif git -C "$VSCODE" apply --check "$DIR/patches/0004-capix-routed-chat.patch"; then
+  git -C "$VSCODE" apply "$DIR/patches/0004-capix-routed-chat.patch"
+  echo "  done: Capix routed chat registered"
+else
+  echo "ERROR: Capix routed chat patch no longer applies"
+  exit 1
+fi
 for module in capix-auth capix-ai capix-remote capix-onboarding; do
   source_dir="$DIR/src/vs/workbench/contrib/$module"
   if [ ! -d "$source_dir" ]; then

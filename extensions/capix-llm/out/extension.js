@@ -82,6 +82,12 @@ function activate(context) {
         get: (key) => Promise.resolve(context.secrets.get(key)),
         store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
     });
+    client.setOAuthAccessTokenHandler(async (accessToken) => {
+        // The workbench stores this short-lived OAuth token using its encrypted
+        // application storage and selects Capix routed inference (`auto`). Portal
+        // API keys are deliberately not copied into the desktop application.
+        await vscode.commands.executeCommand("capix.chat.configure", accessToken);
+    });
     // ── Tree views ────────────────────────────────────────────────────────
     deploysProvider = new treeViews_1.DeploysTreeProvider(client);
     catalogProvider = new treeViews_1.CatalogTreeProvider(client);
@@ -215,17 +221,15 @@ async function updateStatusBar(item) {
 }
 let statusBarItem = null;
 // ── Helpers ───────────────────────────────────────────────────────────────
-function refreshAll() {
-    deploysProvider.load();
-    catalogProvider.load();
-    hostedProvider.load();
-    instancesProvider.load();
-    agentsProvider.load();
-    jobsProvider.load();
-    apiKeysProvider.load();
-    profileProvider.refresh();
+async function refreshAll() {
+    await client.checkConfigured();
+    await Promise.all([
+        deploysProvider.load(), catalogProvider.load(), hostedProvider.load(),
+        instancesProvider.load(), agentsProvider.load(), jobsProvider.load(),
+        apiKeysProvider.load(), profileProvider.refresh(),
+    ]);
     if (statusBarItem)
-        updateStatusBar(statusBarItem);
+        await updateStatusBar(statusBarItem);
 }
 function setupAutoRefresh(context) {
     refreshTimer?.dispose();
@@ -778,7 +782,8 @@ async function cmdConnectWallet() {
             response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
             response.end("Capix sign-in complete. Return to CapixIDE.");
             vscode.window.showInformationMessage("Capix sign-in complete.");
-            refreshAll();
+            await refreshAll();
+            await vscode.commands.executeCommand("capix.agent.refreshAuth");
         }
         catch (error) {
             response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });

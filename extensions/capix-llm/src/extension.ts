@@ -50,6 +50,12 @@ export function activate(context: vscode.ExtensionContext) {
     get: (key) => Promise.resolve(context.secrets.get(key)),
     store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
   });
+  client.setOAuthAccessTokenHandler(async (accessToken) => {
+    // The workbench stores this short-lived OAuth token using its encrypted
+    // application storage and selects Capix routed inference (`auto`). Portal
+    // API keys are deliberately not copied into the desktop application.
+    await vscode.commands.executeCommand("capix.chat.configure", accessToken);
+  });
 
   // ── Tree views ────────────────────────────────────────────────────────
   deploysProvider = new DeploysTreeProvider(client);
