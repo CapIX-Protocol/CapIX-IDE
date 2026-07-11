@@ -37,11 +37,13 @@
         },
         {
           "id": "capix.llm.agents",
-          "name": "Agents"
+          "name": "Agents",
+          "when": "false"
         },
         {
           "id": "capix.llm.jobs",
-          "name": "Serverless Jobs"
+          "name": "Serverless Jobs",
+          "when": "false"
         },
         {
           "id": "capix.llm.apikeys",

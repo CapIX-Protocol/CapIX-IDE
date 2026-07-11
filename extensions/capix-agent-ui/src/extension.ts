@@ -42,6 +42,11 @@ let toolApprovalHandler: vscode.Disposable | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
 	broker = new CapixAgentBroker();
+	// Agent chat is intentionally outside the initial customer launch scope.
+	// Keep the built-in installed/activatable for protocol compatibility, but
+	// do not register any customer-facing views or commands yet.
+	const launchUiEnabled = false;
+	if (!launchUiEnabled) return;
 	sessionsProvider = new SessionsTreeProvider(broker);
 	chatProvider = new ChatViewProvider(broker, context.extensionUri);
 

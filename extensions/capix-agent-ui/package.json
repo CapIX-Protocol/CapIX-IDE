@@ -10,37 +10,6 @@
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "capix-agent",
-          "title": "Capix Agent",
-          "icon": "resources/capix-activitybar.svg"
-        }
-      ],
-      "panel": [
-        {
-          "id": "capix-agent-panel",
-          "title": "Capix Chat",
-          "icon": "resources/capix-activitybar.svg"
-        }
-      ]
-    },
-    "views": {
-      "capix-agent": [
-        {
-          "id": "capix.agent.sessions",
-          "name": "Sessions"
-        }
-      ],
-      "capix-agent-panel": [
-        {
-          "id": "capix.agent.chat",
-          "name": "Chat",
-          "type": "webview"
-        }
-      ]
-    },
     "commands": [
       {
         "command": "capix.agent.refreshSessions",
