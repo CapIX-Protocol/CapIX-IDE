@@ -9,6 +9,8 @@ vi.mock("vscode", () => ({
     createTerminal: mockCreateTerminal,
     showWarningMessage: mockShowWarningMessage,
     onDidCloseTerminal: mockOnDidCloseTerminal,
+    showErrorMessage: vi.fn(),
+    createOutputChannel: vi.fn(() => ({ appendLine: vi.fn() })),
   },
   ThemeIcon: vi.fn().mockImplementation((icon: string) => ({ id: icon })),
   Terminal: vi.fn(),

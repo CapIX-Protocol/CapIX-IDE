@@ -367,6 +367,11 @@
           "enum": ["auto", "private", "loop"],
           "default": "auto",
           "description": "Smart router mode: 'auto' (dynamic model selection), 'private' (use deployed private LLM), 'loop' (private + continuous build until done)."
+        },
+        "capix.enableCrashReporting": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable opt-in crash reporting"
         }
       }
     }

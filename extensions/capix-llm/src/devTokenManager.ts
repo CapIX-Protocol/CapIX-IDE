@@ -39,7 +39,7 @@ export class DevTokenManager {
           `◆ Capix Dev Token: +${(res.mint as { amount?: number })?.amount || 1} DEV minted for committing with Capix IDE.`,
         );
       }
-    } catch (err) { logger.error("DevTokenManager.onDecision failed", { error: String(err) }); }
+    } catch (err) { logger.error("DevTokenManager.onCommit failed", { error: String(err) }); }
   }
 
   /** Call when a deploy succeeds (agent, serverless, LLM, VPS). */
@@ -54,7 +54,7 @@ export class DevTokenManager {
           `◆ Capix Dev Token: +${(res.mint as { amount?: number })?.amount || 5} DEV minted for deploying from Capix IDE.`,
         );
       }
-    } catch { /* silent */ }
+    } catch (err) { logger.error("DevTokenManager.onDeploy failed", { error: String(err) }); }
   }
 
   /** Call on each chat turn. Mints at 50 turns. */
@@ -74,7 +74,7 @@ export class DevTokenManager {
           `◆ Capix Dev Token: +${(res.mint as { amount?: number })?.amount || 2} DEV minted for recording a decision.`,
         );
       }
-    } catch { /* silent */ }
+    } catch (err) { logger.error("DevTokenManager.onDecision failed", { error: String(err) }); }
   }
 
   private async mintSessionComplete(): Promise<void> {
@@ -89,7 +89,7 @@ export class DevTokenManager {
           `◆ Capix Dev Token: +${(res.mint as { amount?: number })?.amount || 10} DEV minted for completing a productive session!`,
         );
       }
-    } catch { /* silent */ }
+    } catch (err) { logger.error("DevTokenManager.mintSessionComplete failed", { error: String(err) }); }
   }
 
   /** Get the user's DEV token balance for display in the Profile panel. */
@@ -99,7 +99,7 @@ export class DevTokenManager {
       if (res.ok) {
         return { balance: res.balance || 0, totalEarned: res.totalEarned || 0 };
       }
-    } catch { /* silent */ }
+    } catch (err) { logger.error("DevTokenManager.getBalance failed", { error: String(err) }); }
     return { balance: 0, totalEarned: 0 };
   }
 }

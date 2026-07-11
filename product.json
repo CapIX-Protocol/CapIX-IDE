@@ -1,7 +1,7 @@
 {
   "nameShort": "CapixIDE",
   "nameLong": "CapixIDE",
-  "capixVersion": "1.0.0",
+  "capixVersion": "1.1.0",
   "capixRelease": "0001",
   "enableTelemetry": false,
   "applicationName": "capix",
@@ -29,16 +29,7 @@
     "serviceUrl": "https://open-vsx.org/vscode/gallery",
     "itemUrl": "https://open-vsx.org/vscode/item"
   },
-  "builtInExtensions": [
-    {
-      "name": "capix-llm",
-      "version": "1.0.0",
-      "repo": "",
-      "metadata": {
-        "isBuiltin": true
-      }
-    }
-  ],
+  "builtInExtensions": [],
   "linkProtectionTrustedDomains": [
     "https://capix.network",
     "https://www.capix.network",

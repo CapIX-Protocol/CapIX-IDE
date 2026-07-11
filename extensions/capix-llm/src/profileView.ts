@@ -8,6 +8,7 @@
 
 import * as vscode from "vscode";
 import { CapixClient } from "./apiClient";
+import { logger } from "./logger";
 
 interface BillingData {
   balance: { usd: number; sol: number; usdc: number };
@@ -76,8 +77,8 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       if (treasuryRes.ok) {
         this.baseTreasury = treasuryRes as unknown as BaseTreasury;
       }
-    } catch {
-      // network error — show retry
+    } catch (err) {
+      logger.error("ProfileViewProvider.refresh failed", { error: String(err) });
     } finally {
       this.loading = false;
       this.view.webview.postMessage({ type: "loading", value: false });

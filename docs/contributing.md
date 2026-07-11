@@ -64,6 +64,41 @@ vscode/
 
 ## Testing
 
+### Extension tests (capix-llm)
+
+```bash
+cd extensions/capix-llm
+
+# Run tests once
+npm test
+
+# Watch mode (auto-rerun on file change)
+npm run test:watch
+
+# Coverage report (text + lcov)
+npm run test:coverage
+```
+
+### Linting & formatting
+
+```bash
+cd extensions/capix-llm
+
+# Check formatting
+npm run format:check
+
+# Fix formatting
+npm run format
+
+# Lint
+npm run lint
+
+# Auto-fix lint issues
+npm run lint:fix
+```
+
+### Full app build test
+
 ```bash
 # Build a local exe for your platform (~25 min, needs the prereqs above):
 cd vscode
@@ -78,10 +113,10 @@ The full `npm test` suite from VS Code also runs after bootstrap, but it's heavy
 ## Releasing
 
 1. Bump `capixVersion` in `product.json`.
-2. Tag: `git tag v1.0.1 && git push origin v1.0.1`.
-3. The [Release workflow](../.github/workflows/release.yml) builds all 6 platform/arch combos in parallel and uploads to GitHub Releases.
+2. Tag: `git tag v1.1.0 && git push origin v1.1.0`.
+3. The [Release workflow](../.github/workflows/release.yml) builds all platform/arch combos in parallel and uploads to GitHub Releases.
 4. The auto-updater (inherited from Void, rewired to this repo's Releases) notifies existing users.
 
 ## License
 
-By contributing, you agree your contributions are licensed under Apache-2.0 (same as the rest of CapixIDE and the Void upstream).
+By contributing, you agree your contributions are licensed under MIT (same as the rest of CapixIDE).

@@ -35,13 +35,13 @@ mac:
   target:
     - target: dmg
       arch: [arm64, x64]
+  identity: "Developer ID Application: Capix Protocol (XXXXXXXXXX)"
   hardenedRuntime: true
-  gatekeeperAssess: false
+  gatekeeperAssess: true
   entitlements: resources/mac/entitlements.plist
   entitlementsInherit: resources/mac/entitlements.plist
   notarize:
-    teamId: ${env.APPLE_TEAM_ID}
-  identity: ${env.APPLE_DEVELOPER_ID}
+    teamId: "XXXXXXXXXX"
 
 win:
   icon: resources/icons/code.ico

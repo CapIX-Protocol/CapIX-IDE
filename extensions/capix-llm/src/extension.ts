@@ -19,6 +19,8 @@ import { AutoConnectManager } from "./autoConnect";
 import { CovenantManager } from "./covenant";
 import { DevTokenManager } from "./devTokenManager";
 import { SmartRouterManager } from "./smartRouterManager";
+import { logger } from "./logger";
+import { initTelemetry } from "./telemetry";
 import type { CatalogModel } from "./types";
 
 let client: CapixClient;
@@ -38,6 +40,8 @@ let smartRouter: SmartRouterManager;
 let refreshTimer: vscode.Disposable | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
+  initTelemetry(context);
+
   client = new CapixClient();
   // Security: use VS Code SecretStorage for the session token instead of plaintext settings.json
   client.setSecretStorage({
@@ -76,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
         await devTokens.onCommit(head, repo.state.HEAD?.name);
       }
       lastHead = head;
-    } catch { /* git extension not available */ }
+    } catch (err) { logger.error("capix.checkCommits failed", { error: String(err) }); }
   });
   context.subscriptions.push(gitWatcher);
   // Poll git state every 10s (lightweight).
@@ -219,7 +223,8 @@ async function updateStatusBar(item: vscode.StatusBarItem): Promise<void> {
       item.command = "capix.connectWallet";
     }
     item.show();
-  } catch {
+  } catch (err) {
+    logger.error("updateStatusBar failed", { error: String(err) });
     item.hide();
   }
 }

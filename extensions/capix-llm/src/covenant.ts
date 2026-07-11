@@ -19,6 +19,7 @@
  */
 
 import * as vscode from "vscode";
+import { logger } from "./logger";
 
 export interface MemoryEntry {
   id: string;
@@ -69,8 +70,8 @@ export class CovenantManager {
       try {
         const doc = await vscode.workspace.fs.readFile(covenantPath);
         return new TextDecoder().decode(doc);
-      } catch {
-        // File doesn't exist — fall through to default.
+      } catch (err) {
+        logger.error("CovenantManager.getSpirit failed", { error: String(err) });
       }
     }
     return this.SPIRIT_DEFAULT;
@@ -149,8 +150,8 @@ export class CovenantManager {
       // File exists — open it.
       const doc = await vscode.workspace.openTextDocument(file);
       vscode.window.showTextDocument(doc);
-    } catch {
-      // Create it with the default spirit.
+    } catch (err) {
+      logger.error("CovenantManager.createSpiritFile failed", { error: String(err) });
       await vscode.workspace.fs.createDirectory(dir);
       await vscode.workspace.fs.writeFile(file, Buffer.from(this.SPIRIT_DEFAULT, "utf-8"));
       const doc = await vscode.workspace.openTextDocument(file);

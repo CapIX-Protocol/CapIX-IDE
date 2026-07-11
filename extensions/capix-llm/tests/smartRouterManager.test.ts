@@ -13,6 +13,7 @@ vi.mock("vscode", () => ({
     showWarningMessage: mockShowWarnMsg,
     showQuickPick: mockShowQuickPick,
     withProgress: mockWithProgress,
+    createOutputChannel: vi.fn(() => ({ appendLine: vi.fn() })),
   },
   workspace: {
     getConfiguration: vi.fn(() => ({

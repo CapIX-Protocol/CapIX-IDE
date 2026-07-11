@@ -7,6 +7,7 @@
 
 import * as vscode from "vscode";
 import { CapixClient } from "./apiClient";
+import { logger } from "./logger";
 import type { CatalogModel, LlmDeploy } from "./types";
 
 // ── Tree item type enums ──────────────────────────────────────────────────
@@ -71,7 +72,8 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
             }) as { instanceId: number; modelLabel: string; state: DeployState; endpoint: string | null; ready: boolean; gpu: string; location: string; pricePerHr: number; apiKey: string | null; instanceRecordId: string }[])
         );
       this.refresh();
-    } catch {
+    } catch (err) {
+      logger.error("DeploysTreeProvider.load failed", { error: String(err) });
       this.deploys = [];
       this.refresh();
     }
@@ -127,7 +129,9 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogItem>
       if (res.ok) {
         this.models = res.models || [];
       }
-    } catch {}
+    } catch (err) {
+      logger.error("CatalogTreeProvider.load failed", { error: String(err) });
+    }
     this.loaded = true;
     this.refresh();
   }
@@ -210,7 +214,7 @@ export class HostedTreeProvider implements vscode.TreeDataProvider<CatalogItem> 
       } else {
         this.hosted = [];
       }
-    } catch { this.hosted = []; }
+    } catch (err) { logger.error("HostedTreeProvider.load failed", { error: String(err) }); this.hosted = []; }
     this.refresh();
   }
 

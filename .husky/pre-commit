@@ -1,0 +1,1 @@
+cd extensions/capix-llm && npx lint-staged
