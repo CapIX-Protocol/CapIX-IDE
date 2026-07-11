@@ -10,27 +10,6 @@
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "capix-workspace",
-          "title": "Capix Workspace",
-          "icon": "$(remote)"
-        }
-      ]
-    },
-    "views": {
-      "capix-workspace": [
-        {
-          "id": "capix.workspace.sessions",
-          "name": "Sessions"
-        },
-        {
-          "id": "capix.workspace.ports",
-          "name": "Ports & Previews"
-        }
-      ]
-    },
     "commands": [
       {
         "command": "capix.workspace.refreshSessions",

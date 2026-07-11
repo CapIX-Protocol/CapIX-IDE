@@ -32,6 +32,11 @@ let stateSub: ConnectionStateSubscription | null = null;
 let statusBarItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext): void {
+	// Remote workspace attach is outside the initial launch surface. Hiding it
+	// avoids presenting a separate broker-auth state alongside the primary Capix
+	// session until the unified native credential bridge ships.
+	const launchUiEnabled = false;
+	if (!launchUiEnabled) return;
 	broker = new CapixWorkspaceBroker();
 	sessionsProvider = new SessionsTreeProvider(broker);
 	portsProvider = new PortsTreeProvider(broker);

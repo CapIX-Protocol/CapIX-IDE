@@ -84,7 +84,7 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
   }
 
   async getChildren(): Promise<DeployItem[]> {
-    if (!this.client.isConfigured) {
+    if (!await this.client.checkConfigured()) {
       return [new DeployItem("Connect wallet to view deploys", "capix-info", vscode.TreeItemCollapsibleState.None, {
         command: "capix.connectWallet",
         title: "Connect",
@@ -141,7 +141,7 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogItem>
   }
 
   async getChildren(element?: CatalogItem): Promise<CatalogItem[]> {
-    if (!this.client.isConfigured) {
+    if (!await this.client.checkConfigured()) {
       return [new CatalogItem("Connect wallet to browse catalog", "capix-info", vscode.TreeItemCollapsibleState.None, {
         command: "capix.connectWallet",
         title: "Connect",

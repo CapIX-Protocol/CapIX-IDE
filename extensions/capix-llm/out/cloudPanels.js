@@ -46,6 +46,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CloudItem = exports.ApiKeysTreeProvider = exports.JobsTreeProvider = exports.AgentsTreeProvider = exports.InstancesTreeProvider = void 0;
 const vscode = __importStar(require("vscode"));
+const logger_1 = require("./logger");
 // ── Instances tree ──────────────────────────────────────────────────────────
 class InstancesTreeProvider {
     client;
@@ -63,14 +64,15 @@ class InstancesTreeProvider {
                 this.instances = res.instances || [];
             }
         }
-        catch {
+        catch (err) {
+            logger_1.logger.error("InstancesTreeProvider.load failed", { error: String(err) });
             this.instances = [];
         }
         this.refresh();
     }
     getTreeItem(element) { return element; }
     async getChildren() {
-        if (!this.client.isConfigured) {
+        if (!await this.client.checkConfigured()) {
             return [CloudItem.info("Connect wallet to view instances")];
         }
         if (this.instances.length === 0) {
@@ -109,14 +111,15 @@ class AgentsTreeProvider {
                 this.agents = res.agents;
             }
         }
-        catch {
+        catch (err) {
+            logger_1.logger.error("AgentsTreeProvider.load failed", { error: String(err) });
             this.agents = [];
         }
         this.refresh();
     }
     getTreeItem(element) { return element; }
     async getChildren() {
-        if (!this.client.isConfigured) {
+        if (!await this.client.checkConfigured()) {
             return [CloudItem.info("Connect wallet to view agents")];
         }
         if (this.agents.length === 0) {
@@ -151,14 +154,15 @@ class JobsTreeProvider {
                 this.jobs = res.jobs;
             }
         }
-        catch {
+        catch (err) {
+            logger_1.logger.error("JobsTreeProvider.load failed", { error: String(err) });
             this.jobs = [];
         }
         this.refresh();
     }
     getTreeItem(element) { return element; }
     async getChildren() {
-        if (!this.client.isConfigured)
+        if (!await this.client.checkConfigured())
             return [CloudItem.info("Connect wallet to view jobs")];
         if (this.jobs.length === 0)
             return [CloudItem.info("No serverless jobs")];
@@ -191,14 +195,15 @@ class ApiKeysTreeProvider {
                 this.keys = res.keys;
             }
         }
-        catch {
+        catch (err) {
+            logger_1.logger.error("ApiKeysTreeProvider.load failed", { error: String(err) });
             this.keys = [];
         }
         this.refresh();
     }
     getTreeItem(element) { return element; }
     async getChildren() {
-        if (!this.client.isConfigured)
+        if (!await this.client.checkConfigured())
             return [CloudItem.info("Connect wallet to view API keys")];
         if (this.keys.length === 0)
             return [CloudItem.info("No API keys — create one for chat")];

@@ -32,6 +32,11 @@ let billingProvider: BillingTreeProvider;
 let operationPoll: NodeJS.Timeout | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
+	// The launch UI is provided by capix-llm's authenticated Profile, Deploys,
+	// Instances and Catalog surfaces. Keep this broker module packaged for the
+	// later control-plane rollout, but do not expose a second auth-gated UI.
+	const launchUiEnabled = false;
+	if (!launchUiEnabled) return;
 	broker = new CapixCloudBroker();
 	deploymentsProvider = new DeploymentsTreeProvider(broker);
 	billingProvider = new BillingTreeProvider(broker);

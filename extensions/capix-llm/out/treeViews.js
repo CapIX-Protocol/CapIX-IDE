@@ -41,6 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CatalogItem = exports.DeployItem = exports.HostedTreeProvider = exports.CatalogTreeProvider = exports.DeploysTreeProvider = void 0;
 const vscode = __importStar(require("vscode"));
+const logger_1 = require("./logger");
 // ── My Deploys tree ───────────────────────────────────────────────────────
 class DeploysTreeProvider {
     client;
@@ -101,7 +102,8 @@ class DeploysTreeProvider {
             }));
             this.refresh();
         }
-        catch {
+        catch (err) {
+            logger_1.logger.error("DeploysTreeProvider.load failed", { error: String(err) });
             this.deploys = [];
             this.refresh();
         }
@@ -110,7 +112,7 @@ class DeploysTreeProvider {
         return element;
     }
     async getChildren() {
-        if (!this.client.isConfigured) {
+        if (!await this.client.checkConfigured()) {
             return [new DeployItem("Connect wallet to view deploys", "capix-info", vscode.TreeItemCollapsibleState.None, {
                     command: "capix.connectWallet",
                     title: "Connect",
@@ -155,7 +157,9 @@ class CatalogTreeProvider {
                 this.models = res.models || [];
             }
         }
-        catch { }
+        catch (err) {
+            logger_1.logger.error("CatalogTreeProvider.load failed", { error: String(err) });
+        }
         this.loaded = true;
         this.refresh();
     }
@@ -163,7 +167,7 @@ class CatalogTreeProvider {
         return element;
     }
     async getChildren(element) {
-        if (!this.client.isConfigured) {
+        if (!await this.client.checkConfigured()) {
             return [new CatalogItem("Connect wallet to browse catalog", "capix-info", vscode.TreeItemCollapsibleState.None, {
                     command: "capix.connectWallet",
                     title: "Connect",
@@ -236,7 +240,8 @@ class HostedTreeProvider {
                 this.hosted = [];
             }
         }
-        catch {
+        catch (err) {
+            logger_1.logger.error("HostedTreeProvider.load failed", { error: String(err) });
             this.hosted = [];
         }
         this.refresh();

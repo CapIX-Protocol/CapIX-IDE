@@ -60,7 +60,7 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
   getTreeItem(element: CloudItem): vscode.TreeItem { return element; }
 
   async getChildren(): Promise<CloudItem[]> {
-    if (!this.client.isConfigured) {
+    if (!await this.client.checkConfigured()) {
       return [CloudItem.info("Connect wallet to view instances")];
     }
     if (this.instances.length === 0) {
@@ -110,7 +110,7 @@ export class AgentsTreeProvider implements vscode.TreeDataProvider<CloudItem> {
   getTreeItem(element: CloudItem): vscode.TreeItem { return element; }
 
   async getChildren(): Promise<CloudItem[]> {
-    if (!this.client.isConfigured) {
+    if (!await this.client.checkConfigured()) {
       return [CloudItem.info("Connect wallet to view agents")];
     }
     if (this.agents.length === 0) {
@@ -150,7 +150,7 @@ export class JobsTreeProvider implements vscode.TreeDataProvider<CloudItem> {
   getTreeItem(element: CloudItem): vscode.TreeItem { return element; }
 
   async getChildren(): Promise<CloudItem[]> {
-    if (!this.client.isConfigured) return [CloudItem.info("Connect wallet to view jobs")];
+    if (!await this.client.checkConfigured()) return [CloudItem.info("Connect wallet to view jobs")];
     if (this.jobs.length === 0) return [CloudItem.info("No serverless jobs")];
     return this.jobs.map((j) => {
       const item = new CloudItem(j.name, "capix-job", vscode.TreeItemCollapsibleState.None);
@@ -186,7 +186,7 @@ export class ApiKeysTreeProvider implements vscode.TreeDataProvider<CloudItem> {
   getTreeItem(element: CloudItem): vscode.TreeItem { return element; }
 
   async getChildren(): Promise<CloudItem[]> {
-    if (!this.client.isConfigured) return [CloudItem.info("Connect wallet to view API keys")];
+    if (!await this.client.checkConfigured()) return [CloudItem.info("Connect wallet to view API keys")];
     if (this.keys.length === 0) return [CloudItem.info("No API keys — create one for chat")];
     return this.keys.map((k) => {
       const item = new CloudItem(k.name, "capix-apikey", vscode.TreeItemCollapsibleState.None);

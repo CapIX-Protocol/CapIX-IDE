@@ -126,4 +126,6 @@ mkdir -p "$VSCODE/src/vs/workbench/contrib/void/browser/react/src/void-settings-
 cp "$DIR/config/settings-defaults.json" "$VSCODE/src/vs/workbench/contrib/void/browser/react/src/void-settings-tsx/capixDefaults.json"
 echo "  done: settings defaults"
 
+VSCODE_DIR="$VSCODE" node "$DIR/scripts/brand-workbench-text.mjs"
+
 echo "Capix product overlay complete."

@@ -10,27 +10,6 @@
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "capix-cloud",
-          "title": "Capix Cloud",
-          "icon": "$(cloud)"
-        }
-      ]
-    },
-    "views": {
-      "capix-cloud": [
-        {
-          "id": "capix.cloud.deployments",
-          "name": "Deployments"
-        },
-        {
-          "id": "capix.cloud.billing",
-          "name": "Billing"
-        }
-      ]
-    },
     "commands": [
       {
         "command": "capix.cloud.refreshDeployments",
