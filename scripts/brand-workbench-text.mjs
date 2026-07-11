@@ -36,6 +36,9 @@ const edits = {
   "src/vs/workbench/contrib/void/browser/react/src/void-onboarding/VoidOnboarding.tsx": [
     ["Welcome to Void", "Welcome to CapixIDE"],
   ],
+  "extensions/references-view/README.md": [
+    ["opencode@microsoft.com", "support@capix.network"],
+  ],
 };
 
 for (const [relative, replacements] of Object.entries(edits)) {
