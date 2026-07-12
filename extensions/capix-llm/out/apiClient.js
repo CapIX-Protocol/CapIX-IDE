@@ -410,11 +410,21 @@ class CapixClient {
             method: "POST",
             headers: { "Content-Type": "application/json", "Idempotency-Key": (0, node_crypto_1.randomUUID)() },
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.host || !data.port || !data.privateKey) {
-            throw new CapixApiError(res.status, data.detail || data.error || "SSH credential is unavailable or was already retrieved.");
+        const contentType = res.headers.get("content-type") || "";
+        if (!res.ok) {
+            const error = contentType.includes("json")
+                ? await res.json().catch(() => ({}))
+                : { detail: await res.text().catch(() => "") };
+            throw new CapixApiError(res.status, error.detail || error.error || "SSH credential is unavailable or was already retrieved.");
         }
-        return { host: data.host, port: data.port, privateKey: data.privateKey, filename: data.filename || `${deploymentId}.pem` };
+        const privateKey = await res.text();
+        const host = res.headers.get("x-capix-ssh-host") || "";
+        const port = Number(res.headers.get("x-capix-ssh-port") || 0);
+        const filename = res.headers.get("x-capix-ssh-filename") || `${deploymentId}.pem`;
+        if (!host || !Number.isInteger(port) || port <= 0 || !privateKey.includes("PRIVATE KEY")) {
+            throw new CapixApiError(502, "The SSH credential response was incomplete. The key was not written to disk.");
+        }
+        return { host, port, privateKey, filename };
     }
     // ── Deploy quote (for showing per-minute costs) ────────────────────────
     async getQuote(tierId, hours) {
