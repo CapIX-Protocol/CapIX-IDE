@@ -10,6 +10,19 @@
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
+    "views": {
+      "capix-llm": [
+        {
+          "id": "capix.agent.sessions",
+          "name": "Agent Sessions"
+        },
+        {
+          "id": "capix.agent.chat",
+          "name": "Agent Chat",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "capix.agent.refreshSessions",

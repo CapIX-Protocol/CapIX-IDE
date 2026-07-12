@@ -6,6 +6,7 @@ import process from "node:process";
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const vscodeRoot = process.env.VSCODE_DIR || path.join(root, "vscode");
 const extensions = ["capix-llm", "capix-cloud", "capix-workspace", "capix-agent-ui"];
+const manifests = new Map();
 
 for (const file of ["capix-broker.ts", "capix-ipc-registration.ts", "capix-native-auth.ts", "capix-runtime-bootstrap.ts"]) {
   if (!fs.existsSync(path.join(vscodeRoot, "src", "main", file))) fail(`native runtime module is missing: ${file}`);
@@ -26,6 +27,7 @@ for (const name of extensions) {
     continue;
   }
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  manifests.set(name, { manifest, extensionRoot });
   if (manifest.publisher !== "capix") fail(`${name} has an unexpected publisher`);
   if (!manifest.activationEvents?.includes("onStartupFinished")) fail(`${name} is not activated by the product`);
   if (manifest.activationEvents?.includes("onUri")) fail(`${name} enables URI credential ingress`);
@@ -33,6 +35,55 @@ for (const name of extensions) {
     fail(`${name} has no desktop extension-host entrypoint`);
   } else if (process.argv.includes("--compiled") && !fs.existsSync(path.resolve(extensionRoot, manifest.main))) {
     fail(`${name} compiled entrypoint is missing: ${manifest.main}`);
+  }
+}
+
+// A contributed view without a runtime provider makes the workbench surface
+// visible but unusable (createTreeView itself throws when the inverse is true).
+// Validate the complete built-in set because a provider may live in a sibling
+// Capix extension while contributing to the shared Capix activity container.
+const registrations = new Map();
+for (const [name, { extensionRoot }] of manifests) {
+  const sourcePath = path.join(extensionRoot, "src", "extension.ts");
+  if (!fs.existsSync(sourcePath)) {
+    fail(`${name} runtime source is missing from the packaged extension`);
+    continue;
+  }
+  const source = fs.readFileSync(sourcePath, "utf8");
+  const patterns = [
+    /createTreeView\(\s*["']([^"']+)["']/g,
+    /registerTreeDataProvider\(\s*["']([^"']+)["']/g,
+    /registerWebviewViewProvider\(\s*["']([^"']+)["']/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const id = match[1];
+      registrations.set(id, [...(registrations.get(id) ?? []), name]);
+    }
+  }
+}
+
+const contributedViews = new Map();
+for (const [name, { manifest }] of manifests) {
+  for (const views of Object.values(manifest.contributes?.views ?? {})) {
+    for (const view of views) {
+      if (typeof view?.id !== "string" || !view.id.startsWith("capix.")) continue;
+      if (contributedViews.has(view.id)) {
+        fail(`view ${view.id} is contributed more than once`);
+      }
+      contributedViews.set(view.id, name);
+    }
+  }
+}
+for (const requiredView of ["capix.agent.sessions", "capix.agent.chat"]) {
+  if (contributedViews.get(requiredView) !== "capix-agent-ui") {
+    fail(`${requiredView} must be packaged as a capix-agent-ui view contribution`);
+  }
+}
+for (const [viewId, contributor] of contributedViews) {
+  const providers = registrations.get(viewId) ?? [];
+  if (providers.length !== 1) {
+    fail(`view ${viewId} from ${contributor} must have exactly one runtime provider; found ${providers.length}`);
   }
 }
 
