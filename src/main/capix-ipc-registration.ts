@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { RendererToMainMessage } from "../vs/workbench/contrib/capix-auth/ipc.js";
 import type { CapixMainBroker } from "./capix-broker.js";
+import { CapixChatChannels } from "../vs/workbench/contrib/capix-ai/index.js";
 
 export const CAPIX_BROKER_CHANNEL = "capix:broker:v1";
 
@@ -9,7 +11,7 @@ export interface ElectronIpcMainLike {
 }
 
 export interface ElectronInvokeEventLike {
-	sender: { id: number; getURL(): string };
+	sender: { id: number; getURL(): string; send?(channel: string, ...args: unknown[]): void };
 }
 
 function nonEmpty(value: unknown): value is string {
@@ -46,16 +48,90 @@ export function parseRendererMessage(value: unknown): RendererToMainMessage {
 }
 
 export function registerCapixIpc(ipcMain: ElectronIpcMainLike, broker: CapixMainBroker): () => void {
-	ipcMain.removeHandler(CAPIX_BROKER_CHANNEL);
-	ipcMain.handle(CAPIX_BROKER_CHANNEL, async (event, raw) => {
+	// Track renderer senders per stream handle so the broker's streamSink can
+	// forward ChatStreamEvents back to the originating renderer via the
+	// capix:chat:onStreamEvent channel.
+	const streamSenders = new Map<string, (channel: string, ...args: unknown[]) => void>();
+
+	broker.setStreamSink((handleId, event) => {
+		const send = streamSenders.get(handleId);
+		if (!send) return;
+		send(CapixChatChannels.onStreamEvent, { streamHandle: handleId, event });
+		if (event && typeof event === "object" && (event.type === "final" || event.type === "error")) {
+			streamSenders.delete(handleId);
+		}
+	});
+
+	const resolveOrigin = (event: ElectronInvokeEventLike): string => {
 		const url = new URL(event.sender.getURL());
-		const message = parseRendererMessage(raw);
 		// WHATWG reports `null` for custom-scheme origins in Node. Preserve the
 		// exact privileged Code-OSS scheme+host without ever trusting generic null.
-		const origin = url.protocol === "vscode-file:" && url.hostname === "vscode-app"
+		return url.protocol === "vscode-file:" && url.hostname === "vscode-app"
 			? "vscode-file://vscode-app"
 			: url.origin;
-		return broker.handleMessage(message, { origin, processId: event.sender.id });
+	};
+
+	const channels = [
+		CAPIX_BROKER_CHANNEL,
+		CapixChatChannels.startSession,
+		CapixChatChannels.streamMessage,
+		CapixChatChannels.cancel,
+		CapixChatChannels.listModels,
+	];
+
+	// --- Existing versioned broker channel ---
+
+	ipcMain.removeHandler(CAPIX_BROKER_CHANNEL);
+	ipcMain.handle(CAPIX_BROKER_CHANNEL, async (event, raw) => {
+		const message = parseRendererMessage(raw);
+		return broker.handleMessage(message, { origin: resolveOrigin(event), processId: event.sender.id });
 	});
-	return () => ipcMain.removeHandler(CAPIX_BROKER_CHANNEL);
+
+	// --- Canonical chat channels (delegate to the existing broker) ---
+
+	ipcMain.removeHandler(CapixChatChannels.startSession);
+	ipcMain.handle(CapixChatChannels.startSession, async (_event, raw) => {
+		const req = raw as { modelId?: string; projectId?: string };
+		if (!req?.modelId || !req?.projectId) throw new TypeError("startSession requires modelId and projectId");
+		return { id: `chat-${randomUUID()}`, modelId: req.modelId, messages: [] };
+	});
+
+	ipcMain.removeHandler(CapixChatChannels.streamMessage);
+	ipcMain.handle(CapixChatChannels.streamMessage, async (event, raw) => {
+		const req = raw as { sessionId?: string; message?: string };
+		if (!req?.sessionId || !req?.message) throw new TypeError("streamMessage requires sessionId and message");
+		const senderSend = event.sender.send;
+		if (typeof senderSend !== "function") throw new Error("Renderer sender does not support event forwarding");
+		const result = await broker.handleMessage(
+			{ type: "inference:stream", input: { sessionId: req.sessionId, message: req.message } },
+			{ origin: resolveOrigin(event), processId: event.sender.id },
+		) as { sessionId: string };
+		const streamHandle = result.sessionId;
+		streamSenders.set(streamHandle, (channel, ...args) => senderSend(channel, ...args));
+		return { streamHandle };
+	});
+
+	ipcMain.removeHandler(CapixChatChannels.cancel);
+	ipcMain.handle(CapixChatChannels.cancel, async (event, raw) => {
+		const req = raw as { sessionId?: string };
+		if (!req?.sessionId) throw new TypeError("cancel requires sessionId");
+		await broker.handleMessage(
+			{ type: "inference:cancel", sessionId: req.sessionId },
+			{ origin: resolveOrigin(event), processId: event.sender.id },
+		);
+		streamSenders.delete(req.sessionId);
+	});
+
+	ipcMain.removeHandler(CapixChatChannels.listModels);
+	ipcMain.handle(CapixChatChannels.listModels, async (event) => {
+		return broker.handleMessage(
+			{ type: "catalog:models" },
+			{ origin: resolveOrigin(event), processId: event.sender.id },
+		);
+	});
+
+	return () => {
+		for (const ch of channels) ipcMain.removeHandler(ch);
+		streamSenders.clear();
+	};
 }
