@@ -89,7 +89,11 @@ export class CapixNativePkceAuth {
 
 	private async acceptLoopback(rawUrl: string | undefined, response: import("node:http").ServerResponse): Promise<void> {
 		const pending = this.pending; if (!pending || !rawUrl) throw new Error("No pending login");
-		const url = new URL(rawUrl, pending.redirectUri); const code = url.searchParams.get("code"); const state = url.searchParams.get("state");
+		const url = new URL(rawUrl, pending.redirectUri);
+		if (url.pathname !== "/oauth/callback" || (!url.searchParams.get("code") && !url.searchParams.get("error"))) {
+			response.writeHead(204, { "content-type": "text/plain" }); response.end(); return;
+		}
+		const code = url.searchParams.get("code"); const state = url.searchParams.get("state");
 		if (!code || !state) throw new Error("Missing authorization callback parameters");
 		await this.completeLogin(code, state);
 		response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }); response.end("Capix sign-in complete. You can close this window.");

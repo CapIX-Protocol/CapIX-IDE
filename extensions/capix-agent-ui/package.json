@@ -53,6 +53,11 @@
         "command": "capix.agent.cancel",
         "title": "Capix: Cancel Stream",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "capix.agent.listSessions",
+        "title": "Capix: List Agent Sessions",
+        "category": "Capix Agent"
       }
     ],
     "menus": {

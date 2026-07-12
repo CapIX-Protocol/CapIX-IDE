@@ -68,6 +68,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		),
 		vscode.commands.registerCommand("capix.agent.selectModel", () => selectModel()),
 		vscode.commands.registerCommand("capix.agent.cancel", () => chatProvider.cancel()),
+		vscode.commands.registerCommand("capix.agent.listSessions", () => sessionsProvider.refresh()),
 		vscode.commands.registerCommand("capix.agent.refreshAuth", async () => {
 			await sessionsProvider.refresh();
 			await chatProvider.init(true);
