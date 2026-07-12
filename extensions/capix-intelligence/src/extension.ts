@@ -125,13 +125,10 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand("capix.intelligence.refreshCheckpoints", () =>
 			checkpointsProvider.refresh(),
 		),
-		vscode.commands.registerCommand("capix.intelligence.refreshReceipts", () =>
-			receiptsProvider.refresh(),
-		),
-		vscode.commands.registerCommand("capix.intelligence.searchMemory", () =>
-			searchMemory(),
-		),
-		vscode.commands.registerCommand("capix.intelligence.createPlan", () =>
+ 		vscode.commands.registerCommand("capix.intelligence.refreshReceipts", () =>
+ 			receiptsProvider.refresh(),
+ 		),
+ 		vscode.commands.registerCommand("capix.intelligence.createPlan", () =>
 			createPlan(),
 		),
 		vscode.commands.registerCommand("capix.intelligence.approvePlan", (node?: IntelligenceTreeNode) =>
