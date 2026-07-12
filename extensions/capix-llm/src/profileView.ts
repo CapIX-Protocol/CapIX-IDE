@@ -50,6 +50,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
 
   async refresh() {
     if (!this.view || this.loading) return;
+    logger.info("Profile sync started");
     this.loading = true;
     this.billingError = null;
     this.view.webview.postMessage({ type: "loading", value: true });
@@ -57,6 +58,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const configured = await this.client.checkConfigured();
+      logger.info("Profile authentication checked", { configured });
       this.view.webview.postMessage({ type: "auth", configured });
       if (!configured) {
         this.billing = null;
@@ -74,6 +76,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
           transactions: br.transactions || [],
           instances: (br.instances || []) as BillingData["instances"],
         };
+        logger.info("Profile sync completed", { activeInstances: this.billing.activeInstances, transactionCount: this.billing.transactions?.length || 0 });
       }
 
     } catch (err) {
