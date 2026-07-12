@@ -16,6 +16,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # Immutable Capix Code runtime paired with the CapixIDE 1.2.1 release.
+  CAPIX_CODE_SHA: 96fc247d50ce22873500799ed15b37140459e68f
+
 jobs:
   create-release:
     name: Create GitHub Release
@@ -125,7 +129,6 @@ jobs:
       - name: Clone and pin Capix Code runtime
         shell: bash
         run: |
-          CAPIX_CODE_SHA=$(git ls-remote https://github.com/CapIX-Protocol/CapIX-Code.git HEAD | awk '{print $1}')
           echo "Capix Code runtime SHA: $CAPIX_CODE_SHA"
           echo "$CAPIX_CODE_SHA" > capix-code-runtime-sha.txt
           git clone --depth 1 https://github.com/CapIX-Protocol/CapIX-Code.git ../capix-code
