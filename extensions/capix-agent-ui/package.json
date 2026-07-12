@@ -1,7 +1,7 @@
 {
   "name": "capix-agent-ui",
-  "displayName": "Capix Agent",
-  "description": "Chat view, agent sessions and tool approval for the bundled Capix Agent Runtime.",
+  "displayName": "Capix Code",
+  "description": "Native Capix Code sessions, routed models, coding tools and approvals inside CapixIDE.",
   "version": "1.0.0",
   "publisher": "capix",
   "license": "Apache-2.0",
@@ -18,7 +18,7 @@
         },
         {
           "id": "capix.agent.chat",
-          "name": "Agent Chat",
+          "name": "Capix Code",
           "type": "webview"
         }
       ]
@@ -31,7 +31,7 @@
       },
       {
         "command": "capix.agent.openChat",
-        "title": "Capix: Open Agent Chat",
+        "title": "Capix: Open Capix Code",
         "icon": "$(comment-discussion)"
       },
       {

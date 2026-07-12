@@ -484,6 +484,9 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 <html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>
   body { font-family: var(--vscode-font-family, sans-serif); margin: 0; padding: 8px; color: var(--vscode-foreground); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 2px 10px; border-bottom: 1px solid var(--vscode-widget-border); }
+  header strong { font-size: 13px; letter-spacing: .02em; }
+  #model { color: var(--vscode-descriptionForeground); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #log { white-space: pre-wrap; word-break: break-word; font-size: 13px; }
   .role-user { color: var(--vscode-textLink-foreground); }
   .role-assistant { color: var(--vscode-foreground); }
@@ -495,11 +498,11 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 10px; cursor: pointer; }
 </style></head>
 <body>
-<div id="model">model: (none)</div>
+<header><strong>Capix Code</strong><span id="model">Smart Router · connecting</span></header>
 <div id="log"></div>
 <div class="row">
-  <input id="text" placeholder="Send a message…" />
-  <button id="send">Send</button>
+  <input id="text" placeholder="Ask Capix Code to build, debug, or explain…" />
+  <button id="send">Run</button>
 </div>
 <script nonce="${nonce}">
 const log = document.getElementById('log');
