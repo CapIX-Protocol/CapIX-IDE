@@ -38,22 +38,91 @@ class ElectronSafeCredentialStore implements SecureCredentialStore {
 function unsupported(name: string): any { return async () => { throw new CapixNotImplementedError(name); }; }
 
 export function createControlPlaneSdk(origin: string, auth: CapixNativePkceAuth, fetchImpl: typeof fetch = fetch): CapixSdkClient {
-	async function getJson(pathname: string): Promise<any> {
+	async function getJson(pathname: string, signal?: AbortSignal): Promise<any> {
 		const token = await auth.getAccessToken();
 		const url = new URL(pathname, origin);
 		if (pathname === "/api/v1/models" && auth.getProjectId()) url.searchParams.set("projectId", auth.getProjectId()!);
-		const response = await fetchImpl(url, { headers: { authorization: `Bearer ${token.token}`, accept: "application/json" } });
+		const response = await fetchImpl(url, { headers: { authorization: `Bearer ${token.token}`, accept: "application/json" }, signal });
 		const body = await response.json(); if (!response.ok) throw new Error(`Capix API ${response.status}: ${body?.error ?? body?.title ?? "request failed"}`); return body;
 	}
+
+	async function postJson(pathname: string, signal?: AbortSignal): Promise<any> {
+		const token = await auth.getAccessToken();
+		const url = new URL(pathname, origin);
+		const response = await fetchImpl(url, { method: "POST", headers: { authorization: `Bearer ${token.token}`, accept: "application/json" }, signal });
+		const text = await response.text();
+		if (!response.ok) { let detail = text; try { detail = JSON.parse(text)?.error ?? text; } catch {} throw new Error(`Capix API ${response.status}: ${detail || "request failed"}`); }
+		if (!text) return undefined;
+		try { return JSON.parse(text); } catch { return undefined; }
+	}
+
+	async function* streamInference(input: unknown, signal?: AbortSignal): AsyncGenerator<unknown> {
+		async function performRequest(token: string, isRetry: boolean): Promise<Response> {
+			const url = new URL("/api/v1/inference/chat/completions", origin);
+			const response = await fetchImpl(url, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
+			if (response.status === 401 && !isRetry) {
+				const refreshed = await auth.getAccessToken();
+				return performRequest(refreshed.token, true);
+			}
+			if (!response.ok || !response.body) {
+				const text = await response.text().catch(() => "");
+				let detail = text; try { detail = JSON.parse(text)?.error ?? text; } catch {}
+				if (response.status === 402) throw new Error(`Capix API 402: insufficient funds${detail ? ` — ${detail}` : ""}`);
+				if (response.status === 429) throw new Error(`Capix API 429: rate limited${detail ? ` — ${detail}` : ""}`);
+				throw new Error(`Capix API ${response.status}: ${detail || "inference request failed"}`);
+			}
+			return response;
+		}
+
+		const token = await auth.getAccessToken();
+		const response = await performRequest(token.token, false);
+		const reader = response.body!.getReader();
+		const decoder = new TextDecoder();
+		let buffer = "";
+		let dataLines: string[] = [];
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				let newlineIdx: number;
+				while ((newlineIdx = buffer.indexOf("\n")) >= 0) {
+					const line = buffer.slice(0, newlineIdx).replace(/\r$/, "");
+					buffer = buffer.slice(newlineIdx + 1);
+					if (line === "") {
+						if (dataLines.length > 0) {
+							const raw = dataLines.join("\n");
+							let data: unknown = raw;
+							try { data = JSON.parse(raw); } catch {}
+							yield data;
+						}
+						dataLines = [];
+						continue;
+					}
+					if (line.startsWith(":")) continue;
+					if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+				}
+			}
+			if (dataLines.length > 0) {
+				const raw = dataLines.join("\n");
+				let data: unknown = raw;
+				try { data = JSON.parse(raw); } catch {}
+				yield data;
+			}
+		} finally {
+			reader.releaseLock();
+		}
+	}
+
 	return {
 		account: { get: () => getJson("/api/v1/account") },
 		catalog: { listModels: async () => (await getJson("/api/v1/models")).models },
 		quote: { create: unsupported("quote creation is not enabled in the IDE native runtime") },
 		deployment: { create: unsupported("deployment creation is not enabled in the IDE native runtime"), get: unsupported("deployment access is not enabled in the IDE native runtime"), list: unsupported("deployment listing is not enabled in the IDE native runtime"), setDesired: unsupported("deployment lifecycle is not enabled in the IDE native runtime"), delete: unsupported("deployment deletion is not enabled in the IDE native runtime") },
 		operation: { subscribe: unsupported("operation streaming is not enabled in the IDE native runtime"), cancel: unsupported("operation cancellation is not enabled in the IDE native runtime") },
-		inference: { stream: unsupported("inference is not enabled in the IDE native runtime"), cancel: unsupported("inference cancellation is not enabled in the IDE native runtime") },
-		billing: { getBalance: unsupported("billing is not enabled in the IDE native runtime"), listInvoices: unsupported("billing is not enabled in the IDE native runtime") },
-		receipt: { get: unsupported("receipts are not enabled in the IDE native runtime") },
+		inference: { stream: (input: unknown, signal?: AbortSignal) => Promise.resolve(streamInference(input, signal)), cancel: (sessionId: string, signal?: AbortSignal) => postJson(`/api/v1/inference/${encodeURIComponent(sessionId)}/cancel`, signal) },
+		billing: { getBalance: (signal?: AbortSignal) => getJson("/api/v1/billing", signal), listInvoices: unsupported("billing is not enabled in the IDE native runtime") },
+		receipt: { get: (id: string, signal?: AbortSignal) => getJson(`/api/v1/route-receipts/${encodeURIComponent(id)}`, signal) },
 		workspace: { openSession: unsupported("remote workspace transport is unavailable"), openPort: unsupported("remote workspace transport is unavailable"), closeSession: unsupported("remote workspace transport is unavailable") },
 	};
 }
