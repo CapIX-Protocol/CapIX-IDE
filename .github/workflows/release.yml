@@ -219,6 +219,14 @@ jobs:
           fs.writeFileSync(file, source);
           NODE
 
+      - name: Hydrate pinned ripgrep artifact
+        run: npm rebuild
+        working-directory: vscode/build/node_modules/@vscode/ripgrep
+        env:
+          # Limit the workflow token to the one pinned downloader that needs
+          # authenticated GitHub API capacity. Do not expose it to all lifecycle scripts.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run dependency lifecycle builds
         run: npm rebuild
         working-directory: vscode
