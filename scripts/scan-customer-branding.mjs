@@ -33,8 +33,13 @@ for (const relative of [
 }
 
 if (!sourceOnly) {
-  for (const file of [path.join(root, "Contents", "Resources", "app", "product.json")]) if (fs.existsSync(file)) scanJson(file);
-  const extensionsRoot = path.join(root, "Contents", "Resources", "app", "extensions");
+  const appRoot = fs.existsSync(path.join(root, "Contents", "Resources", "app"))
+    ? path.join(root, "Contents", "Resources", "app")
+    : path.join(root, "resources", "app");
+  const product = path.join(appRoot, "product.json");
+  if (!fs.existsSync(product)) failures.push(`missing packaged product manifest ${product}`);
+  else scanJson(product);
+  const extensionsRoot = path.join(appRoot, "extensions");
   for (const name of ["capix-llm", "capix-cloud", "capix-workspace", "capix-agent-ui"]) {
     const ext = path.join(extensionsRoot, name);
     const manifest = path.join(ext, "package.json"); if (!fs.existsSync(manifest)) { failures.push(`missing ${manifest}`); continue; }
