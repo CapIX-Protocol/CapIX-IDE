@@ -864,7 +864,24 @@ class BrokerAuthService implements CapixBrokerAuth {
  * surface — never through a generic authenticated fetch.
  */
 export class CapixMainBroker {
-	constructor(private readonly dependencies?: CapixBrokerDependencies) {}
+	/** Release identity (from product.json `capixVersion`) surfaced in health checks. */
+	private readonly releaseId: string | undefined;
+
+	constructor(
+		private readonly dependencies?: CapixBrokerDependencies,
+		releaseId?: string,
+	) {
+		this.releaseId = releaseId;
+	}
+
+	/**
+	 * Health check — returns release identity and broker readiness so callers
+	 * (diagnostics, telemetry, the renderer "About" surface) can correlate a
+	 * running broker instance with a specific product release.
+	 */
+	healthCheck(): { status: "ok"; releaseId: string | undefined } {
+		return { status: "ok", releaseId: this.releaseId };
+	}
 
 	/** Active short-lived capabilities handed to runtimes/tools; revocable. */
 	private readonly capabilities = new Map<string, CapixCapability>();

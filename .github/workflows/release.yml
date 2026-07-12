@@ -88,6 +88,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
           - os: ubuntu-latest
             platform: linux
             arch: x64

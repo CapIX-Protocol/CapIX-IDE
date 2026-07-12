@@ -28,12 +28,12 @@
   "urlProtocol": "capix",
   "licenseName": "Apache-2.0",
   "licenseFileName": "LICENSE.txt",
-  "licenseUrl": "https://github.com/Ritzky/CapixIDE/blob/main/LICENSE",
-  "reportIssueUrl": "https://github.com/Ritzky/CapixIDE/issues/new",
+  "licenseUrl": "https://github.com/CapIX-Protocol/CapIX-IDE/blob/main/LICENSE",
+  "reportIssueUrl": "https://github.com/CapIX-Protocol/CapIX-IDE/issues/new",
   "builtInExtensions": [],
   "linkProtectionTrustedDomains": [
     "https://capix.network",
     "https://www.capix.network",
-    "https://github.com/Ritzky/CapixIDE"
+    "https://github.com/CapIX-Protocol/CapIX-IDE"
   ]
 }

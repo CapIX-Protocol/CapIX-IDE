@@ -6,6 +6,7 @@ import { registerCapixIpc } from "./capix-ipc-registration.js";
 import { CapixNativePkceAuth, type SecureCredentialStore } from "./capix-native-auth.js";
 
 interface CapixProductConfig {
+	capixVersion?: string;
 	capixControlPlaneOrigin?: string;
 	capixOAuthAuthorizePath?: string;
 	capixOAuthTokenPath?: string;
@@ -61,7 +62,7 @@ export function startCapixNativeRuntime(rawProduct: unknown): () => void {
 	const product = rawProduct as CapixProductConfig;
 	const origin = resolveControlPlaneOrigin(product);
 	const auth = new CapixNativePkceAuth({ baseUrl: origin, authorizePath: product.capixOAuthAuthorizePath || "/oauth/authorize", tokenPath: product.capixOAuthTokenPath || "/oauth/token", revokePath: product.capixOAuthRevokePath || "/oauth/revoke", clientId: "capix-ide", scope: "openid account catalog" }, new ElectronSafeCredentialStore(), { openExternal: async url => { await shell.openExternal(url); } });
-	const broker = new CapixMainBroker({ auth, sdk: createControlPlaneSdk(origin, auth) });
+	const broker = new CapixMainBroker({ auth, sdk: createControlPlaneSdk(origin, auth) }, product.capixVersion);
 	const unregister = registerCapixIpc(ipcMain, broker);
 	const shutdown = () => { unregister(); void broker.shutdown(); };
 	app.once("before-quit", shutdown);
