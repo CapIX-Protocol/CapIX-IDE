@@ -31,6 +31,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
   private billing: BillingData | null = null;
   private loading = false;
   private billingError: string | null = null;
+  private configured = false;
 
   constructor(
     private client: CapixClient,
@@ -58,6 +59,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const configured = await this.client.checkConfigured();
+      this.configured = configured;
       logger.info("Profile authentication checked", { configured });
       this.view.webview.postMessage({ type: "auth", configured });
       if (!configured) {
@@ -88,10 +90,21 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
           : "Billing could not be loaded. Check your connection and retry.";
     } finally {
       this.loading = false;
-      this.view.webview.postMessage({ type: "loading", value: false });
-      this.view.webview.postMessage({ type: "billing", value: this.billing });
-      this.view.webview.postMessage({ type: "billingError", value: this.billingError });
+      // Render the authoritative snapshot directly. Webview messages can be
+      // dropped while a sidebar view is being restored or moved; profile data
+      // must never remain hidden behind an indefinite loading placeholder.
+      if (this.view) this.view.webview.html = this.getHtml();
     }
+  }
+
+  private snapshotHtml(): string {
+    const esc = (value: unknown) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    if (this.loading) return '<div class="loading-msg empty">Loading your profile…</div>';
+    if (this.billingError) return `<div class="connect-prompt"><p>${esc(this.billingError)}</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: 'refresh' })">Retry</button></div>`;
+    if (!this.configured || !this.billing) return '<div class="connect-prompt"><p>Sign in to synchronize your Capix balance and compute.</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'resetSession\' })">Sign In</button></div>';
+    const b = this.billing.balance;
+    const rows = this.billing.instances.map((instance) => `<div class="deploy-row"><div><span class="deploy-name">${esc(instance.tier)}</span><span class="deploy-status ${instance.status === "running" ? "status-running" : "status-stopped"}">${esc(instance.status)}</span></div><span class="deploy-rate">$${Number(instance.costUsdPerHour || 0).toFixed(2)}/hr</span></div>`).join("") || '<div class="empty">No compute instances</div>';
+    return `<div class="card"><div class="balance-label">Wallet Balance</div><div class="balance-main">$${Number(b.usd || 0).toFixed(2)}</div><div class="stats"><div class="stat-box"><div class="stat-value">${Number(b.sol || 0).toFixed(4)}</div><div class="stat-label">SOL</div></div><div class="stat-box"><div class="stat-value">${Number(b.usdc || 0).toFixed(2)}</div><div class="stat-label">USDC</div></div></div><div style="margin-top:12px"><button class="btn btn-primary" onclick="vscode.postMessage({ type: 'topUp' })">+ Top Up</button><button class="btn btn-secondary" onclick="vscode.postMessage({ type: 'openBilling' })">Billing →</button></div></div><div class="card"><div class="balance-label">Compute · ${this.billing.activeInstances} active</div>${rows}</div>`;
   }
 
   private handleMessage(msg: { type: string; value?: unknown }) {
@@ -267,7 +280,7 @@ ${cspMeta}
 </head>
 <body>
   <div id="content">
-    <div class="loading-msg empty">Loading your profile…</div>
+    ${this.snapshotHtml()}
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -388,8 +401,6 @@ ${cspMeta}
       }
     });
 
-    // Initial load message.
-    vscode.postMessage({ type: 'refresh' });
   </script>
 </body>
 </html>`;

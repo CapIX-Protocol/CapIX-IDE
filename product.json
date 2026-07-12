@@ -1,7 +1,7 @@
 {
   "nameShort": "CapixIDE",
   "nameLong": "CapixIDE",
-  "capixVersion": "1.2.3",
+  "capixVersion": "1.2.4",
   "capixRelease": "0001",
   "capixControlPlaneOrigin": "https://www.capix.network",
   "capixOAuthAuthorizePath": "/oauth/authorize",

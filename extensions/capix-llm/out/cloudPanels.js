@@ -53,22 +53,26 @@ class InstancesTreeProvider {
     _onDidChange = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChange.event;
     instances = [];
+    loading = null;
     constructor(client) {
         this.client = client;
     }
     refresh() { this._onDidChange.fire(); }
     async load() {
-        try {
-            const res = await this.client.getBalance();
-            if (res.ok) {
-                this.instances = res.instances || [];
+        if (this.loading)
+            return this.loading;
+        this.loading = (async () => {
+            try {
+                const res = await this.client.listInstances();
+                this.instances = res.instances;
             }
-        }
-        catch (err) {
-            logger_1.logger.error("InstancesTreeProvider.load failed", { error: String(err) });
-            this.instances = [];
-        }
-        this.refresh();
+            catch (err) {
+                logger_1.logger.error("InstancesTreeProvider.load failed", { error: String(err) });
+                this.instances = [];
+            }
+            this.refresh();
+        })().finally(() => { this.loading = null; });
+        return this.loading;
     }
     getTreeItem(element) { return element; }
     async getChildren() {
@@ -87,6 +91,7 @@ class InstancesTreeProvider {
             item.contextValue = `capix-instance-${inst.status}`;
             item.command = { command: "capix.openInstance", title: "Open", arguments: [inst.id] };
             item._instanceId = inst.id;
+            item._sshAvailable = inst.nodes.some((n) => n.sshAvailable);
             item._sshHost = inst.nodes.find((n) => n.sshHost)?.sshHost ?? undefined;
             item._sshPort = inst.nodes.find((n) => n.sshPort)?.sshPort ?? undefined;
             return item;

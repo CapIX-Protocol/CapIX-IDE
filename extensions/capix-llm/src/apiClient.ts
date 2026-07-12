@@ -152,11 +152,17 @@ export class CapixClient {
 
   private async authenticatedFetch(url: string, init: RequestInit = {}, retry = true, networkAttempt = 0): Promise<Response> {
     const method = String(init.method || "GET").toUpperCase();
+    const safeRead = method === "GET" || method === "HEAD";
+    const requestInit: RequestInit = {
+      ...init,
+      signal: init.signal ?? (safeRead ? AbortSignal.timeout(6_000) : undefined),
+      headers: { ...(init.headers || {}), ...(await this.getAuthHeaders()) },
+    };
     let response: Response;
     try {
-      response = await fetch(url, { ...init, headers: { ...(init.headers || {}), ...(await this.getAuthHeaders()) } });
+      response = await fetch(url, requestInit);
     } catch (error) {
-      if ((method === "GET" || method === "HEAD") && networkAttempt < 2) {
+      if (safeRead && networkAttempt < 2) {
         console.warn("Capix API read retry", { url: new URL(url).pathname, attempt: networkAttempt + 1, error: String(error) });
         await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** networkAttempt));
         return this.authenticatedFetch(url, init, retry, networkAttempt + 1);
@@ -164,7 +170,7 @@ export class CapixClient {
       throw error;
     }
     if (response.status === 401 && retry && await this.refreshOAuthToken()) return this.authenticatedFetch(url, init, false);
-    if ((method === "GET" || method === "HEAD") && [429, 502, 503, 504].includes(response.status) && networkAttempt < 2) {
+    if (safeRead && [429, 502, 503, 504].includes(response.status) && networkAttempt < 2) {
       console.warn("Capix API read retry", { url: new URL(url).pathname, attempt: networkAttempt + 1, status: response.status });
       await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** networkAttempt));
       return this.authenticatedFetch(url, init, retry, networkAttempt + 1);
@@ -327,11 +333,13 @@ export class CapixClient {
 
   // ── Wallet balance ────────────────────────────────────────────────────
   async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; transactions?: unknown[]; updatedAt?: string; activeInstances?: number; totalSpent?: number; instances?: unknown[]; error?: string }> {
-    const result = await this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; transactions?: unknown[]; error?: string }>("/api/v1/billing");
+    const [result, inventory] = await Promise.all([
+      this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; transactions?: unknown[]; error?: string }>("/api/v1/billing"),
+      this.listInstances(),
+    ]);
     if (!result.ok) return result;
     const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
     const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
-    const inventory = await this.listInstances();
     const transactions = result.transactions || [];
     const totalSpent = transactions.reduce<number>((sum, entry) => {
       if (!entry || typeof entry !== "object") return sum;

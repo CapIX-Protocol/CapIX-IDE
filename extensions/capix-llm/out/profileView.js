@@ -49,9 +49,9 @@ class ProfileViewProvider {
     extensionUri;
     view;
     billing = null;
-    baseTreasury = null;
     loading = false;
     billingError = null;
+    configured = false;
     constructor(client, extensionUri) {
         this.client = client;
         this.extensionUri = extensionUri;
@@ -67,23 +67,23 @@ class ProfileViewProvider {
         this.refresh();
     }
     async refresh() {
-        if (!this.view)
+        if (!this.view || this.loading)
             return;
+        logger_1.logger.info("Profile sync started");
         this.loading = true;
         this.billingError = null;
         this.view.webview.postMessage({ type: "loading", value: true });
         this.view.webview.postMessage({ type: "billingError", value: null });
         try {
             const configured = await this.client.checkConfigured();
+            this.configured = configured;
+            logger_1.logger.info("Profile authentication checked", { configured });
             this.view.webview.postMessage({ type: "auth", configured });
             if (!configured) {
                 this.billing = null;
                 return;
             }
-            const [billingRes, treasuryRes] = await Promise.all([
-                this.client.getBalance(),
-                this.client.getBaseTreasury().catch(() => ({ ok: false })),
-            ]);
+            const billingRes = await this.client.getBalance();
             if (billingRes.ok) {
                 const br = billingRes;
                 this.billing = {
@@ -94,9 +94,7 @@ class ProfileViewProvider {
                     transactions: br.transactions || [],
                     instances: (br.instances || []),
                 };
-            }
-            if (treasuryRes.ok) {
-                this.baseTreasury = treasuryRes;
+                logger_1.logger.info("Profile sync completed", { activeInstances: this.billing.activeInstances, transactionCount: this.billing.transactions?.length || 0 });
             }
         }
         catch (err) {
@@ -109,11 +107,24 @@ class ProfileViewProvider {
         }
         finally {
             this.loading = false;
-            this.view.webview.postMessage({ type: "loading", value: false });
-            this.view.webview.postMessage({ type: "billing", value: this.billing });
-            this.view.webview.postMessage({ type: "treasury", value: this.baseTreasury });
-            this.view.webview.postMessage({ type: "billingError", value: this.billingError });
+            // Render the authoritative snapshot directly. Webview messages can be
+            // dropped while a sidebar view is being restored or moved; profile data
+            // must never remain hidden behind an indefinite loading placeholder.
+            if (this.view)
+                this.view.webview.html = this.getHtml();
         }
+    }
+    snapshotHtml() {
+        const esc = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        if (this.loading)
+            return '<div class="loading-msg empty">Loading your profile…</div>';
+        if (this.billingError)
+            return `<div class="connect-prompt"><p>${esc(this.billingError)}</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: 'refresh' })">Retry</button></div>`;
+        if (!this.configured || !this.billing)
+            return '<div class="connect-prompt"><p>Sign in to synchronize your Capix balance and compute.</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'resetSession\' })">Sign In</button></div>';
+        const b = this.billing.balance;
+        const rows = this.billing.instances.map((instance) => `<div class="deploy-row"><div><span class="deploy-name">${esc(instance.tier)}</span><span class="deploy-status ${instance.status === "running" ? "status-running" : "status-stopped"}">${esc(instance.status)}</span></div><span class="deploy-rate">$${Number(instance.costUsdPerHour || 0).toFixed(2)}/hr</span></div>`).join("") || '<div class="empty">No compute instances</div>';
+        return `<div class="card"><div class="balance-label">Wallet Balance</div><div class="balance-main">$${Number(b.usd || 0).toFixed(2)}</div><div class="stats"><div class="stat-box"><div class="stat-value">${Number(b.sol || 0).toFixed(4)}</div><div class="stat-label">SOL</div></div><div class="stat-box"><div class="stat-value">${Number(b.usdc || 0).toFixed(2)}</div><div class="stat-label">USDC</div></div></div><div style="margin-top:12px"><button class="btn btn-primary" onclick="vscode.postMessage({ type: 'topUp' })">+ Top Up</button><button class="btn btn-secondary" onclick="vscode.postMessage({ type: 'openBilling' })">Billing →</button></div></div><div class="card"><div class="balance-label">Compute · ${this.billing.activeInstances} active</div>${rows}</div>`;
     }
     handleMessage(msg) {
         switch (msg.type) {
@@ -126,11 +137,8 @@ class ProfileViewProvider {
             case "openBilling":
                 vscode.commands.executeCommand("capix.openBilling");
                 break;
-            case "copyTreasury":
-                if (this.baseTreasury) {
-                    vscode.env.clipboard.writeText(this.baseTreasury.treasury);
-                    vscode.window.showInformationMessage("Treasury address copied.");
-                }
+            case "resetSession":
+                vscode.commands.executeCommand("capix.resetSessionAndSignIn");
                 break;
         }
     }
@@ -290,7 +298,7 @@ ${cspMeta}
 </head>
 <body>
   <div id="content">
-    <div class="loading-msg empty">Loading your profile…</div>
+    ${this.snapshotHtml()}
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -308,7 +316,7 @@ ${cspMeta}
         content.innerHTML = \`
           <div class="connect-prompt">
             <p>Connect your Capix wallet to view balance, top up, and manage billing.</p>
-            <button class="btn btn-primary" onclick="vscode.postMessage({ type: 'topUp' })">Connect Wallet</button>
+            <button class="btn btn-primary" onclick="vscode.postMessage({ type: 'resetSession' })">Reset Session and Sign In</button>
           </div>
         \`;
         return;
@@ -394,27 +402,7 @@ ${cspMeta}
           \${deployRows}
         </div>
 
-        <div class="card" id="treasury-card" style="display: none;">
-          <div class="section-title">USDC on Base (SuperGemma chain)</div>
-          <div class="billing-rate">Send USDC to this address from any EVM wallet:</div>
-          <div class="treasury-box" id="treasury-addr" onclick="copyTreasury()"></div>
-          <div class="billing-rate" style="margin-top: 4px;">Then submit the tx hash via Top Up → verify on the billing page.</div>
-        </div>
       \`;
-    }
-
-    function renderTreasury(data) {
-      const card = document.getElementById('treasury-card');
-      const addr = document.getElementById('treasury-addr');
-      if (!card || !addr) return;
-      if (data && data.treasury) {
-        card.style.display = 'block';
-        addr.textContent = data.treasury;
-      }
-    }
-
-    function copyTreasury() {
-      vscode.postMessage({ type: 'copyTreasury' });
     }
 
     // Listen for messages from the extension.
@@ -425,16 +413,12 @@ ${cspMeta}
       } else if (msg.type === 'billing') {
         render(msg.value);
       } else if (msg.type === 'billingError' && msg.value) {
-        document.getElementById('content').innerHTML = '<div class="connect-prompt"><p>' + esc(msg.value) + '</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'topUp\' })">Connect Wallet</button></div>';
+        document.getElementById('content').innerHTML = '<div class="connect-prompt"><p>' + esc(msg.value) + '</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'resetSession\' })">Reset Session and Sign In</button></div>';
       } else if (msg.type === 'auth') {
         isConfigured = Boolean(msg.configured);
-      } else if (msg.type === 'treasury') {
-        renderTreasury(msg.value);
       }
     });
 
-    // Initial load message.
-    vscode.postMessage({ type: 'refresh' });
   </script>
 </body>
 </html>`;

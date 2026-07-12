@@ -52,6 +52,8 @@ const apiClient_1 = require("./apiClient");
 const treeViews_1 = require("./treeViews");
 const cloudPanels_1 = require("./cloudPanels");
 const profileView_1 = require("./profileView");
+const authRecovery_1 = require("./authRecovery");
+const oauthCallbackGuard_1 = require("./oauthCallbackGuard");
 const terminalManager_1 = require("./terminalManager");
 const autoConnect_1 = require("./autoConnect");
 const covenant_1 = require("./covenant");
@@ -59,6 +61,7 @@ const devTokenManager_1 = require("./devTokenManager");
 const smartRouterManager_1 = require("./smartRouterManager");
 const logger_1 = require("./logger");
 const telemetry_1 = require("./telemetry");
+const agentCommandBridge_1 = require("./agentCommandBridge");
 let client;
 let deploysProvider;
 let catalogProvider;
@@ -81,12 +84,13 @@ function activate(context) {
     client.setSecretStorage({
         get: (key) => Promise.resolve(context.secrets.get(key)),
         store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
+        delete: (key) => Promise.resolve(context.secrets.delete(key)),
     });
     client.setOAuthAccessTokenHandler(async (accessToken) => {
         // The workbench stores this short-lived OAuth token using its encrypted
         // application storage and selects Capix routed inference (`auto`). Portal
         // API keys are deliberately not copied into the desktop application.
-        await vscode.commands.executeCommand("capix.chat.configure", accessToken);
+        await vscode.commands.executeCommand(accessToken ? "capix.chat.configure" : "capix.chat.clear", ...(accessToken ? [accessToken] : []));
     });
     // ── Tree views ────────────────────────────────────────────────────────
     deploysProvider = new treeViews_1.DeploysTreeProvider(client);
@@ -102,6 +106,7 @@ function activate(context) {
     covenant = new covenant_1.CovenantManager(context);
     devTokens = new devTokenManager_1.DevTokenManager(client);
     smartRouter = new smartRouterManager_1.SmartRouterManager(client);
+    context.subscriptions.push(new agentCommandBridge_1.AgentCommandBridge(client).register());
     // ── Dev Token: auto-mint on git commits ────────────────────────────────
     // Watch the VS Code SCM (git) state — when HEAD changes, a commit happened.
     let lastHead;
@@ -155,9 +160,6 @@ function activate(context) {
     context.subscriptions.push(
     // LLM commands
     vscode.commands.registerCommand("capix.deployModel", (model) => cmdDeployModel(model)), vscode.commands.registerCommand("capix.deployCustomModel", () => cmdDeployCustomModel()), vscode.commands.registerCommand("capix.deployVps", () => cmdDeployVps()), vscode.commands.registerCommand("capix.destroyDeploy", (item) => cmdDestroyDeploy(item)), vscode.commands.registerCommand("capix.stopDeploy", (item) => cmdStopDeploy(item)), vscode.commands.registerCommand("capix.startDeploy", (item) => cmdStartDeploy(item)), vscode.commands.registerCommand("capix.viewLogs", (item) => cmdViewLogs(item)), vscode.commands.registerCommand("capix.execOnInstance", (item) => cmdExecOnInstance(item)), vscode.commands.registerCommand("capix.copyEndpoint", (item) => cmdCopyEndpoint(item)), vscode.commands.registerCommand("capix.copyApiKey", (item) => cmdCopyApiKey(item)), 
-    // Agent bridge stub — returns an empty session list when the main-process
-    // broker has not registered the capix:agent:listSessions channel yet.
-    vscode.commands.registerCommand("capix:agent:listSessions", () => ({ sessions: [] })), 
     // Refresh commands
     vscode.commands.registerCommand("capix.refreshDeploys", () => { deploysProvider.load(); }), vscode.commands.registerCommand("capix.refreshCatalog", () => { catalogProvider.load(); }), vscode.commands.registerCommand("capix.refreshInstances", () => { instancesProvider.load(); }), vscode.commands.registerCommand("capix.refreshAgents", () => { agentsProvider.load(); }), vscode.commands.registerCommand("capix.refreshJobs", () => { jobsProvider.load(); }), vscode.commands.registerCommand("capix.refreshApiKeys", () => { apiKeysProvider.load(); }), vscode.commands.registerCommand("capix.refreshProfile", () => { profileProvider.refresh(); }), 
     // Navigation
@@ -167,7 +169,7 @@ function activate(context) {
         vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
     }), vscode.commands.registerCommand("capix.openInstance", (instanceId) => {
         vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/instances/${instanceId}`));
-    }), vscode.commands.registerCommand("capix.connectWallet", () => cmdConnectWallet()), 
+    }), vscode.commands.registerCommand("capix.connectWallet", () => cmdConnectWallet()), vscode.commands.registerCommand("capix.resetSessionAndSignIn", () => cmdResetSessionAndSignIn()), 
     // Profile
     vscode.commands.registerCommand("capix.topUp", () => cmdTopUp()), 
     // Cloud panels
@@ -739,6 +741,8 @@ async function cmdOpenTerminal(item) {
     const sshHost = item?._sshHost;
     const sshPort = item?._sshPort;
     const sshCommand = item?._sshCommand;
+    const instanceId = item?._instanceId;
+    const sshAvailable = item?._sshAvailable;
     const label = item?.label || "instance";
     if (sshHost && sshPort) {
         await terminalManager.openSshSession({ host: sshHost, port: sshPort, label });
@@ -752,6 +756,23 @@ async function cmdOpenTerminal(item) {
             await terminalManager.openSshSession({ host: match[3], port: Number(match[1]) || 22, user: match[2], label });
             return;
         }
+    }
+    if (instanceId?.startsWith("dep_")) {
+        if (!sshAvailable) {
+            vscode.window.showWarningMessage("SSH access for this instance is unavailable or its one-time key was already retrieved.", "Open instance").then((action) => {
+                if (action === "Open instance")
+                    vscode.commands.executeCommand("capix.openInstance", instanceId);
+            });
+            return;
+        }
+        try {
+            const credential = await client.retrieveSshCredential(instanceId);
+            await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label, privateKey: credential.privateKey });
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
+        }
+        return;
     }
     // No item — prompt the user to pick from instances
     if (!checkConfigured())
@@ -802,38 +823,51 @@ async function cmdConnectWallet() {
     const verifier = (0, node_crypto_1.randomBytes)(48).toString("base64url");
     const state = (0, node_crypto_1.randomBytes)(32).toString("base64url");
     const challenge = (0, node_crypto_1.createHash)("sha256").update(verifier).digest("base64url");
+    const callbackGuard = new oauthCallbackGuard_1.OAuthCallbackGuard(state);
     let timeout;
     const server = (0, node_http_1.createServer)(async (request, response) => {
+        const decision = callbackGuard.inspect(request.url || "/");
+        if (decision.kind === "ignore") {
+            response.writeHead(204, { "cache-control": "no-store" });
+            response.end();
+            return;
+        }
+        if (decision.kind === "invalid") {
+            response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
+            response.end(decision.message);
+            return;
+        }
+        if (decision.kind === "duplicate") {
+            response.writeHead(409, { "content-type": "text/plain", "cache-control": "no-store" });
+            response.end("This Capix sign-in callback is already being processed.");
+            return;
+        }
         try {
-            const callback = new URL(request.url || "/", "http://127.0.0.1");
-            const code = callback.searchParams.get("code");
-            if (!code || callback.searchParams.get("state") !== state)
-                throw new Error("OAuth callback validation failed");
             const redirectUri = `http://127.0.0.1:${server.address().port}/oauth/callback`;
             const tokenResponse = await fetch("https://www.capix.network/oauth/token", {
                 method: "POST",
                 headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-                body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
+                body: new URLSearchParams({ grant_type: "authorization_code", code: decision.code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
             });
             const tokens = await tokenResponse.json();
             if (!tokenResponse.ok || !tokens.access_token)
                 throw new Error(tokens.error || `Token exchange failed (${tokenResponse.status})`);
             await client.saveOAuthTokens(tokens.access_token, tokens.refresh_token);
+            callbackGuard.exchangeSucceeded();
             response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
             response.end("Capix sign-in complete. Return to CapixIDE.");
+            if (timeout)
+                clearTimeout(timeout);
+            server.close();
             vscode.window.showInformationMessage("Capix sign-in complete.");
             await refreshAll();
             await vscode.commands.executeCommand("capix.agent.refreshAuth");
         }
         catch (error) {
+            callbackGuard.exchangeFailed();
             response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
             response.end("Capix sign-in failed. Return to CapixIDE.");
             vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        finally {
-            if (timeout)
-                clearTimeout(timeout);
-            server.close();
         }
     });
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
@@ -848,54 +882,27 @@ async function cmdConnectWallet() {
     Object.entries({ response_type: "code", client_id: "capix-ide", redirect_uri: redirectUri, scope: "openid account catalog", code_challenge: challenge, code_challenge_method: "S256", state, nonce: (0, node_crypto_1.randomBytes)(24).toString("base64url") }).forEach(([key, value]) => authorize.searchParams.set(key, value));
     await vscode.env.openExternal(vscode.Uri.parse(authorize.toString()));
 }
+async function cmdResetSessionAndSignIn() {
+    await (0, authRecovery_1.resetSessionAndSignIn)(client, async () => {
+        try {
+            await refreshAll();
+        }
+        catch (error) {
+            logger_1.logger.error("Capix signed-out view refresh failed", { error: String(error) });
+        }
+        try {
+            await vscode.commands.executeCommand("capix.agent.refreshAuth");
+        }
+        catch (error) {
+            logger_1.logger.error("Capix agent signed-out refresh failed", { error: String(error) });
+        }
+    }, cmdConnectWallet);
+}
 // Top up wallet balance — shared across web and IDE
 async function cmdTopUp() {
     if (!checkConfigured())
         return;
-    const pick = await vscode.window.showQuickPick([
-        { label: "SOL (Solana)", description: "Deposit with your Solana wallet", value: "sol" },
-        { label: "USDC (Solana)", description: "Stablecoin on Solana", value: "usdc" },
-        { label: "USDC on Base", description: "Send from any EVM wallet", value: "usdc_base" },
-    ], { placeHolder: "Select a deposit method" });
-    if (!pick)
-        return;
-    if (pick.value === "usdc_base") {
-        const treasuryRes = await client.getBaseTreasury().catch(() => ({ ok: false }));
-        if (!treasuryRes.ok || !treasuryRes.treasury) {
-            vscode.window.showErrorMessage("Base deposits not configured. Use SOL or USDC, or top up at the web billing page.");
-            return;
-        }
-        const treasury = treasuryRes.treasury;
-        const amount = await vscode.window.showInputBox({ prompt: "Amount in USD", placeHolder: "10", ignoreFocusOut: true, validateInput: (v) => Number(v) > 0 ? null : "Enter a positive number" });
-        if (!amount)
-            return;
-        const copied = await vscode.window.showInformationMessage(`Send ${amount} USDC on Base to:\n${treasury}\n\nThen submit the tx hash.`, "Copy address", "Open Billing Page");
-        if (copied === "Copy address") {
-            vscode.env.clipboard.writeText(treasury);
-        }
-        const evmAddress = await vscode.window.showInputBox({ prompt: "Your EVM sender address (0x...)", placeHolder: "0x...", ignoreFocusOut: true, validateInput: (v) => /^0x[a-fA-F0-9]{40}$/.test(v) ? null : "Must be 0x + 40 hex chars" });
-        if (!evmAddress)
-            return;
-        const txHash = await vscode.window.showInputBox({ prompt: "Paste your Base tx hash (0x...)", placeHolder: "0x...", ignoreFocusOut: true, validateInput: (v) => v.startsWith("0x") && v.length > 20 ? null : "Must be a 0x hash" });
-        if (!txHash)
-            return;
-        await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Verifying Base transaction…" }, async () => {
-            const res = await client.submitBaseDeposit(txHash, Number(amount));
-            if (res.ok) {
-                vscode.window.showInformationMessage(`✓ Deposited $${Number(amount).toFixed(2)} — balance $${(res.balanceUsd || 0).toFixed(2)}.`);
-                profileProvider.refresh();
-            }
-            else {
-                vscode.window.showErrorMessage(res.error || "Verification failed.");
-            }
-        });
-    }
-    else {
-        vscode.window.showInformationMessage(`Open the billing page to deposit ${pick.label}.`, "Open Billing Page").then((action) => {
-            if (action === "Open Billing Page")
-                vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
-        });
-    }
+    await vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
 }
 // Launch capix-code (the CLI coding assistant) in a terminal, pre-configured
 // with the user's Capix endpoint + API key from SecretStorage.

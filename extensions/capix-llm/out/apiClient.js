@@ -14,6 +14,8 @@ class CapixClient {
     _secretStorage;
     _onOAuthAccessToken;
     _lastPublishedOAuthAccessToken = null;
+    _refreshPromise = null;
+    _inFlightGets = new Map();
     /** Wire up VS Code SecretStorage for secure (non-plaintext) token storage */
     setSecretStorage(store) {
         this._secretStorage = store;
@@ -21,6 +23,18 @@ class CapixClient {
     /** Keep the native chat surface synchronized whenever OAuth rotates. */
     setOAuthAccessTokenHandler(handler) {
         this._onOAuthAccessToken = handler;
+    }
+    /** Forget only Capix OAuth credentials, including all in-memory copies. */
+    async resetOAuthSession() {
+        if (!this._secretStorage)
+            throw new Error("OS SecretStorage is unavailable");
+        await Promise.all([
+            this._secretStorage.delete("capix.sessionToken"),
+            this._secretStorage.delete("capix.refreshToken"),
+        ]);
+        this._sessionToken = null;
+        this._lastPublishedOAuthAccessToken = null;
+        await this._onOAuthAccessToken?.(null);
     }
     async publishOAuthAccessToken(accessToken) {
         if (accessToken === this._lastPublishedOAuthAccessToken)
@@ -79,10 +93,20 @@ class CapixClient {
         const token = await this.getStoredToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
     }
-    async refreshOAuthToken(recoverCrossWindow = true) {
+    async refreshOAuthToken() {
+        if (this._refreshPromise)
+            return this._refreshPromise;
+        this._refreshPromise = this.performOAuthRefresh(true).finally(() => {
+            this._refreshPromise = null;
+        });
+        return this._refreshPromise;
+    }
+    async performOAuthRefresh(recoverCrossWindow) {
         const refreshToken = await this._secretStorage?.get("capix.refreshToken");
-        if (!refreshToken)
+        if (!refreshToken) {
+            await this.clearExpiredOAuthSession();
             return false;
+        }
         const response = await fetch(`${CapixClient.PRODUCTION_BASE_URL}/oauth/token`, {
             method: "POST",
             headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
@@ -101,22 +125,52 @@ class CapixClient {
                 ]);
                 if (storedAccess && storedAccess !== this._sessionToken) {
                     this._sessionToken = storedAccess;
+                    await this.publishOAuthAccessToken(storedAccess);
                     return true;
                 }
                 if (storedRefresh && storedRefresh !== refreshToken) {
-                    return this.refreshOAuthToken(false);
+                    return this.performOAuthRefresh(false);
                 }
             }
-            this._sessionToken = null;
+            await this.clearExpiredOAuthSession();
             return false;
         }
         await this.saveOAuthTokens(tokens.access_token, tokens.refresh_token || refreshToken);
         return true;
     }
-    async authenticatedFetch(url, init = {}, retry = true) {
-        const response = await fetch(url, { ...init, headers: { ...(init.headers || {}), ...(await this.getAuthHeaders()) } });
+    async clearExpiredOAuthSession() {
+        this._sessionToken = null;
+        this._lastPublishedOAuthAccessToken = null;
+        await this._secretStorage?.delete("capix.sessionToken");
+        await this._onOAuthAccessToken?.(null);
+    }
+    async authenticatedFetch(url, init = {}, retry = true, networkAttempt = 0) {
+        const method = String(init.method || "GET").toUpperCase();
+        const safeRead = method === "GET" || method === "HEAD";
+        const requestInit = {
+            ...init,
+            signal: init.signal ?? (safeRead ? AbortSignal.timeout(6_000) : undefined),
+            headers: { ...(init.headers || {}), ...(await this.getAuthHeaders()) },
+        };
+        let response;
+        try {
+            response = await fetch(url, requestInit);
+        }
+        catch (error) {
+            if (safeRead && networkAttempt < 2) {
+                console.warn("Capix API read retry", { url: new URL(url).pathname, attempt: networkAttempt + 1, error: String(error) });
+                await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** networkAttempt));
+                return this.authenticatedFetch(url, init, retry, networkAttempt + 1);
+            }
+            throw error;
+        }
         if (response.status === 401 && retry && await this.refreshOAuthToken())
             return this.authenticatedFetch(url, init, false);
+        if (safeRead && [429, 502, 503, 504].includes(response.status) && networkAttempt < 2) {
+            console.warn("Capix API read retry", { url: new URL(url).pathname, attempt: networkAttempt + 1, status: response.status });
+            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** networkAttempt));
+            return this.authenticatedFetch(url, init, retry, networkAttempt + 1);
+        }
         return response;
     }
     get isConfigured() {
@@ -124,7 +178,8 @@ class CapixClient {
     }
     /** Async config check (used by tools that can await) */
     async checkConfigured() {
-        const token = await this.getStoredToken();
+        const stored = await this._secretStorage?.get("capix.sessionToken");
+        const token = stored || await this.getStoredToken();
         this._sessionToken = token;
         const configured = this.isOAuthAccessToken(token);
         if (configured)
@@ -135,11 +190,21 @@ class CapixClient {
         return token.startsWith("cpxs_") || token.startsWith("cpx_session.");
     }
     async get(path) {
-        const res = await this.authenticatedFetch(`${this.baseUrl}${path}`);
-        const data = await res.json().catch(() => ({}));
-        if (res.ok === false)
-            throw new CapixApiError(res.status, data.error || `request_failed_${res.status}`);
-        return data;
+        const existing = this._inFlightGets.get(path);
+        if (existing)
+            return existing;
+        const request = (async () => {
+            const res = await this.authenticatedFetch(`${this.baseUrl}${path}`);
+            const data = await res.json().catch(() => ({}));
+            if (res.ok === false)
+                throw new CapixApiError(res.status, data.error || `request_failed_${res.status}`);
+            return data;
+        })();
+        this._inFlightGets.set(path, request);
+        return request.finally(() => {
+            if (this._inFlightGets.get(path) === request)
+                this._inFlightGets.delete(path);
+        });
     }
     async post(path, body) {
         const res = await this.authenticatedFetch(`${this.baseUrl}${path}`, {
@@ -155,6 +220,58 @@ class CapixClient {
             headers: { "Idempotency-Key": (0, node_crypto_1.randomUUID)() },
         });
         return res.json();
+    }
+    async streamAgentChat(input, signal, onEvent) {
+        const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/chat/completions`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
+        if (!res.ok || !res.body)
+            throw new CapixApiError(res.status, `inference_failed_${res.status}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let data = [];
+        const emit = async (raw) => {
+            if (raw === "[DONE]")
+                return;
+            let parsed;
+            try {
+                parsed = JSON.parse(raw);
+            }
+            catch {
+                return;
+            }
+            const choice = parsed.choices?.[0];
+            if (choice?.delta?.content !== undefined || choice?.delta?.tool_calls !== undefined)
+                await onEvent({ type: "delta", content: choice.delta.content, toolCalls: choice.delta.tool_calls });
+            if (parsed.capix?.receiptId || parsed.receiptId)
+                await onEvent({ type: "route", receiptId: parsed.capix?.receiptId ?? parsed.receiptId, model: parsed.model ?? (input && input.model), region: parsed.capix?.region ?? "global", privacy: parsed.capix?.privacy });
+            if (parsed.usage)
+                await onEvent({ type: "usage", inputTokens: Number(parsed.usage.prompt_tokens ?? 0), outputTokens: Number(parsed.usage.completion_tokens ?? 0), costMinor: String(parsed.usage.cost_minor ?? parsed.capix?.costMinor ?? "0"), currency: String(parsed.usage.currency ?? parsed.capix?.currency ?? "USD") });
+        };
+        try {
+            while (true) {
+                const chunk = await reader.read();
+                if (chunk.done)
+                    break;
+                buffer += decoder.decode(chunk.value, { stream: true });
+                let i;
+                while ((i = buffer.indexOf("\n")) >= 0) {
+                    const line = buffer.slice(0, i).replace(/\r$/, "");
+                    buffer = buffer.slice(i + 1);
+                    if (!line) {
+                        if (data.length)
+                            await emit(data.join("\n"));
+                        data = [];
+                    }
+                    else if (line.startsWith("data:"))
+                        data.push(line.slice(5).trimStart());
+                }
+            }
+            if (data.length)
+                await emit(data.join("\n"));
+        }
+        finally {
+            reader.releaseLock();
+        }
     }
     // ── Model catalog ──────────────────────────────────────────────────────
     async getCatalog() {
@@ -229,23 +346,75 @@ class CapixClient {
     }
     // ── Wallet balance ────────────────────────────────────────────────────
     async getBalance() {
-        const result = await this.get("/api/v1/billing");
+        const [result, inventory] = await Promise.all([
+            this.get("/api/v1/billing"),
+            this.listInstances(),
+        ]);
         if (!result.ok)
             return result;
         const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
         const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
-        return { ok: true, balance: { usd: usdc, sol, usdc }, transactions: result.transactions || [], updatedAt: new Date().toISOString(), activeInstances: 0, totalSpent: 0 };
+        const transactions = result.transactions || [];
+        const totalSpent = transactions.reduce((sum, entry) => {
+            if (!entry || typeof entry !== "object")
+                return sum;
+            const row = entry;
+            if ((row.postingType ?? row.posting_type) !== "debit" || row.asset !== "USDC")
+                return sum;
+            return sum + Number(row.amount || 0) / 10 ** Number(row.scale ?? 6);
+        }, 0);
+        const activeInstances = inventory.instances.filter((instance) => !["terminated", "deleted", "destroyed"].includes(instance.status)).length;
+        return {
+            ok: true,
+            balance: { usd: usdc, sol, usdc },
+            transactions,
+            updatedAt: new Date().toISOString(),
+            activeInstances,
+            totalSpent,
+            instances: inventory.instances.map((instance) => ({
+                id: instance.id, tier: instance.tier, status: instance.status,
+                startedAt: instance.startedAt, costUsdPerHour: instance.costUsdPerHour,
+                paymentAsset: "USDC",
+            })),
+        };
     }
-    // ── Billing: base treasury address for USDC on Base ───────────────────
-    async getBaseTreasury() {
-        return this.get("/api/cloud/billing?action=base-treasury");
+    // ── Instances: canonical owner-scoped deployments ─────────────────────
+    async listInstances() {
+        const result = await this.get("/api/v1/deployments?limit=100");
+        return {
+            ok: true,
+            instances: (result.data || []).map((deployment) => {
+                const workload = deployment.workloadSpec || {};
+                const allocations = deployment.allocations || [];
+                return {
+                    id: deployment.id,
+                    tier: String(workload.name || workload.modelId || workload.kind || "Capix compute"),
+                    status: String(deployment.phase || "pending").toLowerCase(),
+                    startedAt: deployment.createdAt || new Date(0).toISOString(),
+                    costUsdPerHour: 0,
+                    nodes: allocations.map((allocation, index) => ({
+                        nodeId: String(allocation.nodeId || allocation.id || `${deployment.id}-${index}`),
+                        location: String(allocation.region || allocation.location || "Capix network"),
+                        sshHost: typeof allocation.sshHost === "string" ? allocation.sshHost : null,
+                        sshPort: typeof allocation.sshPort === "number" ? allocation.sshPort : null,
+                        gpu: typeof allocation.gpu === "string" ? allocation.gpu : null,
+                        agentOnline: allocation.agentOnline === true,
+                        sshAvailable: allocation.sshAvailable === true,
+                    })),
+                };
+            }),
+        };
     }
-    // ── Deposit (SOL or USDC on Solana — returns a tx signature) ──────────
-    // The actual signing happens in the web browser with the Solana wallet
-    // adapter. The IDE just opens the billing page for the user to complete.
-    // For USDC on Base (EVM), the user sends manually and submits the tx hash.
-    async submitBaseDeposit(txHash, amountUsd) {
-        return this.post("/api/cloud/billing", { action: "deposit", signature: txHash, asset: "USDC_BASE", amountUsd });
+    async retrieveSshCredential(deploymentId) {
+        const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/deployments/${encodeURIComponent(deploymentId)}/ssh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Idempotency-Key": (0, node_crypto_1.randomUUID)() },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.host || !data.port || !data.privateKey) {
+            throw new CapixApiError(res.status, data.detail || data.error || "SSH credential is unavailable or was already retrieved.");
+        }
+        return { host: data.host, port: data.port, privateKey: data.privateKey, filename: data.filename || `${deploymentId}.pem` };
     }
     // ── Deploy quote (for showing per-minute costs) ────────────────────────
     async getQuote(tierId, hours) {
