@@ -14,7 +14,7 @@ describe("native Capix runtime", () => {
     const handlers = new Map<string, (event: any, input: unknown) => Promise<unknown>>();
     const ipc = { removeHandler: vi.fn(), handle: vi.fn((channel: string, fn: any) => { handlers.set(channel, fn); }) };
     const sdk = { catalog: { listModels: vi.fn().mockResolvedValue([{ id: "model-1" }]) } as any };
-    const auth = { startLogin: vi.fn(), completeLogin: vi.fn(), logout: vi.fn() };
+    const auth = { startLogin: vi.fn(), completeLogin: vi.fn(), logout: vi.fn(), getAccessToken: vi.fn().mockResolvedValue({ token: "oauth", expiresAt: Date.now() + 60_000 }) };
     const dispose = registerCapixIpc(ipc, new CapixMainBroker({ sdk, auth }));
     expect(ipc.handle).toHaveBeenCalledWith(CAPIX_BROKER_CHANNEL, expect.any(Function));
     for (const ch of Object.values(CapixChatChannels)) {
@@ -39,9 +39,12 @@ describe("native Capix runtime", () => {
     const ipc = { removeHandler: vi.fn(), handle: vi.fn((channel: string, fn: any) => { handlers.set(channel, fn); }) };
     const sdk = {
       catalog: { listModels: vi.fn().mockResolvedValue([]) } as any,
-      inference: { stream: vi.fn().mockResolvedValue([]), cancel: vi.fn().mockResolvedValue(undefined) } as any,
+      inference: { stream: vi.fn().mockImplementation(async () => (async function* () {
+		yield { choices: [{ delta: { content: "hello from Capix" } }] };
+		yield { usage: { prompt_tokens: 2, completion_tokens: 3, cost_minor: "7", currency: "USD" } };
+	  })()), cancel: vi.fn().mockResolvedValue(undefined) } as any,
     };
-    const auth = { startLogin: vi.fn(), completeLogin: vi.fn(), logout: vi.fn() };
+    const auth = { startLogin: vi.fn(), completeLogin: vi.fn(), logout: vi.fn(), getAccessToken: vi.fn().mockResolvedValue({ token: "oauth", expiresAt: Date.now() + 60_000 }) };
     registerCapixIpc(ipc, new CapixMainBroker({ sdk, auth }));
 
     const startHandler = handlers.get(CapixChatChannels.startSession)!;
@@ -65,6 +68,30 @@ describe("native Capix runtime", () => {
     );
     expect(streamResult.streamHandle).toMatch(/^inference-/);
     expect(sdk.inference.stream).toHaveBeenCalledTimes(1);
+		expect(sdk.inference.stream).toHaveBeenCalledWith(expect.objectContaining({
+			model: "capix/sonnet",
+			projectId: "proj-1",
+			stream: true,
+			messages: [{ role: "user", content: "hello" }],
+		}), expect.any(AbortSignal));
+		expect(sdk.inference.stream.mock.calls[0][0]).not.toHaveProperty("capixStreamHandle");
+		await vi.waitFor(() => expect(sentEvents.some(({ channel, args }) =>
+			channel === CapixChatChannels.onStreamEvent && (args[0] as any)?.event?.content === "hello from Capix",
+		)).toBe(true));
+
+		const listHandler = handlers.get("capix:agent:listSessions")!;
+		await expect(listHandler(
+			{ sender: { id: 1, getURL: () => "vscode-file://vscode-app/out/vs/workbench/workbench.html" } },
+			{ projectId: "proj-1" },
+		)).resolves.toMatchObject({ sessions: [{ id: session.id, projectId: "proj-1" }] });
+		const resumeHandler = handlers.get("capix:agent:resumeSession")!;
+		await expect(resumeHandler(
+			{ sender: { id: 1, getURL: () => "vscode-file://vscode-app/out/vs/workbench/workbench.html" } },
+			{ sessionId: session.id },
+		)).resolves.toMatchObject({ id: session.id, messages: [
+			{ role: "user", content: "hello" },
+			{ role: "assistant", content: "hello from Capix" },
+		] });
 
     const cancelHandler = handlers.get(CapixChatChannels.cancel)!;
     await cancelHandler(

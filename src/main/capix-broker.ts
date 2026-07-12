@@ -1380,7 +1380,15 @@ export class CapixMainBroker {
 		input: unknown,
 	): Promise<{ sessionId: string }> {
 		const client = await this.acquireSdkClient();
-		const sessionId = `inference-${randomUUID()}`;
+		const requestedHandle = input && typeof input === "object" && "capixStreamHandle" in input
+			? (input as { capixStreamHandle?: unknown }).capixStreamHandle
+			: undefined;
+		const sessionId = typeof requestedHandle === "string" && /^inference-[0-9a-f-]{36}$/.test(requestedHandle)
+			? requestedHandle
+			: `inference-${randomUUID()}`;
+		const sdkInput = input && typeof input === "object"
+			? Object.fromEntries(Object.entries(input as Record<string, unknown>).filter(([key]) => key !== "capixStreamHandle"))
+			: input;
 		const controller = new AbortController();
 		this.abortControllers.set(sessionId, controller);
 
@@ -1390,7 +1398,7 @@ export class CapixMainBroker {
 
 		try {
 			const stream = await client.inference.stream(
-				input,
+				sdkInput,
 				controller.signal,
 			);
 			if (isAsyncIterable(stream)) {

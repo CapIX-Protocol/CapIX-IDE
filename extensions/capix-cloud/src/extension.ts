@@ -34,55 +34,19 @@ let operationPoll: NodeJS.Timeout | null = null;
 export function activate(context: vscode.ExtensionContext): void {
 	// The launch UI is provided by capix-llm's authenticated Profile, Deploys,
 	// Instances and Catalog surfaces. Keep this broker module packaged for the
-	// later control-plane rollout, but do not expose a second auth-gated UI.
-	const launchUiEnabled = true;
-	if (!launchUiEnabled) return;
+	// later control-plane rollout, but do not register orphan view IDs. Billing
+	// and deployments are canonically exposed as capix.llm.profile and
+	// capix.llm.deploys by capix-llm.
 	broker = new CapixCloudBroker();
 	deploymentsProvider = new DeploymentsTreeProvider(broker);
 	billingProvider = new BillingTreeProvider(broker);
-
-	const deploymentsView = vscode.window.createTreeView("capix.cloud.deployments", {
-		treeDataProvider: deploymentsProvider,
-		showCollapseAll: true,
-	});
-	const billingView = vscode.window.createTreeView("capix.cloud.billing", {
-		treeDataProvider: billingProvider,
-		showCollapseAll: false,
-	});
-
-	context.subscriptions.push(deploymentsView, billingView);
-
 	context.subscriptions.push(
-		vscode.commands.registerCommand("capix.cloud.refreshDeployments", () =>
-			deploymentsProvider.refresh(),
-		),
-		vscode.commands.registerCommand("capix.cloud.refreshBilling", () =>
-			billingProvider.refresh(),
-		),
-		vscode.commands.registerCommand("capix.cloud.createDeployment", () =>
-			createDeployment(broker, deploymentsProvider),
-		),
-		vscode.commands.registerCommand("capix.cloud.deleteDeployment", (node?: DeploymentNode) =>
-			deleteDeployment(broker, deploymentsProvider, node),
-		),
-		vscode.commands.registerCommand("capix.cloud.showOperation", (node?: DeploymentNode) =>
-			showOperation(broker, node),
-		),
-		vscode.commands.registerCommand("capix.cloud.cancelOperation", (node?: DeploymentNode) =>
-			cancelOperation(broker, node),
-		),
-		vscode.commands.registerCommand("capix.cloud.viewReceipt", (node: InvoiceNode | ReceiptNode) =>
-			viewReceipt(broker, node),
-		),
 		vscode.commands.registerCommand("capix.cloud.openWebConsole", () =>
 			vscode.env.openExternal(
-				vscode.Uri.parse("https://www.capix.network/console"),
+				vscode.Uri.parse("https://www.capix.network/cloud"),
 			),
 		),
 	);
-
-	void deploymentsProvider.refresh();
-	void billingProvider.refresh();
 }
 
 export function deactivate(): void {

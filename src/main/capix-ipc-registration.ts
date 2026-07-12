@@ -3,6 +3,17 @@ import type { RendererToMainMessage } from "../vs/workbench/contrib/capix-auth/i
 import type { CapixMainBroker } from "./capix-broker.js";
 import { CapixChatChannels } from "../vs/workbench/contrib/capix-ai/index.js";
 
+const CapixAgentChannels = {
+	listSessions: "capix:agent:listSessions",
+	resumeSession: "capix:agent:resumeSession",
+} as const;
+
+interface NativeAgentMessage { role: "user" | "assistant" | "system" | "tool"; content: string; createdAt: number; receiptId?: string }
+interface NativeAgentSession {
+	id: string; modelId: string; projectId: string; messages: NativeAgentMessage[];
+	receiptId?: string; costMinor?: string; currency?: string;
+}
+
 export const CAPIX_BROKER_CHANNEL = "capix:broker:v1";
 
 export interface ElectronIpcMainLike {
@@ -57,13 +68,50 @@ export function registerCapixIpc(ipcMain: ElectronIpcMainLike, broker: CapixMain
 	// forward ChatStreamEvents back to the originating renderer via the
 	// capix:chat:onStreamEvent channel.
 	const streamSenders = new Map<string, (channel: string, ...args: unknown[]) => void>();
+	const sessions = new Map<string, NativeAgentSession>();
+	const streamSessions = new Map<string, string>();
+	const activeSessionStreams = new Map<string, string>();
+
+	const normalizeStreamEvent = (handleId: string, raw: unknown): Record<string, unknown> => {
+		const session = sessions.get(streamSessions.get(handleId) ?? "");
+		const event = raw && typeof raw === "object" ? raw as Record<string, any> : {};
+		if (event.type === "error") {
+			const problem = event.error && typeof event.error === "object" ? event.error : event;
+			return { type: "error", capixCode: String(problem.capixCode ?? problem.status ?? "inference_error"), message: String(problem.detail ?? problem.message ?? "Inference failed"), supportId: problem.supportId };
+		}
+		if (event.type === "route" || event.type === "usage") return event;
+		const choice = Array.isArray(event.choices) ? event.choices[0] : undefined;
+		const delta = choice?.delta;
+		if (delta?.content !== undefined || delta?.tool_calls !== undefined) {
+			return { type: "delta", content: delta.content, toolCalls: delta.tool_calls };
+		}
+		if (event.usage) {
+			return { type: "usage", inputTokens: Number(event.usage.prompt_tokens ?? event.usage.input_tokens ?? 0), outputTokens: Number(event.usage.completion_tokens ?? event.usage.output_tokens ?? 0), costMinor: String(event.usage.cost_minor ?? "0"), currency: String(event.usage.currency ?? "USD") };
+		}
+		if (event.type === "final" || choice?.finish_reason) {
+			return { type: "final", finishReason: String(choice?.finish_reason ?? event.finishReason ?? "stop"), receiptId: String(event.receiptId ?? session?.receiptId ?? "") };
+		}
+		return event;
+	};
 
 	broker.setStreamSink((handleId, event) => {
 		const send = streamSenders.get(handleId);
 		if (!send) return;
-		send(CapixChatChannels.onStreamEvent, { streamHandle: handleId, event });
-		if (event && typeof event === "object" && hasTerminalStreamType(event)) {
+		const normalized = normalizeStreamEvent(handleId, event);
+		const sessionId = streamSessions.get(handleId);
+		const session = sessionId ? sessions.get(sessionId) : undefined;
+		if (session && normalized.type === "delta" && typeof normalized.content === "string") {
+			const last = session.messages.at(-1);
+			if (last?.role === "assistant") last.content += normalized.content;
+			else session.messages.push({ role: "assistant", content: normalized.content, createdAt: Date.now() });
+		}
+		if (session && normalized.type === "route") session.receiptId = String(normalized.receiptId ?? "");
+		if (session && normalized.type === "usage") { session.costMinor = String(normalized.costMinor ?? "0"); session.currency = String(normalized.currency ?? "USD"); }
+		send(CapixChatChannels.onStreamEvent, { streamHandle: handleId, event: normalized });
+		if (hasTerminalStreamType(normalized)) {
 			streamSenders.delete(handleId);
+			streamSessions.delete(handleId);
+			if (sessionId) activeSessionStreams.delete(sessionId);
 		}
 	});
 
@@ -82,6 +130,8 @@ export function registerCapixIpc(ipcMain: ElectronIpcMainLike, broker: CapixMain
 		CapixChatChannels.streamMessage,
 		CapixChatChannels.cancel,
 		CapixChatChannels.listModels,
+		CapixAgentChannels.listSessions,
+		CapixAgentChannels.resumeSession,
 	];
 
 	// --- Existing versioned broker channel ---
@@ -98,41 +148,76 @@ export function registerCapixIpc(ipcMain: ElectronIpcMainLike, broker: CapixMain
 	ipcMain.handle(CapixChatChannels.startSession, async (_event, raw) => {
 		const req = raw as { modelId?: string; projectId?: string };
 		if (!req?.modelId || !req?.projectId) throw new TypeError("startSession requires modelId and projectId");
-		return { id: `chat-${randomUUID()}`, modelId: req.modelId, messages: [] };
+		const session: NativeAgentSession = { id: `chat-${randomUUID()}`, modelId: req.modelId, projectId: req.projectId, messages: [] };
+		sessions.set(session.id, session);
+		return structuredClone(session);
 	});
 
 	ipcMain.removeHandler(CapixChatChannels.streamMessage);
 	ipcMain.handle(CapixChatChannels.streamMessage, async (event, raw) => {
 		const req = raw as { sessionId?: string; message?: string };
 		if (!req?.sessionId || !req?.message) throw new TypeError("streamMessage requires sessionId and message");
+		const session = sessions.get(req.sessionId);
+		if (!session) throw new TypeError("Unknown Capix agent session");
+		if (activeSessionStreams.has(session.id)) throw new TypeError("A stream is already active for this session");
 		const senderSend = event.sender.send;
 		if (typeof senderSend !== "function") throw new Error("Renderer sender does not support event forwarding");
-		const result = await broker.handleMessage(
-			{ type: "inference:stream", input: { sessionId: req.sessionId, message: req.message } },
-			{ origin: resolveOrigin(event), processId: event.sender.id },
-		) as { sessionId: string };
-		const streamHandle = result.sessionId;
+		session.messages.push({ role: "user", content: req.message, createdAt: Date.now() });
+		const streamHandle = `inference-${randomUUID()}`;
 		streamSenders.set(streamHandle, (channel, ...args) => senderSend(channel, ...args));
-		return { streamHandle };
+		streamSessions.set(streamHandle, session.id);
+		activeSessionStreams.set(session.id, streamHandle);
+		try {
+			await broker.handleMessage(
+				{ type: "inference:stream", input: { capixStreamHandle: streamHandle, model: session.modelId, projectId: session.projectId, sessionId: session.id, stream: true, messages: session.messages.map(({ role, content }) => ({ role, content })) } },
+				{ origin: resolveOrigin(event), processId: event.sender.id },
+			);
+			return { streamHandle };
+		} catch (error) {
+			streamSenders.delete(streamHandle); streamSessions.delete(streamHandle); activeSessionStreams.delete(session.id);
+			throw error;
+		}
 	});
 
 	ipcMain.removeHandler(CapixChatChannels.cancel);
 	ipcMain.handle(CapixChatChannels.cancel, async (event, raw) => {
 		const req = raw as { sessionId?: string };
 		if (!req?.sessionId) throw new TypeError("cancel requires sessionId");
+		const handle = activeSessionStreams.get(req.sessionId) ?? req.sessionId;
 		await broker.handleMessage(
-			{ type: "inference:cancel", sessionId: req.sessionId },
+			{ type: "inference:cancel", sessionId: handle },
 			{ origin: resolveOrigin(event), processId: event.sender.id },
 		);
-		streamSenders.delete(req.sessionId);
+		streamSenders.delete(handle);
+		streamSessions.delete(handle);
+		activeSessionStreams.delete(req.sessionId);
 	});
 
 	ipcMain.removeHandler(CapixChatChannels.listModels);
 	ipcMain.handle(CapixChatChannels.listModels, async (event) => {
-		return broker.handleMessage(
+		const models = await broker.handleMessage(
 			{ type: "catalog:models" },
 			{ origin: resolveOrigin(event), processId: event.sender.id },
 		);
+		return { models };
+	});
+
+	ipcMain.removeHandler(CapixAgentChannels.listSessions);
+	ipcMain.handle(CapixAgentChannels.listSessions, async (event, raw) => {
+		// Force authentication through the canonical broker before exposing state.
+		await broker.handleMessage({ type: "auth:getToken" }, { origin: resolveOrigin(event), processId: event.sender.id });
+		const projectId = (raw as { projectId?: string } | undefined)?.projectId;
+		return { sessions: [...sessions.values()].filter(s => !projectId || s.projectId === projectId).map(s => structuredClone(s)) };
+	});
+
+	ipcMain.removeHandler(CapixAgentChannels.resumeSession);
+	ipcMain.handle(CapixAgentChannels.resumeSession, async (event, raw) => {
+		await broker.handleMessage({ type: "auth:getToken" }, { origin: resolveOrigin(event), processId: event.sender.id });
+		const sessionId = (raw as { sessionId?: string } | undefined)?.sessionId;
+		if (!sessionId) throw new TypeError("resumeSession requires sessionId");
+		const session = sessions.get(sessionId);
+		if (!session) throw new TypeError("Unknown Capix agent session");
+		return structuredClone(session);
 	});
 
 	return () => {

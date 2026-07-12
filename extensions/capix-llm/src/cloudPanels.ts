@@ -43,18 +43,24 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
   private _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChange.event;
   public instances: CloudInstance[] = [];
+  private loading: Promise<void> | null = null;
 
   constructor(private client: CapixClient) {}
   refresh(): void { this._onDidChange.fire(); }
 
   async load(): Promise<void> {
-    try {
-      const res = await this.client.getBalance();
-      if (res.ok) {
-        this.instances = ((res as unknown) as { instances?: CloudInstance[] }).instances || [];
+    if (this.loading) return this.loading;
+    this.loading = (async () => {
+      try {
+        const res = await this.client.listInstances();
+        this.instances = res.instances;
+      } catch (err) {
+        logger.error("InstancesTreeProvider.load failed", { error: String(err) });
+        this.instances = [];
       }
-    } catch (err) { logger.error("InstancesTreeProvider.load failed", { error: String(err) }); this.instances = []; }
-    this.refresh();
+      this.refresh();
+    })().finally(() => { this.loading = null; });
+    return this.loading;
   }
 
   getTreeItem(element: CloudItem): vscode.TreeItem { return element; }

@@ -26,6 +26,7 @@ import { SmartRouterManager } from "./smartRouterManager";
 import { logger } from "./logger";
 import { initTelemetry } from "./telemetry";
 import type { CatalogModel } from "./types";
+import { AgentCommandBridge } from "./agentCommandBridge";
 
 let client: CapixClient;
 let deploysProvider: DeploysTreeProvider;
@@ -74,6 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
   covenant = new CovenantManager(context);
   devTokens = new DevTokenManager(client);
   smartRouter = new SmartRouterManager(client);
+  context.subscriptions.push(new AgentCommandBridge(client).register());
 
   // ── Dev Token: auto-mint on git commits ────────────────────────────────
   // Watch the VS Code SCM (git) state — when HEAD changes, a commit happened.
@@ -144,10 +146,6 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.execOnInstance", (item?: unknown) => cmdExecOnInstance(item)),
     vscode.commands.registerCommand("capix.copyEndpoint", (item?: unknown) => cmdCopyEndpoint(item)),
     vscode.commands.registerCommand("capix.copyApiKey", (item?: unknown) => cmdCopyApiKey(item)),
-
-    // Agent bridge stub — returns an empty session list when the main-process
-    // broker has not registered the capix:agent:listSessions channel yet.
-    vscode.commands.registerCommand("capix:agent:listSessions", () => ({ sessions: [] })),
 
     // Refresh commands
     vscode.commands.registerCommand("capix.refreshDeploys", () => { deploysProvider.load(); }),
@@ -967,49 +965,7 @@ async function cmdResetSessionAndSignIn() {
 // Top up wallet balance — shared across web and IDE
 async function cmdTopUp() {
   if (!checkConfigured()) return;
-
-  const pick = await vscode.window.showQuickPick(
-    [
-      { label: "SOL (Solana)", description: "Deposit with your Solana wallet", value: "sol" },
-      { label: "USDC (Solana)", description: "Stablecoin on Solana", value: "usdc" },
-      { label: "USDC on Base", description: "Send from any EVM wallet", value: "usdc_base" },
-    ],
-    { placeHolder: "Select a deposit method" },
-  );
-  if (!pick) return;
-
-  if (pick.value === "usdc_base") {
-    const treasuryRes = await client.getBaseTreasury().catch(() => ({ ok: false }) as { ok: boolean });
-    if (!treasuryRes.ok || !(treasuryRes as { treasury?: string }).treasury) {
-      vscode.window.showErrorMessage("Base deposits not configured. Use SOL or USDC, or top up at the web billing page.");
-      return;
-    }
-    const treasury = (treasuryRes as { treasury: string }).treasury;
-    const amount = await vscode.window.showInputBox({ prompt: "Amount in USD", placeHolder: "10", ignoreFocusOut: true, validateInput: (v) => Number(v) > 0 ? null : "Enter a positive number" });
-    if (!amount) return;
-
-    const copied = await vscode.window.showInformationMessage(`Send ${amount} USDC on Base to:\n${treasury}\n\nThen submit the tx hash.`, "Copy address", "Open Billing Page");
-    if (copied === "Copy address") { vscode.env.clipboard.writeText(treasury); }
-
-    const evmAddress = await vscode.window.showInputBox({ prompt: "Your EVM sender address (0x...)", placeHolder: "0x...", ignoreFocusOut: true, validateInput: (v) => /^0x[a-fA-F0-9]{40}$/.test(v) ? null : "Must be 0x + 40 hex chars" });
-    if (!evmAddress) return;
-    const txHash = await vscode.window.showInputBox({ prompt: "Paste your Base tx hash (0x...)", placeHolder: "0x...", ignoreFocusOut: true, validateInput: (v) => v.startsWith("0x") && v.length > 20 ? null : "Must be a 0x hash" });
-    if (!txHash) return;
-
-    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Verifying Base transaction…" }, async () => {
-      const res = await client.submitBaseDeposit(txHash, Number(amount));
-      if (res.ok) {
-        vscode.window.showInformationMessage(`✓ Deposited $${Number(amount).toFixed(2)} — balance $${(res.balanceUsd || 0).toFixed(2)}.`);
-        profileProvider.refresh();
-      } else {
-        vscode.window.showErrorMessage(res.error || "Verification failed.");
-      }
-    });
-  } else {
-    vscode.window.showInformationMessage(`Open the billing page to deposit ${pick.label}.`, "Open Billing Page").then((action) => {
-      if (action === "Open Billing Page") vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
-    });
-  }
+  await vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
 }
 
 // Launch capix-code (the CLI coding assistant) in a terminal, pre-configured

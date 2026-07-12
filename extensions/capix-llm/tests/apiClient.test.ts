@@ -184,10 +184,10 @@ describe("CapixClient", () => {
     });
 
     it("should use the correct path in the URL", async () => {
-      await client.get("/api/cloud/billing");
+      await client.get("/api/v1/billing");
 
       const url = fetchMock.mock.calls[0][0];
-      expect(url).toBe("https://www.capix.network/api/cloud/billing");
+      expect(url).toBe("https://www.capix.network/api/v1/billing");
     });
 
     it("should parse JSON response", async () => {
@@ -345,6 +345,71 @@ describe("CapixClient", () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
+    it("single-flights refresh when profile and cloud requests receive 401 together", async () => {
+      const secrets = new Map([["capix.sessionToken", "cpxs_expired"], ["capix.refreshToken", "cpxsr_old"]]);
+      client.setSecretStorage({
+        get: vi.fn(async (key: string) => secrets.get(key)),
+        store: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+        delete: vi.fn(async (key: string) => { secrets.delete(key); }),
+      });
+      let refreshCalls = 0;
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.endsWith("/oauth/token")) {
+          refreshCalls += 1;
+          return { status: 200, ok: true, json: vi.fn().mockResolvedValue({ access_token: "cpxs_new", refresh_token: "cpxsr_new" }) };
+        }
+        const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+        if (auth === "Bearer cpxs_expired") {
+          return { status: 401, ok: false, json: vi.fn().mockResolvedValue({ error: "unauthorized" }) };
+        }
+        return { status: 200, ok: true, json: vi.fn().mockResolvedValue({ ok: true, data: [] }) };
+      });
+
+      await Promise.all([
+        client.get("/api/v1/billing"),
+        client.get("/api/v1/deployments?limit=100"),
+      ]);
+
+      expect(refreshCalls).toBe(1);
+      expect(secrets.get("capix.sessionToken")).toBe("cpxs_new");
+    });
+
+    it("coalesces identical in-flight GET requests from concurrent views", async () => {
+      let resolveResponse!: (value: unknown) => void;
+      fetchMock.mockReturnValue(new Promise((resolve) => { resolveResponse = resolve; }));
+
+      const first = client.get("/api/v1/billing");
+      const second = client.get("/api/v1/billing");
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledOnce();
+      resolveResponse({ status: 200, ok: true, json: vi.fn().mockResolvedValue({ ok: true }) });
+
+      await expect(Promise.all([first, second])).resolves.toEqual([{ ok: true }, { ok: true }]);
+    });
+
+    it("lists instances from canonical deployments instead of retired billing payloads", async () => {
+      client.setSecretStorage(createMockSecretStorage("cpxs_session"));
+      fetchMock.mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          data: [{
+            id: "dep_1",
+            phase: "RUNNING",
+            createdAt: "2026-07-12T00:00:00.000Z",
+            workloadSpec: { kind: "cpu", name: "Customer VM" },
+            allocations: [],
+          }],
+        }),
+      });
+
+      const result = await client.listInstances();
+
+      expect(fetchMock.mock.calls[0][0]).toBe("https://www.capix.network/api/v1/deployments?limit=100");
+      expect(result.instances[0]).toMatchObject({ id: "dep_1", tier: "Customer VM", status: "running" });
+    });
+
     it("recovers when another IDE window wins refresh-token rotation", async () => {
       const secrets = new Map([["capix.sessionToken", "cpxs_expired"], ["capix.refreshToken", "cpxsr_old"]]);
       const storage = {
@@ -370,9 +435,15 @@ describe("CapixClient", () => {
     });
 
     it("surfaces an unauthorized API response instead of treating it as billing data", async () => {
-      client.setSecretStorage(createMockSecretStorage("cpxs_expired"));
+      const storage = createMockSecretStorage("cpxs_expired");
+      const publish = vi.fn().mockResolvedValue(undefined);
+      client.setSecretStorage(storage);
+      client.setOAuthAccessTokenHandler(publish);
       fetchMock.mockResolvedValue({ status: 401, ok: false, json: vi.fn().mockResolvedValue({ error: "unauthorized" }) });
       await expect(client.get("/api/v1/billing")).rejects.toMatchObject({ status: 401, code: "unauthorized" });
+      expect(storage.delete).toHaveBeenCalledWith("capix.sessionToken");
+      expect(publish).toHaveBeenCalledWith(null);
+      expect(client.isConfigured).toBe(false);
     });
 
     it("getSecret should delegate to the secret storage", async () => {

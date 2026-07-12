@@ -26,17 +26,9 @@ interface BillingData {
   }>;
 }
 
-interface BaseTreasury {
-  treasury: string;
-  chain: string;
-  contract: string;
-  explorer: string;
-}
-
 export class ProfileViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private billing: BillingData | null = null;
-  private baseTreasury: BaseTreasury | null = null;
   private loading = false;
   private billingError: string | null = null;
 
@@ -57,7 +49,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
   }
 
   async refresh() {
-    if (!this.view) return;
+    if (!this.view || this.loading) return;
     this.loading = true;
     this.billingError = null;
     this.view.webview.postMessage({ type: "loading", value: true });
@@ -70,10 +62,7 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
         this.billing = null;
         return;
       }
-      const [billingRes, treasuryRes] = await Promise.all([
-        this.client.getBalance(),
-        this.client.getBaseTreasury().catch(() => ({ ok: false }) as { ok: boolean }),
-      ]);
+      const billingRes = await this.client.getBalance();
 
       if (billingRes.ok) {
         const br = billingRes as { ok?: boolean; balance?: { usd: number; sol: number; usdc: number }; activeInstances?: number; totalSpent?: number; updatedAt?: string; transactions?: Array<Record<string, unknown>>; instances?: unknown[] };
@@ -87,9 +76,6 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
         };
       }
 
-      if (treasuryRes.ok) {
-        this.baseTreasury = treasuryRes as unknown as BaseTreasury;
-      }
     } catch (err) {
       logger.error("ProfileViewProvider.refresh failed", { error: String(err) });
       this.billingError = err instanceof CapixApiError && err.status === 401
@@ -101,7 +87,6 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       this.loading = false;
       this.view.webview.postMessage({ type: "loading", value: false });
       this.view.webview.postMessage({ type: "billing", value: this.billing });
-      this.view.webview.postMessage({ type: "treasury", value: this.baseTreasury });
       this.view.webview.postMessage({ type: "billingError", value: this.billingError });
     }
   }
@@ -119,12 +104,6 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
         break;
       case "resetSession":
         vscode.commands.executeCommand("capix.resetSessionAndSignIn");
-        break;
-      case "copyTreasury":
-        if (this.baseTreasury) {
-          vscode.env.clipboard.writeText(this.baseTreasury.treasury);
-          vscode.window.showInformationMessage("Treasury address copied.");
-        }
         break;
     }
   }
@@ -389,27 +368,7 @@ ${cspMeta}
           \${deployRows}
         </div>
 
-        <div class="card" id="treasury-card" style="display: none;">
-          <div class="section-title">USDC on Base (SuperGemma chain)</div>
-          <div class="billing-rate">Send USDC to this address from any EVM wallet:</div>
-          <div class="treasury-box" id="treasury-addr" onclick="copyTreasury()"></div>
-          <div class="billing-rate" style="margin-top: 4px;">Then submit the tx hash via Top Up → verify on the billing page.</div>
-        </div>
       \`;
-    }
-
-    function renderTreasury(data) {
-      const card = document.getElementById('treasury-card');
-      const addr = document.getElementById('treasury-addr');
-      if (!card || !addr) return;
-      if (data && data.treasury) {
-        card.style.display = 'block';
-        addr.textContent = data.treasury;
-      }
-    }
-
-    function copyTreasury() {
-      vscode.postMessage({ type: 'copyTreasury' });
     }
 
     // Listen for messages from the extension.
@@ -423,8 +382,6 @@ ${cspMeta}
         document.getElementById('content').innerHTML = '<div class="connect-prompt"><p>' + esc(msg.value) + '</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'resetSession\' })">Reset Session and Sign In</button></div>';
       } else if (msg.type === 'auth') {
         isConfigured = Boolean(msg.configured);
-      } else if (msg.type === 'treasury') {
-        renderTreasury(msg.value);
       }
     });
 
