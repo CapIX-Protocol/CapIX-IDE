@@ -19,7 +19,7 @@ interface CloudInstance {
   id: string; tier: string; status: string; startedAt: string;
   costUsdPerHour: number; nodes: Array<{
     nodeId: string; location: string; sshHost: string | null; sshPort: number | null;
-    gpu: string | null; agentOnline: boolean;
+    gpu: string | null; agentOnline: boolean; sshAvailable?: boolean;
   }>;
 }
 
@@ -87,6 +87,7 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
       item.contextValue = `capix-instance-${inst.status}`;
       item.command = { command: "capix.openInstance", title: "Open", arguments: [inst.id] };
       (item as CloudItem & { _instanceId?: string })._instanceId = inst.id;
+      (item as CloudItem & { _sshAvailable?: boolean })._sshAvailable = inst.nodes.some((n) => n.sshAvailable);
       (item as CloudItem & { _sshHost?: string })._sshHost = inst.nodes.find((n) => n.sshHost)?.sshHost ?? undefined;
       (item as CloudItem & { _sshPort?: number })._sshPort = inst.nodes.find((n) => n.sshPort)?.sshPort ?? undefined;
       return item;

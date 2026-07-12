@@ -816,6 +816,8 @@ async function cmdOpenTerminal(item?: unknown) {
   const sshHost = (item as { _sshHost?: string })?._sshHost;
   const sshPort = (item as { _sshPort?: number })?._sshPort;
   const sshCommand = (item as { _sshCommand?: string })?._sshCommand;
+  const instanceId = (item as { _instanceId?: string })?._instanceId;
+  const sshAvailable = (item as { _sshAvailable?: boolean })?._sshAvailable;
   const label = (item as { label?: string })?.label || "instance";
 
   if (sshHost && sshPort) {
@@ -831,6 +833,22 @@ async function cmdOpenTerminal(item?: unknown) {
       await terminalManager.openSshSession({ host: match[3], port: Number(match[1]) || 22, user: match[2], label });
       return;
     }
+  }
+
+  if (instanceId?.startsWith("dep_")) {
+    if (!sshAvailable) {
+      vscode.window.showWarningMessage("SSH access for this instance is unavailable or its one-time key was already retrieved.", "Open instance").then((action) => {
+        if (action === "Open instance") vscode.commands.executeCommand("capix.openInstance", instanceId);
+      });
+      return;
+    }
+    try {
+      const credential = await client.retrieveSshCredential(instanceId);
+      await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label, privateKey: credential.privateKey });
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
+    }
+    return;
   }
 
   // No item — prompt the user to pick from instances

@@ -38,6 +38,8 @@ interface SshTarget {
   port: number;
   user?: string;
   label: string;
+  privateKey?: string;
+  identityFile?: string;
 }
 
 export class TerminalManager {
@@ -202,6 +204,7 @@ export class TerminalManager {
       "-o", `UserKnownHostsFile=${this.knownHostsPath}`,
       "-o", "ConnectTimeout=10",
       "-o", "LogLevel=ERROR",
+      ...(target.identityFile ? ["-i", target.identityFile, "-o", "IdentitiesOnly=yes"] : []),
       "-p", String(target.port),
       `${user}@${target.host}`,
     ];
@@ -220,8 +223,17 @@ export class TerminalManager {
       return;
     }
 
-    const sshArgs = await this.resolveSshArgs(target);
-    if (!sshArgs) return; // Aborted — host key changed, warning shown.
+    let identityFile: string | undefined;
+    if (target.privateKey) {
+      identityFile = path.join(os.tmpdir(), `capix-ssh-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.pem`);
+      fs.writeFileSync(identityFile, target.privateKey.endsWith("\n") ? target.privateKey : `${target.privateKey}\n`, { mode: 0o600 });
+      this.pendingKeyFiles.add(identityFile);
+    }
+    const sshArgs = await this.resolveSshArgs({ ...target, identityFile });
+    if (!sshArgs) {
+      if (identityFile) this.deleteKeyFile(identityFile);
+      return;
+    }
 
     const terminal = window.createTerminal({
       name: `SSH: ${target.label}`,
@@ -235,6 +247,7 @@ export class TerminalManager {
 
     // Clean up closed terminals from the map.
     window.onDidCloseTerminal((t) => {
+      if (t === terminal && identityFile) this.deleteKeyFile(identityFile);
       for (const [k, v] of this.terminals) {
         if (v === t) { this.terminals.delete(k); break; }
       }

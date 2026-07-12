@@ -310,16 +310,37 @@ export class CapixClient {
   }
 
   // ── Wallet balance ────────────────────────────────────────────────────
-  async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; transactions?: unknown[]; updatedAt?: string; activeInstances?: number; totalSpent?: number; error?: string }> {
+  async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; transactions?: unknown[]; updatedAt?: string; activeInstances?: number; totalSpent?: number; instances?: unknown[]; error?: string }> {
     const result = await this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; transactions?: unknown[]; error?: string }>("/api/v1/billing");
     if (!result.ok) return result;
     const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
     const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
-    return { ok: true, balance: { usd: usdc, sol, usdc }, transactions: result.transactions || [], updatedAt: new Date().toISOString(), activeInstances: 0, totalSpent: 0 };
+    const inventory = await this.listInstances().catch(() => ({ ok: true as const, instances: [] }));
+    const transactions = result.transactions || [];
+    const totalSpent = transactions.reduce<number>((sum, entry) => {
+      if (!entry || typeof entry !== "object") return sum;
+      const row = entry as { postingType?: string; posting_type?: string; amount?: string | number; asset?: string; scale?: number };
+      if ((row.postingType ?? row.posting_type) !== "debit" || row.asset !== "USDC") return sum;
+      return sum + Number(row.amount || 0) / 10 ** Number(row.scale ?? 6);
+    }, 0);
+    const activeInstances = inventory.instances.filter((instance) => !["terminated", "deleted", "destroyed"].includes(instance.status)).length;
+    return {
+      ok: true,
+      balance: { usd: usdc, sol, usdc },
+      transactions,
+      updatedAt: new Date().toISOString(),
+      activeInstances,
+      totalSpent,
+      instances: inventory.instances.map((instance) => ({
+        id: instance.id, tier: instance.tier, status: instance.status,
+        startedAt: instance.startedAt, costUsdPerHour: instance.costUsdPerHour,
+        paymentAsset: "USDC",
+      })),
+    };
   }
 
   // ── Instances: canonical owner-scoped deployments ─────────────────────
-  async listInstances(): Promise<{ ok: true; instances: Array<{ id: string; tier: string; status: string; startedAt: string; costUsdPerHour: number; nodes: Array<{ nodeId: string; location: string; sshHost: string | null; sshPort: number | null; gpu: string | null; agentOnline: boolean }> }> }> {
+  async listInstances(): Promise<{ ok: true; instances: Array<{ id: string; tier: string; status: string; startedAt: string; costUsdPerHour: number; nodes: Array<{ nodeId: string; location: string; sshHost: string | null; sshPort: number | null; gpu: string | null; agentOnline: boolean; sshAvailable?: boolean }> }> }> {
     const result = await this.get<{ data?: Array<{ id: string; phase?: string; createdAt?: string; workloadSpec?: Record<string, unknown>; allocations?: Array<Record<string, unknown>> }> }>("/api/v1/deployments?limit=100");
     return {
       ok: true,
@@ -339,10 +360,23 @@ export class CapixClient {
             sshPort: typeof allocation.sshPort === "number" ? allocation.sshPort : null,
             gpu: typeof allocation.gpu === "string" ? allocation.gpu : null,
             agentOnline: allocation.agentOnline === true,
+            sshAvailable: allocation.sshAvailable === true,
           })),
         };
       }),
     };
+  }
+
+  async retrieveSshCredential(deploymentId: string): Promise<{ host: string; port: number; privateKey: string; filename: string }> {
+    const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/deployments/${encodeURIComponent(deploymentId)}/ssh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+    });
+    const data = await res.json().catch(() => ({})) as { host?: string; port?: number; privateKey?: string; filename?: string; detail?: string; error?: string };
+    if (!res.ok || !data.host || !data.port || !data.privateKey) {
+      throw new CapixApiError(res.status, data.detail || data.error || "SSH credential is unavailable or was already retrieved.");
+    }
+    return { host: data.host, port: data.port, privateKey: data.privateKey, filename: data.filename || `${deploymentId}.pem` };
   }
 
   // ── Deploy quote (for showing per-minute costs) ────────────────────────
