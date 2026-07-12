@@ -27,7 +27,7 @@ else
   }
 fi
 
-for extension in capix-llm capix-cloud capix-workspace capix-agent-ui; do
+for extension in capix-llm capix-cloud capix-workspace capix-agent-ui capix-intelligence; do
   MANIFEST="$(find "$CONTENT" -type f -path "*/extensions/$extension/package.json" -print -quit)"
   test -n "$MANIFEST" || { echo "ERROR: missing built-in $extension manifest"; exit 1; }
   test -f "$(dirname "$MANIFEST")/out/extension.js" || {

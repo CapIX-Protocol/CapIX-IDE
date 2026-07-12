@@ -40,7 +40,7 @@ if (!sourceOnly) {
   if (!fs.existsSync(product)) failures.push(`missing packaged product manifest ${product}`);
   else scanJson(product);
   const extensionsRoot = path.join(appRoot, "extensions");
-  for (const name of ["capix-llm", "capix-cloud", "capix-workspace", "capix-agent-ui"]) {
+  for (const name of ["capix-llm", "capix-cloud", "capix-workspace", "capix-agent-ui", "capix-intelligence"]) {
     const ext = path.join(extensionsRoot, name);
     const manifest = path.join(ext, "package.json"); if (!fs.existsSync(manifest)) { failures.push(`missing ${manifest}`); continue; }
     scanJson(manifest);
