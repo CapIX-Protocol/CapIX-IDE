@@ -1,0 +1,88 @@
+diff --git a/src/vs/workbench/contrib/void/electron-main/llmMessage/sendLLMMessage.impl.ts b/src/vs/workbench/contrib/void/electron-main/llmMessage/sendLLMMessage.impl.ts
+index b4c794e..519d71a 100644
+--- a/src/vs/workbench/contrib/void/electron-main/llmMessage/sendLLMMessage.impl.ts
++++ b/src/vs/workbench/contrib/void/electron-main/llmMessage/sendLLMMessage.impl.ts
+@@ -20,6 +20,7 @@ import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities
+ import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
+ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
+ import { generateUuid } from '../../../../../base/common/uuid.js';
++import { extractCapixJsonText, parseCapixSseText } from '../../../capix-ai/common/capixResponseParser.js';
+ 
+ const getGoogleApiKey = async () => {
+ 	// module‑level singleton
+@@ -333,6 +334,57 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
+ 	let toolId = ''
+ 	let toolParamsStr = ''
+ 
++	// The Capix gateway deliberately supports both the OpenAI JSON contract and
++	// the richer named-event Capix stream contract. The generic SDK expects an
++	// OpenAI data-only stream whenever `stream: true`; a valid JSON response or a
++	// `content.delta` event would otherwise be consumed as an empty response.
++	const openAICompatibleSettings = providerName === 'openAICompatible' ? settingsOfProvider.openAICompatible : undefined
++	const endpoint = openAICompatibleSettings?.endpoint?.replace(/\/$/, '')
++	if (openAICompatibleSettings && endpoint === 'https://www.capix.network/api/v1') {
++		const controller = new AbortController()
++		_setAborter(() => controller.abort())
++		const configuredHeaders = parseHeadersJSON(openAICompatibleSettings.headersJSON) ?? {}
++		const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'text/event-stream, application/json' }
++		for (const [key, value] of Object.entries(configuredHeaders)) if (typeof value === 'string') headers[key] = value
++		if (openAICompatibleSettings.apiKey) headers.authorization = `Bearer ${openAICompatibleSettings.apiKey}`
++
++		fetch(`${endpoint}/chat/completions`, {
++			method: 'POST',
++			headers,
++			body: JSON.stringify(options),
++			signal: controller.signal,
++		}).then(async response => {
++			const raw = await response.text()
++			if (!response.ok) {
++				let supportId = response.headers.get('x-capix-support-id') ?? undefined
++				let detail = ''
++				try {
++					const problem = JSON.parse(raw) as { detail?: unknown; message?: unknown; supportId?: unknown; traceId?: unknown }
++					detail = typeof problem.detail === 'string' ? problem.detail : typeof problem.message === 'string' ? problem.message : ''
++					supportId = supportId ?? (typeof problem.supportId === 'string' ? problem.supportId : typeof problem.traceId === 'string' ? problem.traceId : undefined)
++				} catch { /* response body is optional */ }
++				const retry = response.status === 429 ? 'Capix inference is busy. Please retry shortly.' : 'Capix inference is temporarily unavailable. Please retry.'
++				throw new Error(`${retry}${detail ? ` ${detail}` : ''}${supportId ? ` Support ID: ${supportId}` : ''}`)
++			}
++
++			const contentType = response.headers.get('content-type') ?? ''
++			const parsed = contentType.includes('text/event-stream') || /^\s*(event|data):/m.test(raw)
++				? parseCapixSseText(raw)
++				: { text: extractCapixJsonText(JSON.parse(raw)), error: undefined as string | undefined }
++			if (parsed.text) {
++				fullTextSoFar = parsed.text
++				onText({ fullText: fullTextSoFar, fullReasoning: '', toolCall: undefined })
++				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: '', anthropicReasoning: null })
++				return
++			}
++			throw new Error(parsed.error || 'Capix returned no text. Retry once; if this continues, contact support@capix.network.')
++		}).catch(error => {
++			if (error?.name === 'AbortError') return
++			onError({ message: error instanceof Error ? error.message : 'Capix inference failed. Please retry.', fullError: error })
++		})
++		return
++	}
++
+ 	openai.chat.completions
+ 		.create(options)
+ 		.then(async response => {
+@@ -372,7 +424,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
+ 			}
+ 			// on final
+ 			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+-				onError({ message: 'Void: Response from model was empty.', fullError: null })
++				onError({ message: 'Capix returned no text. Retry once; if this continues, contact support@capix.network.', fullError: null })
+ 			}
+ 			else {
+ 				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
+@@ -817,7 +869,7 @@ const sendGeminiChat = async ({
+ 
+ 			// on final
+ 			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+-				onError({ message: 'Void: Response from model was empty.', fullError: null })
++				onError({ message: 'Capix returned no text. Retry once; if this continues, contact support@capix.network.', fullError: null })
+ 			} else {
+ 				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
+ 				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)

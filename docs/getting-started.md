@@ -65,7 +65,7 @@ See [`llm-deploy.md`](llm-deploy.md) for the full deploy walkthrough.
 
 ### Option B — use any hosted provider
 
-CapixIDE inherits Void's provider list: Anthropic, OpenAI, DeepSeek, OpenRouter, Ollama, vLLM, LM Studio, Groq, xAI, Mistral, Gemini, etc. Paste your API key for whichever one you use.
+CapixIDE signs in to the Capix smart router and selects the available `Auto` route. No third-party model credential is required in the IDE.
 
 ## 4. Start coding with AI
 

@@ -1,0 +1,14 @@
+event: capix.route
+data: {"type":"capix.route","receiptId":"cpxr_sse_fixture","modelCapability":"auto","region":"routed","privacyClass":"authenticated-gateway"}
+
+event: content.delta
+data: {"type":"content.delta","content":"Capix "}
+
+data: {"choices":[{"delta":{"content":"stream response fixture."}}]}
+
+event: capix.usage
+data: {"type":"capix.usage","inputUnits":3,"outputUnits":4}
+
+event: capix.final
+data: {"type":"capix.final","finishReason":"stop","receiptId":"cpxr_sse_fixture"}
+

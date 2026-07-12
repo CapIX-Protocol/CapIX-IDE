@@ -9,7 +9,7 @@
  *    provisioning deploys until `ready` flips to true.
  * 2. When ready, we fetch the API key via `?action=reveal-key` (auth-gated).
  * 3. We write the base URL + API key into VS Code Settings under
- *    `capix.ai.baseUrl` and `capix.ai.apiKey` — which the Void/Capix
+ *    `capix.ai.baseUrl` and `capix.ai.apiKey` — which the Capix
  *    chat panel reads as its `openAICompatible` provider config.
  * 4. We show a notification: "Your endpoint is ready — chat panel
  *    auto-configured."

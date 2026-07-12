@@ -1,0 +1,6 @@
+{
+  "id": "chatcmpl_capix_fixture",
+  "object": "chat.completion",
+  "choices": [{ "index": 0, "message": { "role": "assistant", "content": "Capix JSON response fixture." }, "finish_reason": "stop" }],
+  "capix": { "receiptId": "cpxr_json_fixture", "tokensBilled": 7, "usdCost": 0.00001 }
+}

@@ -155,6 +155,9 @@ function activate(context) {
     context.subscriptions.push(
     // LLM commands
     vscode.commands.registerCommand("capix.deployModel", (model) => cmdDeployModel(model)), vscode.commands.registerCommand("capix.deployCustomModel", () => cmdDeployCustomModel()), vscode.commands.registerCommand("capix.deployVps", () => cmdDeployVps()), vscode.commands.registerCommand("capix.destroyDeploy", (item) => cmdDestroyDeploy(item)), vscode.commands.registerCommand("capix.stopDeploy", (item) => cmdStopDeploy(item)), vscode.commands.registerCommand("capix.startDeploy", (item) => cmdStartDeploy(item)), vscode.commands.registerCommand("capix.viewLogs", (item) => cmdViewLogs(item)), vscode.commands.registerCommand("capix.execOnInstance", (item) => cmdExecOnInstance(item)), vscode.commands.registerCommand("capix.copyEndpoint", (item) => cmdCopyEndpoint(item)), vscode.commands.registerCommand("capix.copyApiKey", (item) => cmdCopyApiKey(item)), 
+    // Agent bridge stub — returns an empty session list when the main-process
+    // broker has not registered the capix:agent:listSessions channel yet.
+    vscode.commands.registerCommand("capix:agent:listSessions", () => ({ sessions: [] })), 
     // Refresh commands
     vscode.commands.registerCommand("capix.refreshDeploys", () => { deploysProvider.load(); }), vscode.commands.registerCommand("capix.refreshCatalog", () => { catalogProvider.load(); }), vscode.commands.registerCommand("capix.refreshInstances", () => { instancesProvider.load(); }), vscode.commands.registerCommand("capix.refreshAgents", () => { agentsProvider.load(); }), vscode.commands.registerCommand("capix.refreshJobs", () => { jobsProvider.load(); }), vscode.commands.registerCommand("capix.refreshApiKeys", () => { apiKeysProvider.load(); }), vscode.commands.registerCommand("capix.refreshProfile", () => { profileProvider.refresh(); }), 
     // Navigation

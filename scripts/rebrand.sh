@@ -93,6 +93,15 @@ else
   echo "ERROR: Capix routed chat patch no longer applies"
   exit 1
 fi
+if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0005-capix-response-contract.patch" >/dev/null 2>&1; then
+  echo "  done: Capix response contract already registered"
+elif git -C "$VSCODE" apply --check "$DIR/patches/0005-capix-response-contract.patch"; then
+  git -C "$VSCODE" apply "$DIR/patches/0005-capix-response-contract.patch"
+  echo "  done: Capix response contract registered"
+else
+  echo "ERROR: Capix response contract patch no longer applies"
+  exit 1
+fi
 for module in capix-auth capix-ai capix-remote capix-onboarding; do
   source_dir="$DIR/src/vs/workbench/contrib/$module"
   if [ ! -d "$source_dir" ]; then
