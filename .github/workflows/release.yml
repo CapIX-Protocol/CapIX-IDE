@@ -163,6 +163,29 @@ jobs:
           NODE
           rm -rf extensions/open-remote-ssh extensions/open-remote-wsl
 
+      - name: Use portable node-gyp launcher (Windows)
+        if: runner.os == 'Windows'
+        working-directory: vscode
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const file = 'build/npm/preinstall.js';
+          let source = fs.readFileSync(file, 'utf8');
+          const edits = [
+            ["const node_gyp = path.join(__dirname, 'gyp', 'node_modules', '.bin', 'node-gyp.cmd');", "const node_gyp = process.execPath;\n\tconst node_gyp_script = path.join(__dirname, 'gyp', 'node_modules', 'node-gyp', 'bin', 'node-gyp.js');"],
+            ["cp.execFileSync(node_gyp, ['list'], { encoding: 'utf8', shell: true })", "cp.execFileSync(node_gyp, [node_gyp_script, 'list'], { encoding: 'utf8' })"],
+            ["cp.execFileSync(node_gyp, ['install', '--dist-url', local.disturl, local.target], { shell: true });", "cp.execFileSync(node_gyp, [node_gyp_script, 'install', '--dist-url', local.disturl, local.target]);"],
+            ["cp.execFileSync(node_gyp, ['install', '--dist-url', remote.disturl, remote.target], { shell: true });", "cp.execFileSync(node_gyp, [node_gyp_script, 'install', '--dist-url', remote.disturl, remote.target]);"],
+          ];
+          for (const [from, to] of edits) {
+            const matches = source.split(from).length - 1;
+            if (matches !== 1) throw new Error(`node-gyp launcher context mismatch: expected 1, found ${matches}`);
+            source = source.replace(from, to);
+          }
+          fs.writeFileSync(file, source);
+          NODE
+
       - name: Install deps
         run: npm install --ignore-scripts
         working-directory: vscode
@@ -220,7 +243,11 @@ jobs:
         run: |
           set -euo pipefail
           cd release-artifacts
-          find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec sha256sum {} \; > checksums.sha256
+          if command -v sha256sum >/dev/null 2>&1; then
+            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec sha256sum {} \; > checksums.sha256
+          else
+            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec shasum -a 256 {} \; > checksums.sha256
+          fi
           if [ -s checksums.sha256 ]; then
             echo "=== SHA-256 Checksums ==="
             cat checksums.sha256
