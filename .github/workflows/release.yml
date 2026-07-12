@@ -133,24 +133,41 @@ jobs:
         with:
           node-version: "20.18.2"
 
+      - name: Setup Python 3.12 for node-gyp
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Clone upstream source
         run: bash scripts/bootstrap.sh
         env:
           VSCODE_DIR: ${{ github.workspace }}/vscode
 
       - name: Install deps
-        run: npm install
+        run: npm install --ignore-scripts
         working-directory: vscode
-        env:
-          # The pinned spdlog/fmt source predates the stricter consteval rules
-          # in the current macOS runner compiler.
-          CXXFLAGS: ${{ runner.os == 'macOS' && '-DFMT_USE_CONSTEXPR=0 -DFMT_USE_CONSTEVAL=0' || '' }}
 
-      - name: Rebuild native modules (macOS)
-        run: npx node-gyp rebuild --directory=node_modules/@vscode/spdlog
-        working-directory: vscode
+      - name: Patch pinned fmt compatibility (macOS)
         if: runner.os == 'macOS'
+        working-directory: vscode
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const file = 'node_modules/@vscode/spdlog/deps/spdlog/include/spdlog/fmt/bundled/core.h';
+          const before = '  ignore_unused(default_value);';
+          const after = '  (void)default_value;';
+          const source = fs.readFileSync(file, 'utf8');
+          const matches = source.split(before).length - 1;
+          if (matches !== 1) throw new Error(`fmt compatibility context mismatch: expected 1, found ${matches}`);
+          fs.writeFileSync(file, source.replace(before, after));
+          NODE
+
+      - name: Run dependency lifecycle builds
+        run: npm rebuild
+        working-directory: vscode
         env:
+          npm_config_python: python
           CXXFLAGS: -DFMT_USE_CONSTEXPR=0 -DFMT_USE_CONSTEVAL=0
 
       - name: Build Capix IDE

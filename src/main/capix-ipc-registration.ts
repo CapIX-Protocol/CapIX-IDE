@@ -18,6 +18,11 @@ function nonEmpty(value: unknown): value is string {
 	return typeof value === "string" && value.length > 0 && value.length <= 4096;
 }
 
+function hasTerminalStreamType(value: object): value is { type: "final" | "error" } {
+	if (!("type" in value)) return false;
+	return value.type === "final" || value.type === "error";
+}
+
 export function parseRendererMessage(value: unknown): RendererToMainMessage {
 	if (!value || typeof value !== "object") throw new TypeError("Capix IPC message must be an object");
 	const message = value as Record<string, unknown>;
@@ -57,7 +62,7 @@ export function registerCapixIpc(ipcMain: ElectronIpcMainLike, broker: CapixMain
 		const send = streamSenders.get(handleId);
 		if (!send) return;
 		send(CapixChatChannels.onStreamEvent, { streamHandle: handleId, event });
-		if (event && typeof event === "object" && (event.type === "final" || event.type === "error")) {
+		if (event && typeof event === "object" && hasTerminalStreamType(event)) {
 			streamSenders.delete(handleId);
 		}
 	});
