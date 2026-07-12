@@ -5,7 +5,7 @@ import process from "node:process";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const vscodeRoot = process.env.VSCODE_DIR || path.join(root, "vscode");
-const extensions = ["capix-llm", "capix-cloud", "capix-workspace", "capix-agent-ui"];
+const extensions = ["capix-llm", "capix-cloud", "capix-workspace", "capix-agent-ui", "capix-intelligence"];
 const manifests = new Map();
 
 for (const file of ["capix-broker.ts", "capix-ipc-registration.ts", "capix-native-auth.ts", "capix-runtime-bootstrap.ts"]) {
@@ -84,6 +84,11 @@ for (const [viewId, contributor] of contributedViews) {
   const providers = registrations.get(viewId) ?? [];
   if (providers.length !== 1) {
     fail(`view ${viewId} from ${contributor} must have exactly one runtime provider; found ${providers.length}`);
+  }
+}
+for (const retiredView of ["capix.cloud.billing", "capix.cloud.deployments"]) {
+  if (registrations.has(retiredView)) {
+    fail(`${retiredView} is a retired orphan view; use the canonical capix-llm surfaces`);
   }
 }
 

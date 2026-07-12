@@ -19,7 +19,7 @@ echo "  done: product.json"
 
 # 2. Overlay every maintained Capix built-in extension. Keep this list explicit:
 # a missing customer module must fail the build instead of silently disappearing.
-CAPIX_EXTENSIONS=(capix-llm capix-cloud capix-workspace capix-agent-ui)
+CAPIX_EXTENSIONS=(capix-llm capix-cloud capix-workspace capix-agent-ui capix-intelligence)
 CODE_CUSTOMER_DIR="${CAPIX_CODE_CUSTOMER_DIR:-$DIR/../capix-code/dist/customer}"
 if [ -d "$CODE_CUSTOMER_DIR" ]; then
   CODE_EXE_SUFFIX=""

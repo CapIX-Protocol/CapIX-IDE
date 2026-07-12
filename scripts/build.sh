@@ -53,6 +53,7 @@ for required in \
   extensions/capix-cloud/package.json \
   extensions/capix-workspace/package.json \
   extensions/capix-agent-ui/package.json \
+  extensions/capix-intelligence/package.json \
   src/main/capix-broker.ts \
   src/main/capix-ipc-registration.ts \
   src/main/capix-native-auth.ts \
@@ -69,7 +70,7 @@ for required in \
 done
 
 # Compile the Capix LLM extension.
-for extension in capix-llm capix-cloud capix-workspace capix-agent-ui; do
+for extension in capix-llm capix-cloud capix-workspace capix-agent-ui capix-intelligence; do
   echo "  compiling $extension extension..."
   (cd "extensions/$extension" && npm install --silent && npx tsc -p ./)
 done
