@@ -27,3 +27,4 @@ Thumbs.db
 *.rpm
 *.AppImage
 *.snap
+release-artifacts/
