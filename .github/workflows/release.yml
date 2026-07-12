@@ -147,8 +147,12 @@ jobs:
         run: npm install --ignore-scripts
         working-directory: vscode
 
-      - name: Patch pinned fmt compatibility (macOS)
-        if: runner.os == 'macOS'
+      - name: Install postinstall workspaces without lifecycle scripts
+        working-directory: vscode
+        shell: bash
+        run: npm_command='install --ignore-scripts' node build/npm/postinstall.js
+
+      - name: Patch pinned fmt compatibility
         working-directory: vscode
         shell: bash
         run: |
