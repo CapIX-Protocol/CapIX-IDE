@@ -1,0 +1,264 @@
+{
+  "name": "capix-intelligence",
+  "displayName": "Capix Intelligence",
+  "description": "Memory, knowledge graph, covenants, agents, plans, checkpoints and work receipts for the Capix Intelligence backend.",
+  "version": "1.0.0",
+  "publisher": "capix",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Machine Learning", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "capix-llm": [
+        {
+          "id": "capix.intelligence.plan",
+          "name": "Current Plan"
+        },
+        {
+          "id": "capix.intelligence.agents",
+          "name": "Active Agents & Delegated Tasks"
+        },
+        {
+          "id": "capix.intelligence.memory",
+          "name": "Memory Search"
+        },
+        {
+          "id": "capix.intelligence.covenant",
+          "name": "Project Covenant"
+        },
+        {
+          "id": "capix.intelligence.graph",
+          "name": "Knowledge Graph",
+          "type": "webview"
+        },
+        {
+          "id": "capix.intelligence.decisions",
+          "name": "Decisions"
+        },
+        {
+          "id": "capix.intelligence.checkpoints",
+          "name": "Checkpoints"
+        },
+        {
+          "id": "capix.intelligence.receipts",
+          "name": "Work Receipts"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "capix.intelligence.createPlan",
+        "title": "Capix Intelligence: Create Plan…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.intelligence.approvePlan",
+        "title": "Capix Intelligence: Approve Plan",
+        "icon": "$(check)"
+      },
+      {
+        "command": "capix.intelligence.spawnAgent",
+        "title": "Capix Intelligence: Spawn Agent…",
+        "icon": "$(robot)"
+      },
+      {
+        "command": "capix.intelligence.completeAgent",
+        "title": "Capix Intelligence: Complete Agent",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "capix.intelligence.writeMemory",
+        "title": "Capix Intelligence: Write Memory…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.intelligence.retrieveMemory",
+        "title": "Capix Intelligence: Search Memory…",
+        "icon": "$(search)"
+      },
+      {
+        "command": "capix.intelligence.ratifyCovenant",
+        "title": "Capix Intelligence: Ratify Covenant…",
+        "icon": "$(shield-check)"
+      },
+      {
+        "command": "capix.intelligence.checkPermission",
+        "title": "Capix Intelligence: Check Permission…",
+        "icon": "$(key)"
+      },
+      {
+        "command": "capix.intelligence.createCheckpoint",
+        "title": "Capix Intelligence: Create Checkpoint…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.intelligence.createReceipt",
+        "title": "Capix Intelligence: Create Work Receipt…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.intelligence.anchorMemory",
+        "title": "Capix Intelligence: Anchor Memory on-chain",
+        "icon": "$(link)"
+      },
+      {
+        "command": "capix.intelligence.openGraph",
+        "title": "Capix Intelligence: Open Knowledge Graph",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "capix.intelligence.refreshPlan",
+        "title": "Capix Intelligence: Refresh Plan",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.intelligence.refreshAgents",
+        "title": "Capix Intelligence: Refresh Agents",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.intelligence.refreshMemory",
+        "title": "Capix Intelligence: Refresh Memory",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.intelligence.refreshCovenant",
+        "title": "Capix Intelligence: Refresh Covenant",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.intelligence.refreshDecisions",
+        "title": "Capix Intelligence: Refresh Decisions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.intelligence.refreshCheckpoints",
+        "title": "Capix Intelligence: Refresh Checkpoints",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.intelligence.refreshReceipts",
+        "title": "Capix Intelligence: Refresh Receipts",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "capix.intelligence.refreshGraph",
+        "title": "Capix Intelligence: Refresh Graph",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "capix.intelligence.createPlan",
+          "when": "view == capix.intelligence.plan",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.intelligence.refreshPlan",
+          "when": "view == capix.intelligence.plan",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.intelligence.spawnAgent",
+          "when": "view == capix.intelligence.agents",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.intelligence.refreshAgents",
+          "when": "view == capix.intelligence.agents",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.intelligence.writeMemory",
+          "when": "view == capix.intelligence.memory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.intelligence.retrieveMemory",
+          "when": "view == capix.intelligence.memory",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.intelligence.refreshMemory",
+          "when": "view == capix.intelligence.memory",
+          "group": "navigation@3"
+        },
+        {
+          "command": "capix.intelligence.ratifyCovenant",
+          "when": "view == capix.intelligence.covenant",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.intelligence.refreshCovenant",
+          "when": "view == capix.intelligence.covenant",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.intelligence.refreshGraph",
+          "when": "view == capix.intelligence.graph",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.intelligence.refreshDecisions",
+          "when": "view == capix.intelligence.decisions",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.intelligence.createCheckpoint",
+          "when": "view == capix.intelligence.checkpoints",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.intelligence.refreshCheckpoints",
+          "when": "view == capix.intelligence.checkpoints",
+          "group": "navigation@2"
+        },
+        {
+          "command": "capix.intelligence.createReceipt",
+          "when": "view == capix.intelligence.receipts",
+          "group": "navigation@1"
+        },
+        {
+          "command": "capix.intelligence.refreshReceipts",
+          "when": "view == capix.intelligence.receipts",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "capix.intelligence.approvePlan",
+          "when": "viewItem =~ /^capix-intel-plan-(draft|approved)$/",
+          "group": "inline"
+        },
+        {
+          "command": "capix.intelligence.completeAgent",
+          "when": "viewItem =~ /^capix-intel-agent-(pending|running)$/",
+          "group": "inline"
+        },
+        {
+          "command": "capix.intelligence.anchorMemory",
+          "when": "viewItem =~ /^capix-intel-memory(-anchor)?$/",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "eslint": "^9.17.0"
+  }
+}
