@@ -117,6 +117,9 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       case "openBilling":
         vscode.commands.executeCommand("capix.openBilling");
         break;
+      case "resetSession":
+        vscode.commands.executeCommand("capix.resetSessionAndSignIn");
+        break;
       case "copyTreasury":
         if (this.baseTreasury) {
           vscode.env.clipboard.writeText(this.baseTreasury.treasury);
@@ -300,7 +303,7 @@ ${cspMeta}
         content.innerHTML = \`
           <div class="connect-prompt">
             <p>Connect your Capix wallet to view balance, top up, and manage billing.</p>
-            <button class="btn btn-primary" onclick="vscode.postMessage({ type: 'topUp' })">Connect Wallet</button>
+            <button class="btn btn-primary" onclick="vscode.postMessage({ type: 'resetSession' })">Reset Session and Sign In</button>
           </div>
         \`;
         return;
@@ -417,7 +420,7 @@ ${cspMeta}
       } else if (msg.type === 'billing') {
         render(msg.value);
       } else if (msg.type === 'billingError' && msg.value) {
-        document.getElementById('content').innerHTML = '<div class="connect-prompt"><p>' + esc(msg.value) + '</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'topUp\' })">Connect Wallet</button></div>';
+        document.getElementById('content').innerHTML = '<div class="connect-prompt"><p>' + esc(msg.value) + '</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'resetSession\' })">Reset Session and Sign In</button></div>';
       } else if (msg.type === 'auth') {
         isConfigured = Boolean(msg.configured);
       } else if (msg.type === 'treasury') {

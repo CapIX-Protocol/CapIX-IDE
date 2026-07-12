@@ -84,7 +84,7 @@ else
   echo "ERROR: inherited onboarding/telemetry patch no longer applies"
   exit 1
 fi
-if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0004-capix-routed-chat.patch" >/dev/null 2>&1; then
+if grep -q "registerCommand('capix.chat.configure'" "$VSCODE/src/vs/workbench/contrib/void/browser/void.contribution.ts"; then
   echo "  done: Capix routed chat already registered"
 elif git -C "$VSCODE" apply --check "$DIR/patches/0004-capix-routed-chat.patch"; then
   git -C "$VSCODE" apply "$DIR/patches/0004-capix-routed-chat.patch"
@@ -100,6 +100,15 @@ elif git -C "$VSCODE" apply --check "$DIR/patches/0005-capix-response-contract.p
   echo "  done: Capix response contract registered"
 else
   echo "ERROR: Capix response contract patch no longer applies"
+  exit 1
+fi
+if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0006-capix-clear-routed-chat.patch" >/dev/null 2>&1; then
+  echo "  done: Capix routed chat reset already registered"
+elif git -C "$VSCODE" apply --check "$DIR/patches/0006-capix-clear-routed-chat.patch"; then
+  git -C "$VSCODE" apply "$DIR/patches/0006-capix-clear-routed-chat.patch"
+  echo "  done: Capix routed chat reset registered"
+else
+  echo "ERROR: Capix routed chat reset patch no longer applies"
   exit 1
 fi
 for module in capix-auth capix-ai capix-remote capix-onboarding; do

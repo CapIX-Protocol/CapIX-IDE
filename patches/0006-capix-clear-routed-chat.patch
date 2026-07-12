@@ -1,0 +1,13 @@
+diff --git a/src/vs/workbench/contrib/void/browser/void.contribution.ts b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+--- a/src/vs/workbench/contrib/void/browser/void.contribution.ts
++++ b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+@@ -108,3 +108,9 @@ CommandsRegistry.registerCommand('capix.chat.configure', async (accessor, creden
+ 	settings.addModel('openAICompatible', selectedModel);
+ 	await settings.setModelSelectionOfFeature('Chat', { providerName: 'openAICompatible', modelName: selectedModel });
+ });
++
++CommandsRegistry.registerCommand('capix.chat.clear', async accessor => {
++	const settings = accessor.get(IVoidSettingsService);
++	await settings.waitForInitState;
++	await settings.setSettingOfProvider('openAICompatible', 'apiKey', '');
++});

@@ -27,6 +27,7 @@ function createMockSecretStorage(token?: string) {
       return undefined;
     }),
     store: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -49,6 +50,24 @@ describe("CapixClient", () => {
 
     expect(configureChat).toHaveBeenCalledOnce();
     expect(configureChat).toHaveBeenCalledWith("cpxs_oauth-access-token");
+  });
+
+  it("resets only Capix OAuth secrets and clears published in-memory auth", async () => {
+    const client = new CapixClient();
+    const secrets = createMockSecretStorage("cpxs_stale-access-token");
+    const publish = vi.fn().mockResolvedValue(undefined);
+    client.setSecretStorage(secrets);
+    client.setOAuthAccessTokenHandler(publish);
+    await client.checkConfigured();
+
+    await client.resetOAuthSession();
+
+    expect(secrets.delete.mock.calls.map(([key]) => key).sort()).toEqual([
+      "capix.refreshToken",
+      "capix.sessionToken",
+    ]);
+    expect(client.isConfigured).toBe(false);
+    expect(publish).toHaveBeenLastCalledWith(null);
   });
   let client: CapixClient;
   let fetchMock: ReturnType<typeof vi.fn>;

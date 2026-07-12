@@ -190,6 +190,10 @@ jobs:
         run: npm install --ignore-scripts
         working-directory: vscode
 
+      - name: Install pinned node-gyp build driver
+        run: npm ci --ignore-scripts
+        working-directory: vscode/build/npm/gyp
+
       - name: Install postinstall workspaces without lifecycle scripts
         working-directory: vscode
         shell: bash

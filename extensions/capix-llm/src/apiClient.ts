@@ -12,18 +12,30 @@ export class CapixClient {
   static readonly PRODUCTION_BASE_URL = "https://www.capix.network";
   /** Cached session token (loaded from SecretStorage on first use) */
   private _sessionToken: string | null = null;
-  private _secretStorage?: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void> };
-  private _onOAuthAccessToken?: (accessToken: string) => Promise<void>;
+  private _secretStorage?: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void>; delete: (key: string) => Promise<void> };
+  private _onOAuthAccessToken?: (accessToken: string | null) => Promise<void>;
   private _lastPublishedOAuthAccessToken: string | null = null;
 
   /** Wire up VS Code SecretStorage for secure (non-plaintext) token storage */
-  setSecretStorage(store: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void> }): void {
+  setSecretStorage(store: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void>; delete: (key: string) => Promise<void> }): void {
     this._secretStorage = store;
   }
 
   /** Keep the native chat surface synchronized whenever OAuth rotates. */
-  setOAuthAccessTokenHandler(handler: (accessToken: string) => Promise<void>): void {
+  setOAuthAccessTokenHandler(handler: (accessToken: string | null) => Promise<void>): void {
     this._onOAuthAccessToken = handler;
+  }
+
+  /** Forget only Capix OAuth credentials, including all in-memory copies. */
+  async resetOAuthSession(): Promise<void> {
+    if (!this._secretStorage) throw new Error("OS SecretStorage is unavailable");
+    await Promise.all([
+      this._secretStorage.delete("capix.sessionToken"),
+      this._secretStorage.delete("capix.refreshToken"),
+    ]);
+    this._sessionToken = null;
+    this._lastPublishedOAuthAccessToken = null;
+    await this._onOAuthAccessToken?.(null);
   }
 
   private async publishOAuthAccessToken(accessToken: string): Promise<void> {

@@ -123,6 +123,10 @@
         "title": "Capix: Sign In"
       },
       {
+        "command": "capix.resetSessionAndSignIn",
+        "title": "Capix: Reset Session and Sign In"
+      },
+      {
         "command": "capix.execOnInstance",
         "title": "Capix: Run Command on GPU Instance…",
         "icon": "$(terminal)"

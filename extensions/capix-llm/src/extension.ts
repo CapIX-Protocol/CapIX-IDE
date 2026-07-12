@@ -16,6 +16,8 @@ import { CapixClient } from "./apiClient";
 import { DeploysTreeProvider, CatalogTreeProvider, HostedTreeProvider } from "./treeViews";
 import { InstancesTreeProvider, AgentsTreeProvider, JobsTreeProvider, ApiKeysTreeProvider } from "./cloudPanels";
 import { ProfileViewProvider } from "./profileView";
+import { resetSessionAndSignIn } from "./authRecovery";
+import { OAuthCallbackGuard } from "./oauthCallbackGuard";
 import { TerminalManager } from "./terminalManager";
 import { AutoConnectManager } from "./autoConnect";
 import { CovenantManager } from "./covenant";
@@ -49,12 +51,13 @@ export function activate(context: vscode.ExtensionContext) {
   client.setSecretStorage({
     get: (key) => Promise.resolve(context.secrets.get(key)),
     store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
+    delete: (key) => Promise.resolve(context.secrets.delete(key)),
   });
   client.setOAuthAccessTokenHandler(async (accessToken) => {
     // The workbench stores this short-lived OAuth token using its encrypted
     // application storage and selects Capix routed inference (`auto`). Portal
     // API keys are deliberately not copied into the desktop application.
-    await vscode.commands.executeCommand("capix.chat.configure", accessToken);
+    await vscode.commands.executeCommand(accessToken ? "capix.chat.configure" : "capix.chat.clear", ...(accessToken ? [accessToken] : []));
   });
 
   // ── Tree views ────────────────────────────────────────────────────────
@@ -166,6 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/instances/${instanceId}`));
     }),
     vscode.commands.registerCommand("capix.connectWallet", () => cmdConnectWallet()),
+    vscode.commands.registerCommand("capix.resetSessionAndSignIn", () => cmdResetSessionAndSignIn()),
 
     // Profile
     vscode.commands.registerCommand("capix.topUp", () => cmdTopUp()),
@@ -887,32 +891,48 @@ async function cmdConnectWallet() {
   const verifier = randomBytes(48).toString("base64url");
   const state = randomBytes(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const callbackGuard = new OAuthCallbackGuard(state);
   let timeout: NodeJS.Timeout | undefined;
   const server = createServer(async (request, response) => {
+    const decision = callbackGuard.inspect(request.url || "/");
+    if (decision.kind === "ignore") {
+      response.writeHead(204, { "cache-control": "no-store" });
+      response.end();
+      return;
+    }
+    if (decision.kind === "invalid") {
+      response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
+      response.end(decision.message);
+      return;
+    }
+    if (decision.kind === "duplicate") {
+      response.writeHead(409, { "content-type": "text/plain", "cache-control": "no-store" });
+      response.end("This Capix sign-in callback is already being processed.");
+      return;
+    }
     try {
-      const callback = new URL(request.url || "/", "http://127.0.0.1");
-      const code = callback.searchParams.get("code");
-      if (!code || callback.searchParams.get("state") !== state) throw new Error("OAuth callback validation failed");
       const redirectUri = `http://127.0.0.1:${(server.address() as { port: number }).port}/oauth/callback`;
       const tokenResponse = await fetch("https://www.capix.network/oauth/token", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-        body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
+        body: new URLSearchParams({ grant_type: "authorization_code", code: decision.code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
       });
       const tokens = await tokenResponse.json() as { access_token?: string; refresh_token?: string; error?: string };
       if (!tokenResponse.ok || !tokens.access_token) throw new Error(tokens.error || `Token exchange failed (${tokenResponse.status})`);
       await client.saveOAuthTokens(tokens.access_token, tokens.refresh_token);
+      callbackGuard.exchangeSucceeded();
       response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
       response.end("Capix sign-in complete. Return to CapixIDE.");
+      if (timeout) clearTimeout(timeout);
+      server.close();
       vscode.window.showInformationMessage("Capix sign-in complete.");
       await refreshAll();
       await vscode.commands.executeCommand("capix.agent.refreshAuth");
     } catch (error) {
+      callbackGuard.exchangeFailed();
       response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
       response.end("Capix sign-in failed. Return to CapixIDE.");
       vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      if (timeout) clearTimeout(timeout); server.close();
     }
   });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
@@ -923,6 +943,25 @@ async function cmdConnectWallet() {
   const authorize = new URL("https://www.capix.network/oauth/authorize");
   Object.entries({ response_type: "code", client_id: "capix-ide", redirect_uri: redirectUri, scope: "openid account catalog", code_challenge: challenge, code_challenge_method: "S256", state, nonce: randomBytes(24).toString("base64url") }).forEach(([key, value]) => authorize.searchParams.set(key, value));
   await vscode.env.openExternal(vscode.Uri.parse(authorize.toString()));
+}
+
+async function cmdResetSessionAndSignIn() {
+  await resetSessionAndSignIn(
+    client,
+    async () => {
+      try {
+        await refreshAll();
+      } catch (error) {
+        logger.error("Capix signed-out view refresh failed", { error: String(error) });
+      }
+      try {
+        await vscode.commands.executeCommand("capix.agent.refreshAuth");
+      } catch (error) {
+        logger.error("Capix agent signed-out refresh failed", { error: String(error) });
+      }
+    },
+    cmdConnectWallet,
+  );
 }
 
 // Top up wallet balance — shared across web and IDE
