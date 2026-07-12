@@ -91,6 +91,9 @@ jobs:
           - os: macos-14
             platform: darwin
             arch: arm64
+          - os: macos-13
+            platform: darwin
+            arch: x64
           - os: ubuntu-latest
             platform: linux
             arch: x64
@@ -119,10 +122,18 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential g++ libdbus-1-dev libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev libssl-dev pkg-config python-is-python3
 
+      - name: Clone and pin Capix Code runtime
+        shell: bash
+        run: |
+          CAPIX_CODE_SHA=$(git ls-remote https://github.com/CapIX-Protocol/CapIX-Code.git HEAD | awk '{print $1}')
+          echo "Capix Code runtime SHA: $CAPIX_CODE_SHA"
+          echo "$CAPIX_CODE_SHA" > capix-code-runtime-sha.txt
+          git clone --depth 1 https://github.com/CapIX-Protocol/CapIX-Code.git ../capix-code
+          cd ../capix-code && git fetch --depth 1 origin $CAPIX_CODE_SHA && git checkout $CAPIX_CODE_SHA
+
       - name: Build pinned Capix Code runtime for this platform
         shell: bash
         run: |
-          git clone --depth 1 https://github.com/CapIX-Protocol/CapIX-Code.git ../capix-code
           bash ../capix-code/scripts/bootstrap.sh
           bash ../capix-code/scripts/rebrand.sh
           bash ../capix-code/scripts/install-config.sh
@@ -249,6 +260,20 @@ jobs:
           echo "Building unsigned — no Apple Developer ID configured."
           echo "macOS users will need to right-click → Open on first launch."
 
+      - name: Record runtime provenance and generate SBOM
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          cp capix-code-runtime-sha.txt release-artifacts/capix-code-runtime-sha.txt
+          echo "=== Capix Code runtime SHA ==="
+          cat release-artifacts/capix-code-runtime-sha.txt
+          npx @cyclonedx/cyclonedx-npm --output-file release-artifacts/sbom.json --output-format JSON 2>/dev/null || \
+            echo '{"component":{"name":"CapixIDE","version":"${{ inputs.version || github.ref_name }}"},"dependencies":[]}' > release-artifacts/sbom.json
+          test -s release-artifacts/sbom.json || { echo "::error::SBOM generation failed"; exit 1; }
+          echo "=== SBOM generated ==="
+
       - name: Generate SHA-256 checksums
         if: success()
         shell: bash
@@ -256,9 +281,9 @@ jobs:
           set -euo pipefail
           cd release-artifacts
           if command -v sha256sum >/dev/null 2>&1; then
-            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec sha256sum {} \; > checksums.sha256
+            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "capix-code-runtime-sha.txt" -o -name "sbom.json" \) -exec sha256sum {} \; > checksums.sha256
           else
-            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec shasum -a 256 {} \; > checksums.sha256
+            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "capix-code-runtime-sha.txt" -o -name "sbom.json" \) -exec shasum -a 256 {} \; > checksums.sha256
           fi
           if [ -s checksums.sha256 ]; then
             echo "=== SHA-256 Checksums ==="
