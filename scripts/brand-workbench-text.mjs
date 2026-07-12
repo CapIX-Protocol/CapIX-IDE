@@ -21,7 +21,7 @@ const edits = {
   "src/vs/workbench/contrib/void/electron-main/llmMessage/sendLLMMessage.impl.ts": [
     ["Void: Response from model was empty.", "Capix returned no text. Retry once; if this continues, contact support@capix.network."],
     ["Void providerName was invalid", "Capix model route was invalid"],
-    ["Ollama Endpoint was empty (please enter ${defaultProviderSettings.ollama.endpoint} in Void if you want the default url).", "Capix model endpoint is unavailable. Sign in again or retry shortly."],
+    ["Ollama Endpoint was empty (please enter ${defaultProviderSettings.ollama.endpoint} in Void if you want the default url).", "Capix model endpoint is unavailable (${defaultProviderSettings.ollama.endpoint}). Sign in again or retry shortly."],
   ],
   "src/vs/workbench/contrib/void/browser/react/src/void-settings-tsx/Settings.tsx": [
     ["Void's Settings", "Capix Settings"],
