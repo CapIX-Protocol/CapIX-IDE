@@ -6,14 +6,10 @@ CapixIDE builds are **unsigned**. On macOS, right-click the app → **Open** on 
 
 ## Download
 
-Pre-built binaries for Mac, Windows, and Linux are on the [Releases page](https://github.com/Ritzky/CapIX-IDE/releases):
+Pre-built unsigned archives for macOS, Windows, and Linux are on the [official Releases page](https://github.com/CapIX-Protocol/CapIX-IDE/releases).
 
-| Platform | Download |
-|---|---|
-| macOS (Apple Silicon) | `CapixIDE-x.x.x-arm64.dmg` |
-| macOS (Intel) | `CapixIDE-x.x.x-x64.dmg` |
-| Windows | `CapixIDE-Setup-x.x.x.exe` |
-| Linux | `CapixIDE-x.x.x.AppImage` / `.deb` / `.rpm` |
+See **[INSTALL.md](INSTALL.md)** for exact checksum, installation, authentication,
+update, and uninstall commands for macOS arm64/x64, Linux arm64/x64, and Windows x64.
 
 ## What's in the box?
 
@@ -90,9 +86,9 @@ CapixIDE is a full project editor with an integrated Capix command centre that i
 
 ## Quick start (users)
 
-1. Download the installer for your platform from [Releases](https://github.com/Ritzky/CapIX-IDE/releases).
+1. Follow the commands in [INSTALL.md](INSTALL.md) and verify the downloaded SHA-256 checksum.
 2. On first launch, CapixIDE offers to import compatible themes, keybindings, settings, and extensions.
-3. Run **Capix: Connect Wallet** (Command Palette) and paste your `cpx_session.…` token from capix.network.
+3. Select **Sign In** in the Capix Profile and complete the browser wallet-signature flow. Never paste session or refresh tokens.
 4. Your profile, deploys, and instances sync automatically.
 5. Deploy an LLM from the Model Catalog → when ready, the chat panel auto-configures.
 6. Or launch `capix-code` in the terminal via **Capix: Launch Capix Code**.
