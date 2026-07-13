@@ -158,17 +158,19 @@ class CapixClient {
         }
         catch (error) {
             if (safeRead && networkAttempt < 2) {
-                console.warn("Capix API read retry", { url: new URL(url).pathname, attempt: networkAttempt + 1, error: String(error) });
-                await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** networkAttempt));
+                const backoff = 250 * 2 ** networkAttempt + Math.random() * 250;
+                console.warn("Capix could not reach the network. Retrying…", { url: new URL(url).pathname, attempt: networkAttempt + 1, cause: String(error), retryInMs: Math.round(backoff) });
+                await new Promise((resolve) => setTimeout(resolve, backoff));
                 return this.authenticatedFetch(url, init, retry, networkAttempt + 1);
             }
-            throw error;
+            throw Object.assign(new Error("Capix could not reach the network. Retrying…"), { code: "network_unreachable", cause: String(error), transient: true });
         }
         if (response.status === 401 && retry && await this.refreshOAuthToken())
             return this.authenticatedFetch(url, init, false);
         if (safeRead && [429, 502, 503, 504].includes(response.status) && networkAttempt < 2) {
-            console.warn("Capix API read retry", { url: new URL(url).pathname, attempt: networkAttempt + 1, status: response.status });
-            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** networkAttempt));
+            const backoff = 250 * 2 ** networkAttempt + Math.random() * 250;
+            console.warn("Capix could not reach the network. Retrying…", { url: new URL(url).pathname, attempt: networkAttempt + 1, status: response.status, retryInMs: Math.round(backoff) });
+            await new Promise((resolve) => setTimeout(resolve, backoff));
             return this.authenticatedFetch(url, init, retry, networkAttempt + 1);
         }
         return response;
@@ -438,6 +440,37 @@ class CapixClient {
             throw new CapixApiError(502, "The SSH credential response was incomplete. The key was not written to disk.");
         }
         return { host, port, privateKey, filename };
+    }
+    /**
+     * Return the deployment credential from the OS credential store, retrieving
+     * it from the control plane only on first use. This makes SSH reliably
+     * reusable without repeatedly exposing the private key over the network.
+     */
+    async getStoredSshCredential(deploymentId) {
+        if (!this._secretStorage)
+            throw new Error("OS SecretStorage is unavailable");
+        const storageKey = `capix.ssh.${deploymentId}`;
+        const stored = await this._secretStorage.get(storageKey);
+        if (stored) {
+            try {
+                const credential = JSON.parse(stored);
+                if (credential.host && Number.isInteger(credential.port) && credential.privateKey?.includes("PRIVATE KEY")) {
+                    return {
+                        host: credential.host,
+                        port: Number(credential.port),
+                        privateKey: credential.privateKey,
+                        filename: credential.filename || `${deploymentId}.pem`,
+                    };
+                }
+            }
+            catch {
+                // Corrupt local material is removed and recovered from the server.
+            }
+            await this._secretStorage.delete(storageKey);
+        }
+        const credential = await this.retrieveSshCredential(deploymentId);
+        await this._secretStorage.store(storageKey, JSON.stringify(credential));
+        return credential;
     }
     // ── Deploy quote (for showing per-minute costs) ────────────────────────
     async getQuote(tierId, hours) {

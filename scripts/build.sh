@@ -91,6 +91,20 @@ npm run gulp compile-extensions-build
 echo "  minifying..."
 npm run gulp minify-vscode
 
+# Verify the PTY deadlock fix is present in compiled output (patch 0008).
+# If getResolvedShellEnv still appears in the compiled JS, the build will
+# deadlock the terminal on startup.
+PTY_JS="$VSCODE/out/vs/platform/terminal/node/ptyHostService.js"
+if [ -f "$PTY_JS" ]; then
+  if grep -q "getResolvedShellEnv" "$PTY_JS" 2>/dev/null; then
+    echo "FATAL: ptyHostService.js still contains getResolvedShellEnv after compilation."
+    echo "The PTY deadlock patch (0008) was not applied to compiled output."
+    exit 1
+  else
+    echo "  PTY deadlock fix verified in compiled output."
+  fi
+fi
+
 echo "  packaging (${PLATFORM}-${ARCH})..."
 npm run gulp "vscode-${PLATFORM}-${ARCH}-min-ci"
 

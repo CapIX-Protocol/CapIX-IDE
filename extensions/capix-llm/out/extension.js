@@ -742,12 +742,7 @@ async function cmdOpenTerminal(item) {
     const sshPort = item?._sshPort;
     const sshCommand = item?._sshCommand;
     const instanceId = item?._instanceId;
-    const sshAvailable = item?._sshAvailable;
     const label = item?.label || "instance";
-    if (sshHost && sshPort) {
-        await terminalManager.openSshSession({ host: sshHost, port: sshPort, label });
-        return;
-    }
     // If it's a plain command string (agents/jobs store full ssh commands)
     if (sshCommand) {
         // Parse "ssh -p PORT root@HOST"
@@ -758,20 +753,17 @@ async function cmdOpenTerminal(item) {
         }
     }
     if (instanceId?.startsWith("dep_")) {
-        if (!sshAvailable) {
-            vscode.window.showWarningMessage("SSH access for this instance is unavailable or its one-time key was already retrieved.", "Open instance").then((action) => {
-                if (action === "Open instance")
-                    vscode.commands.executeCommand("capix.openInstance", instanceId);
-            });
-            return;
-        }
         try {
-            const credential = await client.retrieveSshCredential(instanceId);
+            const credential = await client.getStoredSshCredential(instanceId);
             await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label, privateKey: credential.privateKey });
         }
         catch (error) {
             vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
         }
+        return;
+    }
+    if (sshHost && sshPort) {
+        await terminalManager.openSshSession({ host: sshHost, port: sshPort, label });
         return;
     }
     // No item — prompt the user to pick from instances
@@ -787,12 +779,19 @@ async function cmdOpenTerminal(item) {
         return {
             label: inst.tier,
             description: `${inst.status} · ${node?.location || ""}`,
+            deploymentId: inst.id,
             host: node?.sshHost,
             port: node?.sshPort,
         };
     }).filter((p) => p.host), { placeHolder: "Select an instance to SSH into" });
-    if (pick?.host && pick.port) {
-        await terminalManager.openSshSession({ host: pick.host, port: pick.port, label: pick.label });
+    if (pick?.deploymentId) {
+        try {
+            const credential = await client.getStoredSshCredential(pick.deploymentId);
+            await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label: pick.label, privateKey: credential.privateKey });
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
+        }
     }
 }
 // Covenant: add a memory entry
