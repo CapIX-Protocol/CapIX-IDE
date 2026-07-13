@@ -234,7 +234,12 @@ jobs:
           NODE
 
       - name: Hydrate pinned ripgrep artifact
-        run: npm rebuild
+        shell: bash
+        run: |
+          npm rebuild
+          # The verified binary is now hydrated. Prevent the subsequent root
+          # rebuild from re-running this downloader without its scoped token.
+          npm pkg delete scripts.postinstall
         working-directory: vscode/build/node_modules/@vscode/ripgrep
         env:
           # Limit the workflow token to the one pinned downloader that needs
