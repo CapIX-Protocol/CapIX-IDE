@@ -11,7 +11,11 @@ NAME="CapixIDE-${VERSION}-${PLATFORM}-${ARCH}-unsigned"
 
 NORMALIZED_VERSION="${VERSION#v}"
 json_capix_version() {
-  node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).capixVersion)" "$1"
+  local json_path="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    json_path="$(cygpath -w "$json_path")"
+  fi
+  node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).capixVersion)" "$json_path"
 }
 PRODUCT_VERSION="$(json_capix_version "$ROOT/product.json")"
 test "$NORMALIZED_VERSION" = "$PRODUCT_VERSION" || {
