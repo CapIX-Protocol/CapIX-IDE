@@ -316,17 +316,31 @@ jobs:
     name: Release
     needs: [create-release, build]
     runs-on: ubuntu-latest
-    if: always() && !cancelled()
+    # Required platforms must all pass. The macOS x64 matrix entry is marked
+    # experimental, so it is published only when it produces a verified asset.
+    if: needs.build.result == 'success'
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
 
+      - name: Assemble collision-free customer assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find dist -type f \( -name 'CapixIDE-*.tar.gz' -o -name 'CapixIDE-*.zip' -o -name 'CapixIDE-*.tar.gz.sha256' -o -name 'CapixIDE-*.zip.sha256' -o -name 'CapixIDE-*.source-commit.txt' \) -exec cp {} release-assets/ \;
+          test "$(find release-assets -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l | tr -d ' ')" -ge 3
+          for archive in release-assets/*.tar.gz release-assets/*.zip; do
+            [ -e "$archive" ] || continue
+            test -s "$archive.sha256"
+          done
+
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
-          files: dist/**/*
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

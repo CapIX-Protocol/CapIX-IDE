@@ -9,11 +9,23 @@ BUILD_ROOT="$ROOT/VSCode-${PLATFORM}-${ARCH}"
 OUT="$ROOT/release-artifacts"
 NAME="CapixIDE-${VERSION}-${PLATFORM}-${ARCH}-unsigned"
 
+NORMALIZED_VERSION="${VERSION#v}"
+PRODUCT_VERSION="$(node -p "require('$ROOT/product.json').capixVersion")"
+test "$NORMALIZED_VERSION" = "$PRODUCT_VERSION" || {
+  echo "ERROR: release version $NORMALIZED_VERSION does not match product version $PRODUCT_VERSION"
+  exit 1
+}
+
 test -d "$BUILD_ROOT" || { echo "ERROR: missing build root $BUILD_ROOT"; exit 1; }
 
 if [ "$PLATFORM" = darwin ]; then
   APP="$BUILD_ROOT/CapixIDE.app"
   test -x "$APP/Contents/MacOS/Electron" || { echo "ERROR: missing macOS executable"; exit 1; }
+  APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+  test "$APP_VERSION" = "$PRODUCT_VERSION" || {
+    echo "ERROR: packaged macOS version $APP_VERSION does not match $PRODUCT_VERSION"
+    exit 1
+  }
   CONTENT="$APP"
 elif [ "$PLATFORM" = win32 ]; then
   CONTENT="$BUILD_ROOT"
@@ -26,6 +38,14 @@ else
     echo "ERROR: missing Linux executable"; exit 1;
   }
 fi
+
+PACKAGED_PRODUCT="$(find "$CONTENT" -type f -path '*/resources/app/product.json' -print -quit)"
+test -n "$PACKAGED_PRODUCT" || { echo "ERROR: packaged product.json not found"; exit 1; }
+PACKAGED_VERSION="$(node -p "require('$PACKAGED_PRODUCT').capixVersion")"
+test "$PACKAGED_VERSION" = "$PRODUCT_VERSION" || {
+  echo "ERROR: packaged CapixIDE version $PACKAGED_VERSION does not match $PRODUCT_VERSION"
+  exit 1
+}
 
 for extension in capix-llm capix-cloud capix-workspace capix-agent-ui capix-intelligence; do
   MANIFEST="$(find "$CONTENT" -type f -path "*/extensions/$extension/package.json" -print -quit)"

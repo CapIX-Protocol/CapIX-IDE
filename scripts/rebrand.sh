@@ -17,6 +17,29 @@ echo "Rebranding in $VSCODE"
 cp "$DIR/product.json" "$VSCODE/product.json"
 echo "  done: product.json"
 
+# Code-OSS derives the desktop application version from package.json. Keep it
+# aligned with the immutable Capix release version so About dialogs, crash
+# reports, update checks, and packaged metadata never expose the inherited
+# upstream editor version.
+node - "$VSCODE" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const vscode = process.argv[2];
+const product = JSON.parse(fs.readFileSync(path.join(vscode, 'product.json'), 'utf8'));
+if (!/^\d+\.\d+\.\d+$/.test(product.capixVersion || '')) {
+  throw new Error(`invalid product capixVersion: ${product.capixVersion}`);
+}
+for (const name of ['package.json', 'package-lock.json']) {
+  const file = path.join(vscode, name);
+  if (!fs.existsSync(file)) continue;
+  const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+  json.version = product.capixVersion;
+  if (json.packages?.['']) json.packages[''].version = product.capixVersion;
+  fs.writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
+}
+NODE
+echo "  done: CapixIDE version metadata"
+
 # 2. Overlay every maintained Capix built-in extension. Keep this list explicit:
 # a missing customer module must fail the build instead of silently disappearing.
 CAPIX_EXTENSIONS=(capix-llm capix-cloud capix-workspace capix-agent-ui capix-intelligence)
