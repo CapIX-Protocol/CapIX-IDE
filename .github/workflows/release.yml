@@ -316,9 +316,10 @@ jobs:
     name: Release
     needs: [create-release, build]
     runs-on: ubuntu-latest
-    # Required platforms must all pass. The macOS x64 matrix entry is marked
-    # experimental, so it is published only when it produces a verified asset.
-    if: needs.build.result == 'success'
+    # Matrix-level conclusions include the experimental Intel lane. Run the
+    # assembler after the matrix and let exact mandatory-asset checks decide
+    # whether publication is safe.
+    if: always() && !cancelled() && needs.create-release.result == 'success'
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -331,7 +332,16 @@ jobs:
           set -euo pipefail
           mkdir -p release-assets
           find dist -type f \( -name 'CapixIDE-*.tar.gz' -o -name 'CapixIDE-*.zip' -o -name 'CapixIDE-*.tar.gz.sha256' -o -name 'CapixIDE-*.zip.sha256' -o -name 'CapixIDE-*.source-commit.txt' \) -exec cp {} release-assets/ \;
-          test "$(find release-assets -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l | tr -d ' ')" -ge 3
+          version="${{ inputs.version || github.ref_name }}"
+          required=(
+            "CapixIDE-${version}-darwin-arm64-unsigned.tar.gz"
+            "CapixIDE-${version}-linux-x64-unsigned.tar.gz"
+            "CapixIDE-${version}-win32-x64-unsigned.zip"
+          )
+          for archive in "${required[@]}"; do
+            test -s "release-assets/$archive"
+            test -s "release-assets/$archive.sha256"
+          done
           for archive in release-assets/*.tar.gz release-assets/*.zip; do
             [ -e "$archive" ] || continue
             test -s "$archive.sha256"
