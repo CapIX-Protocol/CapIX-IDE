@@ -36,7 +36,7 @@ Beyond SuperGemma, the catalog includes:
 ### How a deploy works
 
 1. Pick a model → the page shows live Vast GPU offers filtered by the model's VRAM requirement.
-2. Connect your Solana wallet. Top up at `/cloud/billing`.
+2. Connect your wallet. Top up at `/cloud/billing` (deposits are EXPERIMENTAL — devnet/localnet testing; not deployed to mainnet).
 3. Pick an offer + duration → click **Deploy model**.
 4. Wallet is billed upfront for the duration (refunded automatically on provision failure).
 5. A Vast GPU boots with vLLM serving the model on port 8000.

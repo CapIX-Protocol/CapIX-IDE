@@ -22,6 +22,18 @@ class CapixClient {
     setOAuthAccessTokenHandler(handler) {
         this._onOAuthAccessToken = handler;
     }
+    /** Forget only Capix OAuth credentials, including all in-memory copies. */
+    async resetOAuthSession() {
+        if (!this._secretStorage)
+            throw new Error("OS SecretStorage is unavailable");
+        await Promise.all([
+            this._secretStorage.delete("capix.sessionToken"),
+            this._secretStorage.delete("capix.refreshToken"),
+        ]);
+        this._sessionToken = null;
+        this._lastPublishedOAuthAccessToken = null;
+        await this._onOAuthAccessToken?.(null);
+    }
     async publishOAuthAccessToken(accessToken) {
         if (accessToken === this._lastPublishedOAuthAccessToken)
             return;
@@ -324,6 +336,25 @@ class CapixClient {
     }
     async mintDevTokens(reason, proof) {
         return this.post("/api/devtokens", { reason, proof });
+    }
+    // ── Settlement status & proofs ────────────────────────────────────────
+    async getSettlementStatus() {
+        return this.get("/api/v1/settlement/status");
+    }
+    async getSettlementEpochs() {
+        return this.get("/api/v1/settlement/epochs");
+    }
+    async getBalanceProof() {
+        return this.get("/api/v1/settlement/proof/balance");
+    }
+    async getUsageProof(receiptId) {
+        return this.get(`/api/v1/settlement/proof/usage/${encodeURIComponent(receiptId)}`);
+    }
+    async getDevProof(awardId) {
+        return this.get(`/api/v1/settlement/proof/dev/${encodeURIComponent(awardId)}`);
+    }
+    async getCpxBilling() {
+        return this.get("/api/v1/settlement/cpx-billing");
     }
 }
 exports.CapixClient = CapixClient;

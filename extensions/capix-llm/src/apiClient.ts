@@ -8,6 +8,74 @@ import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import type { CatalogModel, GpuOffer, LlmDeploy, HostedEndpoint, DeployResult } from "./types";
 
+// ── Settlement & Proof types ────────────────────────────────────────────
+
+/** Canonical leaf field in JSON form. BigInt values are decimal strings. */
+export type FieldJSON =
+  | { kind: "hash"; value: string }
+  | { kind: "u64"; value: string }
+  | { kind: "string"; value: string }
+  | { kind: "bytes"; value: string }
+  | { kind: "null" }
+  | { kind: "u8"; value: number }
+  | { kind: "bool"; value: boolean };
+
+/** Settlement layer status (all u64/bigint values as decimal strings). */
+export interface SettlementStatus {
+  currentEpoch: string;
+  lastFinalizedEpoch: string;
+  lastSettlementRoot: string;
+  cluster: string;
+  programId: string;
+  paused: boolean;
+  lastAnchoredTimestamp: string | null;
+}
+
+/** A finalized settlement epoch entry. */
+export interface SettlementEpoch {
+  epoch: string;
+  root: string;
+  txSignature: string | null;
+  anchoredAt: string | null;
+  leafCount: string;
+}
+
+/** Complete proof package — wraps the Merkle proof with settlement metadata. */
+export interface ProofPackage {
+  leafCategory: string;
+  leafVersion: number;
+  leaf: FieldJSON[];
+  leafIndex: string;
+  leafCount: string;
+  path: { sibling: string; siblingIsRight: boolean }[];
+  root: string;
+  epoch: string;
+  txSignature: string | null;
+  programId: string;
+  cluster: string;
+  verifyInstructions: string;
+}
+
+/** Balance proof variant (account leaf in the settlement tree). */
+export type BalanceProofPackage = ProofPackage;
+/** Usage proof variant (route-receipt leaf). */
+export type UsageProofPackage = ProofPackage;
+/** Dev-token proof variant (proof-of-development leaf). */
+export type DevProofPackage = ProofPackage;
+
+/** CPX billing overview — all amounts as string minor units (no float). */
+export interface CpxBilling {
+  walletBalanceMinor: string;
+  depositedBalanceMinor: string;
+  decimals: number;
+  priceUsd: string;
+  priceSource: string;
+  priceUpdatedAt: string | null;
+  perMinuteRateMinor: string;
+  burnedThisEpochMinor: string;
+  currentEpoch: string;
+}
+
 export class CapixClient {
   static readonly PRODUCTION_BASE_URL = "https://www.capix.network";
   /** Cached session token (loaded from SecretStorage on first use) */
@@ -379,6 +447,32 @@ export class CapixClient {
 
   async mintDevTokens(reason: string, proof: { sessionId?: string; repoHash?: string; commitSha?: string; toolUsed: "capix-code" | "capix-ide" }): Promise<{ ok: boolean; mint?: unknown; message?: string; error?: string }> {
     return this.post("/api/devtokens", { reason, proof });
+  }
+
+  // ── Settlement status & proofs ────────────────────────────────────────
+
+  async getSettlementStatus(): Promise<SettlementStatus & { ok: boolean; error?: string }> {
+    return this.get("/api/v1/settlement/status");
+  }
+
+  async getSettlementEpochs(): Promise<{ ok: boolean; epochs?: SettlementEpoch[]; error?: string }> {
+    return this.get("/api/v1/settlement/epochs");
+  }
+
+  async getBalanceProof(): Promise<BalanceProofPackage & { ok: boolean; error?: string }> {
+    return this.get("/api/v1/settlement/proof/balance");
+  }
+
+  async getUsageProof(receiptId: string): Promise<UsageProofPackage & { ok: boolean; error?: string }> {
+    return this.get(`/api/v1/settlement/proof/usage/${encodeURIComponent(receiptId)}`);
+  }
+
+  async getDevProof(awardId: string): Promise<DevProofPackage & { ok: boolean; error?: string }> {
+    return this.get(`/api/v1/settlement/proof/dev/${encodeURIComponent(awardId)}`);
+  }
+
+  async getCpxBilling(): Promise<CpxBilling & { ok: boolean; error?: string }> {
+    return this.get("/api/v1/settlement/cpx-billing");
   }
 }
 

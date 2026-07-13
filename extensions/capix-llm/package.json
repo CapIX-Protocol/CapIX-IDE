@@ -28,6 +28,11 @@
           "type": "webview"
         },
         {
+          "id": "capix.llm.settlement",
+          "name": "Settlement",
+          "type": "webview"
+        },
+        {
           "id": "capix.llm.deploys",
           "name": "My Deploys"
         },
@@ -238,9 +243,40 @@
       {
         "command": "capix.routerFavorModel",
         "title": "Capix: Favor Model (Always Prefer)…"
+      },
+      {
+        "command": "capix.settlementStatus",
+        "title": "Capix: Settlement Status",
+        "category": "Capix"
+      },
+      {
+        "command": "capix.viewProof",
+        "title": "Capix: View Proof",
+        "category": "Capix"
+      },
+      {
+        "command": "capix.verifyLocally",
+        "title": "Capix: Verify Proof Locally",
+        "category": "Capix"
+      },
+      {
+        "command": "capix.cpxBilling",
+        "title": "Capix: CPX Billing",
+        "category": "Capix"
+      },
+      {
+        "command": "capix.refreshSettlement",
+        "title": "Capix: Refresh Settlement",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
+      "commandPalette": [
+        { "command": "capix.settlementStatus" },
+        { "command": "capix.viewProof" },
+        { "command": "capix.verifyLocally" },
+        { "command": "capix.cpxBilling" }
+      ],
       "view/title": [
         {
           "command": "capix.deployModel",
@@ -305,6 +341,11 @@
         {
           "command": "capix.refreshApiKeys",
           "when": "view == capix.llm.apikeys",
+          "group": "navigation"
+        },
+        {
+          "command": "capix.refreshSettlement",
+          "when": "view == capix.llm.settlement",
           "group": "navigation"
         }
       ],

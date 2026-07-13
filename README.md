@@ -37,7 +37,7 @@ CapixIDE is a full project editor with an integrated Capix command centre that i
 
 ### Profile (synced across web + IDE)
 - **Wallet balance** — USD + SOL + USDC equivalents, with active billing per-deploy ($/hr + $/min)
-- **Top up** — SOL, USDC (Solana), or USDC on Base (EVM tx-hash verify)
+- **Top up** — SOL, USDC (Solana), or USDC on Base (EVM tx-hash verify) — on-chain deposits EXPERIMENTAL (devnet/localnet testing; not deployed to mainnet)
 - **Total spent** — lifetime billing history
 
 ### Native SSH Terminal
@@ -62,8 +62,8 @@ CapixIDE is a full project editor with an integrated Capix command centre that i
   - Complete a productive session (50+ turns) → 10 DEV
   - Record an architectural decision in Covenant → 2 DEV
   - Ship a complete product → 50 DEV
-- Tokens are on-chain proof of useful work (Solana devnet pre-mainnet)
-- In the future, DEV tokens will be exchangeable for SOL or CPX
+- Tokens are proof of useful work — on-chain anchoring in development (local validator stage)
+- DEV tokens are non-transferable proof of useful work; no exchange planned
 - Visible in the Profile panel alongside your wallet balance
 
 ### Covenant (memory + governance + spirit)

@@ -52,6 +52,10 @@ const apiClient_1 = require("./apiClient");
 const treeViews_1 = require("./treeViews");
 const cloudPanels_1 = require("./cloudPanels");
 const profileView_1 = require("./profileView");
+const settlementView_1 = require("./settlementView");
+const merkleVerifier_1 = require("./merkleVerifier");
+const authRecovery_1 = require("./authRecovery");
+const oauthCallbackGuard_1 = require("./oauthCallbackGuard");
 const terminalManager_1 = require("./terminalManager");
 const autoConnect_1 = require("./autoConnect");
 const covenant_1 = require("./covenant");
@@ -68,6 +72,7 @@ let agentsProvider;
 let jobsProvider;
 let apiKeysProvider;
 let profileProvider;
+let settlementProvider;
 let terminalManager;
 let autoConnect;
 let covenant;
@@ -81,12 +86,13 @@ function activate(context) {
     client.setSecretStorage({
         get: (key) => Promise.resolve(context.secrets.get(key)),
         store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
+        delete: (key) => Promise.resolve(context.secrets.delete(key)),
     });
     client.setOAuthAccessTokenHandler(async (accessToken) => {
         // The workbench stores this short-lived OAuth token using its encrypted
         // application storage and selects Capix routed inference (`auto`). Portal
         // API keys are deliberately not copied into the desktop application.
-        await vscode.commands.executeCommand("capix.chat.configure", accessToken);
+        await vscode.commands.executeCommand(accessToken ? "capix.chat.configure" : "capix.chat.clear", ...(accessToken ? [accessToken] : []));
     });
     // ── Tree views ────────────────────────────────────────────────────────
     deploysProvider = new treeViews_1.DeploysTreeProvider(client);
@@ -97,6 +103,7 @@ function activate(context) {
     jobsProvider = new cloudPanels_1.JobsTreeProvider(client);
     apiKeysProvider = new cloudPanels_1.ApiKeysTreeProvider(client);
     profileProvider = new profileView_1.ProfileViewProvider(client, context.extensionUri);
+    settlementProvider = new settlementView_1.SettlementViewProvider(client, context.extensionUri);
     terminalManager = new terminalManager_1.TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
     autoConnect = new autoConnect_1.AutoConnectManager(client);
     covenant = new covenant_1.CovenantManager(context);
@@ -135,7 +142,7 @@ function activate(context) {
     const agentsView = vscode.window.createTreeView("capix.llm.agents", { treeDataProvider: agentsProvider });
     const jobsView = vscode.window.createTreeView("capix.llm.jobs", { treeDataProvider: jobsProvider });
     const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
-    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider));
+    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider), vscode.window.registerWebviewViewProvider("capix.llm.settlement", settlementProvider));
     // ── Auto-refresh ───────────────────────────────────────────────────────
     setupAutoRefresh(context);
     // ── Auto-connect: check for ready deploys on startup ────────────────────
@@ -167,7 +174,7 @@ function activate(context) {
         vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/billing`));
     }), vscode.commands.registerCommand("capix.openInstance", (instanceId) => {
         vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/instances/${instanceId}`));
-    }), vscode.commands.registerCommand("capix.connectWallet", () => cmdConnectWallet()), 
+    }), vscode.commands.registerCommand("capix.connectWallet", () => cmdConnectWallet()), vscode.commands.registerCommand("capix.resetSessionAndSignIn", () => cmdResetSessionAndSignIn()), 
     // Profile
     vscode.commands.registerCommand("capix.topUp", () => cmdTopUp()), 
     // Cloud panels
@@ -182,7 +189,9 @@ function activate(context) {
     // Launch Capix Code (the CLI coding assistant) in a terminal
     vscode.commands.registerCommand("capix.launchCapixCode", () => cmdLaunchCapixCode()), 
     // Smart Router: routing mode, private LLM deploy/destroy, memory
-    vscode.commands.registerCommand("capix.setRouteMode", () => cmdSetRouteMode()), vscode.commands.registerCommand("capix.deployPrivateLlm", () => cmdDeployPrivateLlm()), vscode.commands.registerCommand("capix.destroyPrivateLlm", () => cmdDestroyPrivateLlm()), vscode.commands.registerCommand("capix.routerMemory", () => cmdRouterMemory()), vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()), vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()), vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()));
+    vscode.commands.registerCommand("capix.setRouteMode", () => cmdSetRouteMode()), vscode.commands.registerCommand("capix.deployPrivateLlm", () => cmdDeployPrivateLlm()), vscode.commands.registerCommand("capix.destroyPrivateLlm", () => cmdDestroyPrivateLlm()), vscode.commands.registerCommand("capix.routerMemory", () => cmdRouterMemory()), vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()), vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()), vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()), 
+    // ── Settlement & Proofs ──────────────────────────────────────────────
+    vscode.commands.registerCommand("capix.settlementStatus", () => cmdSettlementStatus()), vscode.commands.registerCommand("capix.viewProof", (proofType) => cmdViewProof(proofType)), vscode.commands.registerCommand("capix.verifyLocally", (proofType) => cmdVerifyLocally(proofType)), vscode.commands.registerCommand("capix.cpxBilling", () => cmdCpxBilling()), vscode.commands.registerCommand("capix.refreshSettlement", () => settlementProvider.refresh()));
 }
 async function cmdLaunchCentre() {
     const action = await vscode.window.showQuickPick([
@@ -266,6 +275,7 @@ async function refreshAll() {
         deploysProvider.load(), catalogProvider.load(), hostedProvider.load(),
         instancesProvider.load(), agentsProvider.load(), jobsProvider.load(),
         apiKeysProvider.load(), profileProvider.refresh(),
+        settlementProvider.refresh(),
     ]);
     if (statusBarItem)
         await updateStatusBar(statusBarItem);
@@ -285,6 +295,7 @@ function setupAutoRefresh(context) {
             agentsProvider.load();
             jobsProvider.load();
             profileProvider.refresh();
+            settlementProvider.refresh();
         }, interval * 1000);
         refreshTimer = new vscode.Disposable(() => clearInterval(handle));
     };
@@ -802,38 +813,51 @@ async function cmdConnectWallet() {
     const verifier = (0, node_crypto_1.randomBytes)(48).toString("base64url");
     const state = (0, node_crypto_1.randomBytes)(32).toString("base64url");
     const challenge = (0, node_crypto_1.createHash)("sha256").update(verifier).digest("base64url");
+    const callbackGuard = new oauthCallbackGuard_1.OAuthCallbackGuard(state);
     let timeout;
     const server = (0, node_http_1.createServer)(async (request, response) => {
+        const decision = callbackGuard.inspect(request.url || "/");
+        if (decision.kind === "ignore") {
+            response.writeHead(204, { "cache-control": "no-store" });
+            response.end();
+            return;
+        }
+        if (decision.kind === "invalid") {
+            response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
+            response.end(decision.message);
+            return;
+        }
+        if (decision.kind === "duplicate") {
+            response.writeHead(409, { "content-type": "text/plain", "cache-control": "no-store" });
+            response.end("This Capix sign-in callback is already being processed.");
+            return;
+        }
         try {
-            const callback = new URL(request.url || "/", "http://127.0.0.1");
-            const code = callback.searchParams.get("code");
-            if (!code || callback.searchParams.get("state") !== state)
-                throw new Error("OAuth callback validation failed");
             const redirectUri = `http://127.0.0.1:${server.address().port}/oauth/callback`;
             const tokenResponse = await fetch("https://www.capix.network/oauth/token", {
                 method: "POST",
                 headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-                body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
+                body: new URLSearchParams({ grant_type: "authorization_code", code: decision.code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
             });
             const tokens = await tokenResponse.json();
             if (!tokenResponse.ok || !tokens.access_token)
                 throw new Error(tokens.error || `Token exchange failed (${tokenResponse.status})`);
             await client.saveOAuthTokens(tokens.access_token, tokens.refresh_token);
+            callbackGuard.exchangeSucceeded();
             response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
             response.end("Capix sign-in complete. Return to CapixIDE.");
+            if (timeout)
+                clearTimeout(timeout);
+            server.close();
             vscode.window.showInformationMessage("Capix sign-in complete.");
             await refreshAll();
             await vscode.commands.executeCommand("capix.agent.refreshAuth");
         }
         catch (error) {
+            callbackGuard.exchangeFailed();
             response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
             response.end("Capix sign-in failed. Return to CapixIDE.");
             vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        finally {
-            if (timeout)
-                clearTimeout(timeout);
-            server.close();
         }
     });
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
@@ -847,6 +871,22 @@ async function cmdConnectWallet() {
     const authorize = new URL("https://www.capix.network/oauth/authorize");
     Object.entries({ response_type: "code", client_id: "capix-ide", redirect_uri: redirectUri, scope: "openid account catalog", code_challenge: challenge, code_challenge_method: "S256", state, nonce: (0, node_crypto_1.randomBytes)(24).toString("base64url") }).forEach(([key, value]) => authorize.searchParams.set(key, value));
     await vscode.env.openExternal(vscode.Uri.parse(authorize.toString()));
+}
+async function cmdResetSessionAndSignIn() {
+    await (0, authRecovery_1.resetSessionAndSignIn)(client, async () => {
+        try {
+            await refreshAll();
+        }
+        catch (error) {
+            logger_1.logger.error("Capix signed-out view refresh failed", { error: String(error) });
+        }
+        try {
+            await vscode.commands.executeCommand("capix.agent.refreshAuth");
+        }
+        catch (error) {
+            logger_1.logger.error("Capix agent signed-out refresh failed", { error: String(error) });
+        }
+    }, cmdConnectWallet);
 }
 // Top up wallet balance — shared across web and IDE
 async function cmdTopUp() {
@@ -999,5 +1039,142 @@ async function cmdRouterFavorModel() {
     });
     if (model)
         smartRouter.favorModel(model);
+}
+// ── Settlement & Proof commands ──────────────────────────────────────────
+/** Open / focus the settlement status panel in the sidebar. */
+async function cmdSettlementStatus() {
+    await vscode.commands.executeCommand("workbench.view.extension.capix-llm");
+    await vscode.commands.executeCommand("capix.llm.settlement.focus");
+    await settlementProvider.refresh();
+}
+/** Open the CPX billing panel (same settlement view, CPX section). */
+async function cmdCpxBilling() {
+    await vscode.commands.executeCommand("workbench.view.extension.capix-llm");
+    await vscode.commands.executeCommand("capix.llm.settlement.focus");
+    await settlementProvider.refresh();
+}
+/** Fetch the appropriate proof package based on the type argument. */
+async function fetchProof(proofType) {
+    const type = proofType || "balance";
+    try {
+        if (type === "balance") {
+            const res = await client.getBalanceProof();
+            if (!res.ok)
+                return { ok: false, error: res.error || "Failed to fetch balance proof" };
+            const { ok, error, ...pkg } = res;
+            void ok;
+            void error;
+            return { ok: true, package: pkg };
+        }
+        if (type === "usage") {
+            const receiptId = await vscode.window.showInputBox({
+                prompt: "Receipt ID to view proof for",
+                placeHolder: "e.g. rec_abc123",
+                ignoreFocusOut: true,
+            });
+            if (!receiptId)
+                return { ok: false, error: "cancelled" };
+            const res = await client.getUsageProof(receiptId);
+            if (!res.ok)
+                return { ok: false, error: res.error || "Failed to fetch usage proof" };
+            const { ok, error, ...pkg } = res;
+            void ok;
+            void error;
+            return { ok: true, package: pkg };
+        }
+        if (type === "dev") {
+            const awardId = await vscode.window.showInputBox({
+                prompt: "Dev award ID to view proof for",
+                placeHolder: "e.g. dev_xyz789",
+                ignoreFocusOut: true,
+            });
+            if (!awardId)
+                return { ok: false, error: "cancelled" };
+            const res = await client.getDevProof(awardId);
+            if (!res.ok)
+                return { ok: false, error: res.error || "Failed to fetch dev proof" };
+            const { ok, error, ...pkg } = res;
+            void ok;
+            void error;
+            return { ok: true, package: pkg };
+        }
+        return { ok: false, error: `Unknown proof type: ${type}` };
+    }
+    catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+}
+/** Show a proof viewer for the selected proof type — opens JSON in an untitled editor. */
+async function cmdViewProof(proofType) {
+    if (!checkConfigured())
+        return;
+    const type = proofType || "balance";
+    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Fetching ${type} proof…` }, () => fetchProof(type));
+    if (!result.ok || !result.package) {
+        if (result.error === "cancelled")
+            return;
+        vscode.window.showErrorMessage(result.error || "Failed to fetch proof.");
+        return;
+    }
+    const pkg = result.package;
+    const json = JSON.stringify(pkg, null, 2);
+    const doc = await vscode.workspace.openTextDocument({
+        content: json,
+        language: "json",
+    });
+    await vscode.window.showTextDocument(doc, { preview: false });
+    // Show a summary notification
+    const rootShort = pkg.root.length > 20 ? pkg.root.slice(0, 10) + "…" + pkg.root.slice(-8) : pkg.root;
+    vscode.window.showInformationMessage(`Proof loaded — category: ${pkg.leafCategory} · epoch: ${pkg.epoch} · root: ${rootShort} · ${pkg.path.length} path steps`);
+}
+/** Verify a proof locally (no network call for verification itself — only the proof fetch). */
+async function cmdVerifyLocally(proofType) {
+    if (!checkConfigured())
+        return;
+    const type = proofType || "balance";
+    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Fetching ${type} proof for local verification…` }, () => fetchProof(type));
+    if (!result.ok || !result.package) {
+        if (result.error === "cancelled")
+            return;
+        vscode.window.showErrorMessage(result.error || "Failed to fetch proof.");
+        return;
+    }
+    const pkg = result.package;
+    // Verification runs entirely in the extension host (Node.js) — no network.
+    const verifyResult = (0, merkleVerifier_1.verifyProofLocally)(pkg);
+    // Show results in an output channel with full detail.
+    const channel = vscode.window.createOutputChannel("Capix Proof Verification", "log");
+    channel.clear();
+    channel.appendLine("╔════════════════════════════════════════════════════════════╗");
+    channel.appendLine("║           Capix Local Merkle Proof Verification            ║");
+    channel.appendLine("╚════════════════════════════════════════════════════════════╝");
+    channel.appendLine("");
+    channel.appendLine(`Category:        ${pkg.leafCategory}`);
+    channel.appendLine(`Epoch:            ${pkg.epoch}`);
+    channel.appendLine(`Leaf Index:       ${pkg.leafIndex} / ${pkg.leafCount} leaves`);
+    channel.appendLine(`Path Length:      ${pkg.path.length} steps`);
+    channel.appendLine(`Program ID:       ${pkg.programId}`);
+    channel.appendLine(`Cluster:          ${pkg.cluster}`);
+    channel.appendLine(`Tx Signature:      ${pkg.txSignature || "none"}`);
+    channel.appendLine("");
+    channel.appendLine(`Claimed Root:     ${pkg.root}`);
+    channel.appendLine(`Computed Root:    ${verifyResult.computedRoot || "(error)"}`);
+    channel.appendLine("");
+    if (verifyResult.valid) {
+        channel.appendLine("✓ VERIFICATION PASSED — the recomputed root matches the claimed root.");
+    }
+    else {
+        channel.appendLine(`✗ VERIFICATION FAILED — ${verifyResult.error}`);
+    }
+    channel.appendLine("");
+    channel.appendLine("Verification ran locally — no network calls were made for the cryptographic check.");
+    channel.appendLine(`Instructions:     ${pkg.verifyInstructions || "N/A"}`);
+    channel.show();
+    if (verifyResult.valid) {
+        vscode.window.showInformationMessage("✓ Proof verified locally — recomputed root matches.");
+    }
+    else {
+        vscode.window.showWarningMessage(`✗ Proof verification failed: ${verifyResult.error}`);
+    }
 }
 //# sourceMappingURL=extension.js.map

@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { CapixApiError, CapixClient } from "./apiClient";
+import { CapixApiError, CapixClient, type CpxBilling, type SettlementStatus } from "./apiClient";
 import { logger } from "./logger";
 
 interface BillingData {
@@ -37,6 +37,8 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private billing: BillingData | null = null;
   private baseTreasury: BaseTreasury | null = null;
+  private settlement: SettlementStatus | null = null;
+  private cpx: CpxBilling | null = null;
   private loading = false;
   private billingError: string | null = null;
 
@@ -70,9 +72,11 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
         this.billing = null;
         return;
       }
-      const [billingRes, treasuryRes] = await Promise.all([
+      const [billingRes, treasuryRes, settlementRes, cpxRes] = await Promise.all([
         this.client.getBalance(),
         this.client.getBaseTreasury().catch(() => ({ ok: false }) as { ok: boolean }),
+        this.client.getSettlementStatus().catch(() => ({ ok: false }) as { ok: boolean }),
+        this.client.getCpxBilling().catch(() => ({ ok: false }) as { ok: boolean }),
       ]);
 
       if (billingRes.ok) {
@@ -90,6 +94,22 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       if (treasuryRes.ok) {
         this.baseTreasury = treasuryRes as unknown as BaseTreasury;
       }
+
+      if (settlementRes.ok) {
+        const { ok, error, ...status } = settlementRes as SettlementStatus & { ok: boolean; error?: string };
+        void ok; void error;
+        this.settlement = status;
+      } else {
+        this.settlement = null;
+      }
+
+      if (cpxRes.ok) {
+        const { ok, error, ...cpx } = cpxRes as CpxBilling & { ok: boolean; error?: string };
+        void ok; void error;
+        this.cpx = cpx;
+      } else {
+        this.cpx = null;
+      }
     } catch (err) {
       logger.error("ProfileViewProvider.refresh failed", { error: String(err) });
       this.billingError = err instanceof CapixApiError && err.status === 401
@@ -101,6 +121,8 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       this.loading = false;
       this.view.webview.postMessage({ type: "loading", value: false });
       this.view.webview.postMessage({ type: "billing", value: this.billing });
+      this.view.webview.postMessage({ type: "settlement", value: this.settlement });
+      this.view.webview.postMessage({ type: "cpxBilling", value: this.cpx });
       this.view.webview.postMessage({ type: "treasury", value: this.baseTreasury });
       this.view.webview.postMessage({ type: "billingError", value: this.billingError });
     }
@@ -119,6 +141,9 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
         break;
       case "resetSession":
         vscode.commands.executeCommand("capix.resetSessionAndSignIn");
+        break;
+      case "openSettlement":
+        vscode.commands.executeCommand("capix.settlementStatus");
         break;
       case "copyTreasury":
         if (this.baseTreasury) {
@@ -281,6 +306,46 @@ ${cspMeta}
     opacity: 0.5;
     margin-top: 2px;
   }
+  .settlement-root {
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 10px;
+    color: var(--vscode-textLink-foreground, #3DCED6);
+    word-break: break-all;
+  }
+  .settlement-paused { background: rgba(255,174,0,0.12); color: #FFAE00; }
+  .settlement-active { background: rgba(20,241,149,0.12); color: #14F195; }
+  .cpx-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .cpx-box {
+    border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.06));
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+  }
+  .cpx-box .stat-value { font-size: 13px; }
+  .cpx-disclosure {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    background: rgba(255,174,0,0.06);
+    border: 1px solid rgba(255,174,0,0.12);
+    font-size: 10px;
+    line-height: 1.4;
+    opacity: 0.8;
+  }
+  .kv-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 2px 0;
+    font-size: 11px;
+  }
+  .kv-row .k { opacity: 0.5; }
+  .kv-row .v { font-weight: 500; }
 </style>
 </head>
 <body>
@@ -395,6 +460,16 @@ ${cspMeta}
           <div class="treasury-box" id="treasury-addr" onclick="copyTreasury()"></div>
           <div class="billing-rate" style="margin-top: 4px;">Then submit the tx hash via Top Up → verify on the billing page.</div>
         </div>
+
+        <div class="card" id="settlement-card" style="display: none;">
+          <div class="section-title">Settlement</div>
+          <div id="settlement-content"></div>
+        </div>
+
+        <div class="card" id="cpx-card" style="display: none;">
+          <div class="section-title">CPX Billing</div>
+          <div id="cpx-content"></div>
+        </div>
       \`;
     }
 
@@ -406,6 +481,61 @@ ${cspMeta}
         card.style.display = 'block';
         addr.textContent = data.treasury;
       }
+    }
+
+    function formatMinor(minor, decimals) {
+      if (!minor || minor === '0') return '0.' + '0'.repeat(Math.max(0, decimals));
+      const abs = minor.startsWith('-') ? minor.slice(1) : minor;
+      const neg = minor.startsWith('-') ? '-' : '';
+      const padded = abs.padStart(decimals + 1, '0');
+      return neg + padded.slice(0, padded.length - decimals) + '.' + padded.slice(padded.length - decimals);
+    }
+
+    function renderSettlement(data) {
+      const card = document.getElementById('settlement-card');
+      const content = document.getElementById('settlement-content');
+      if (!card || !content) return;
+      if (!data) { card.style.display = 'none'; return; }
+      card.style.display = 'block';
+      const pausedBadge = data.paused
+        ? '<span class="deploy-status settlement-paused">PAUSED</span>'
+        : '<span class="deploy-status settlement-active">ACTIVE</span>';
+      const rootShort = data.lastSettlementRoot ? esc(data.lastSettlementRoot.slice(0, 12) + '…' + data.lastSettlementRoot.slice(-8)) : '—';
+      const ts = data.lastAnchoredTimestamp ? new Date(data.lastAnchoredTimestamp).toLocaleString() : 'not yet anchored';
+      const cluster = esc(data.cluster || 'unknown');
+      content.innerHTML =
+        '<div class="kv-row"><span class="k">Last Epoch</span><span class="v">' + esc(data.lastFinalizedEpoch) + '</span></div>' +
+        '<div class="kv-row"><span class="k">Root</span><span class="v settlement-root">' + rootShort + '</span></div>' +
+        '<div class="kv-row"><span class="k">Cluster</span><span class="v">' + cluster + '</span></div>' +
+        '<div class="kv-row"><span class="k">Anchored</span><span class="v">' + esc(ts) + '</span></div>' +
+        '<div class="kv-row"><span class="k">Status</span><span class="v">' + pausedBadge + '</span></div>' +
+        '<div style="margin-top: 8px;"><button class="btn btn-secondary" onclick="vscode.postMessage({ type: \\'openSettlement\\' })">Settlement Details &rarr;</button></div>';
+    }
+
+    function renderCpxBilling(data) {
+      const card = document.getElementById('cpx-card');
+      const content = document.getElementById('cpx-content');
+      if (!card || !content) return;
+      if (!data) { card.style.display = 'none'; return; }
+      card.style.display = 'block';
+      const d = data.decimals || 6;
+      const wallet = formatMinor(data.walletBalanceMinor, d);
+      const deposited = formatMinor(data.depositedBalanceMinor, d);
+      const perMin = formatMinor(data.perMinuteRateMinor, d);
+      const burned = formatMinor(data.burnedThisEpochMinor, d);
+      const priceUsd = data.priceUsd ? '$' + esc(data.priceUsd) : '—';
+      const priceTs = data.priceUpdatedAt ? new Date(data.priceUpdatedAt).toLocaleTimeString() : '—';
+      content.innerHTML =
+        '<div class="cpx-grid">' +
+          '<div class="cpx-box"><div class="balance-label">Wallet CPX</div><div class="stat-value">' + esc(wallet) + '</div></div>' +
+          '<div class="cpx-box"><div class="balance-label">Deposited CPX</div><div class="stat-value">' + esc(deposited) + '</div></div>' +
+        '</div>' +
+        '<div class="kv-row" style="margin-top:8px"><span class="k">CPX/USD</span><span class="v">' + priceUsd + '</span></div>' +
+        '<div class="kv-row"><span class="k">Source</span><span class="v">' + esc(data.priceSource || '—') + '</span></div>' +
+        '<div class="kv-row"><span class="k">Updated</span><span class="v">' + esc(priceTs) + '</span></div>' +
+        '<div class="kv-row"><span class="k">Per-Minute Rate</span><span class="v" style="color:#14F195">' + esc(perMin) + ' CPX/min</span></div>' +
+        '<div class="kv-row"><span class="k">Burned This Epoch</span><span class="v" style="color:#14F195">' + esc(burned) + ' CPX</span></div>' +
+        '<div class="cpx-disclosure">CPX is burned at settlement — providers are never paid in CPX.</div>';
     }
 
     function copyTreasury() {
@@ -425,6 +555,10 @@ ${cspMeta}
         isConfigured = Boolean(msg.configured);
       } else if (msg.type === 'treasury') {
         renderTreasury(msg.value);
+      } else if (msg.type === 'settlement') {
+        renderSettlement(msg.value);
+      } else if (msg.type === 'cpxBilling') {
+        renderCpxBilling(msg.value);
       }
     });
 

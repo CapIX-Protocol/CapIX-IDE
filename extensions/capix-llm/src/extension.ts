@@ -16,6 +16,8 @@ import { CapixClient } from "./apiClient";
 import { DeploysTreeProvider, CatalogTreeProvider, HostedTreeProvider } from "./treeViews";
 import { InstancesTreeProvider, AgentsTreeProvider, JobsTreeProvider, ApiKeysTreeProvider } from "./cloudPanels";
 import { ProfileViewProvider } from "./profileView";
+import { SettlementViewProvider } from "./settlementView";
+import { verifyProofLocally, type VerifyResult } from "./merkleVerifier";
 import { resetSessionAndSignIn } from "./authRecovery";
 import { OAuthCallbackGuard } from "./oauthCallbackGuard";
 import { TerminalManager } from "./terminalManager";
@@ -36,6 +38,7 @@ let agentsProvider: AgentsTreeProvider;
 let jobsProvider: JobsTreeProvider;
 let apiKeysProvider: ApiKeysTreeProvider;
 let profileProvider: ProfileViewProvider;
+let settlementProvider: SettlementViewProvider;
 let terminalManager: TerminalManager;
 let autoConnect: AutoConnectManager;
 let covenant: CovenantManager;
@@ -69,6 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
   jobsProvider = new JobsTreeProvider(client);
   apiKeysProvider = new ApiKeysTreeProvider(client);
   profileProvider = new ProfileViewProvider(client, context.extensionUri);
+  settlementProvider = new SettlementViewProvider(client, context.extensionUri);
   terminalManager = new TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
   autoConnect = new AutoConnectManager(client);
   covenant = new CovenantManager(context);
@@ -109,6 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()),
     deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView,
     vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider),
+    vscode.window.registerWebviewViewProvider("capix.llm.settlement", settlementProvider),
   );
 
   // ── Auto-refresh ───────────────────────────────────────────────────────
@@ -201,6 +206,13 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()),
     vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()),
     vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()),
+
+    // ── Settlement & Proofs ──────────────────────────────────────────────
+    vscode.commands.registerCommand("capix.settlementStatus", () => cmdSettlementStatus()),
+    vscode.commands.registerCommand("capix.viewProof", (proofType?: string) => cmdViewProof(proofType)),
+    vscode.commands.registerCommand("capix.verifyLocally", (proofType?: string) => cmdVerifyLocally(proofType)),
+    vscode.commands.registerCommand("capix.cpxBilling", () => cmdCpxBilling()),
+    vscode.commands.registerCommand("capix.refreshSettlement", () => settlementProvider.refresh()),
   );
 
 }
@@ -284,6 +296,7 @@ async function refreshAll() {
     deploysProvider.load(), catalogProvider.load(), hostedProvider.load(),
     instancesProvider.load(), agentsProvider.load(), jobsProvider.load(),
     apiKeysProvider.load(), profileProvider.refresh(),
+    settlementProvider.refresh(),
   ]);
   if (statusBarItem) await updateStatusBar(statusBarItem);
 }
@@ -302,6 +315,7 @@ function setupAutoRefresh(context: vscode.ExtensionContext) {
       agentsProvider.load();
       jobsProvider.load();
       profileProvider.refresh();
+      settlementProvider.refresh();
     }, interval * 1000);
     refreshTimer = new vscode.Disposable(() => clearInterval(handle));
   };
@@ -1127,4 +1141,147 @@ async function cmdRouterFavorModel() {
     ignoreFocusOut: true,
   });
   if (model) smartRouter.favorModel(model);
+}
+
+// ── Settlement & Proof commands ──────────────────────────────────────────
+
+/** Open / focus the settlement status panel in the sidebar. */
+async function cmdSettlementStatus(): Promise<void> {
+  await vscode.commands.executeCommand("workbench.view.extension.capix-llm");
+  await vscode.commands.executeCommand("capix.llm.settlement.focus");
+  await settlementProvider.refresh();
+}
+
+/** Open the CPX billing panel (same settlement view, CPX section). */
+async function cmdCpxBilling(): Promise<void> {
+  await vscode.commands.executeCommand("workbench.view.extension.capix-llm");
+  await vscode.commands.executeCommand("capix.llm.settlement.focus");
+  await settlementProvider.refresh();
+}
+
+/** Fetch the appropriate proof package based on the type argument. */
+async function fetchProof(
+  proofType: string,
+): Promise<{ ok: boolean; package?: import("./apiClient").ProofPackage; error?: string }> {
+  const type = proofType || "balance";
+  try {
+    if (type === "balance") {
+      const res = await client.getBalanceProof();
+      if (!res.ok) return { ok: false, error: res.error || "Failed to fetch balance proof" };
+      const { ok, error, ...pkg } = res;
+      void ok; void error;
+      return { ok: true, package: pkg };
+    }
+    if (type === "usage") {
+      const receiptId = await vscode.window.showInputBox({
+        prompt: "Receipt ID to view proof for",
+        placeHolder: "e.g. rec_abc123",
+        ignoreFocusOut: true,
+      });
+      if (!receiptId) return { ok: false, error: "cancelled" };
+      const res = await client.getUsageProof(receiptId);
+      if (!res.ok) return { ok: false, error: res.error || "Failed to fetch usage proof" };
+      const { ok, error, ...pkg } = res;
+      void ok; void error;
+      return { ok: true, package: pkg };
+    }
+    if (type === "dev") {
+      const awardId = await vscode.window.showInputBox({
+        prompt: "Dev award ID to view proof for",
+        placeHolder: "e.g. dev_xyz789",
+        ignoreFocusOut: true,
+      });
+      if (!awardId) return { ok: false, error: "cancelled" };
+      const res = await client.getDevProof(awardId);
+      if (!res.ok) return { ok: false, error: res.error || "Failed to fetch dev proof" };
+      const { ok, error, ...pkg } = res;
+      void ok; void error;
+      return { ok: true, package: pkg };
+    }
+    return { ok: false, error: `Unknown proof type: ${type}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Show a proof viewer for the selected proof type — opens JSON in an untitled editor. */
+async function cmdViewProof(proofType?: string): Promise<void> {
+  if (!checkConfigured()) return;
+  const type = proofType || "balance";
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Fetching ${type} proof…` },
+    () => fetchProof(type),
+  );
+  if (!result.ok || !result.package) {
+    if (result.error === "cancelled") return;
+    vscode.window.showErrorMessage(result.error || "Failed to fetch proof.");
+    return;
+  }
+
+  const pkg = result.package;
+  const json = JSON.stringify(pkg, null, 2);
+  const doc = await vscode.workspace.openTextDocument({
+    content: json,
+    language: "json",
+  });
+  await vscode.window.showTextDocument(doc, { preview: false });
+
+  // Show a summary notification
+  const rootShort = pkg.root.length > 20 ? pkg.root.slice(0, 10) + "…" + pkg.root.slice(-8) : pkg.root;
+  vscode.window.showInformationMessage(
+    `Proof loaded — category: ${pkg.leafCategory} · epoch: ${pkg.epoch} · root: ${rootShort} · ${pkg.path.length} path steps`,
+  );
+}
+
+/** Verify a proof locally (no network call for verification itself — only the proof fetch). */
+async function cmdVerifyLocally(proofType?: string): Promise<void> {
+  if (!checkConfigured()) return;
+  const type = proofType || "balance";
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Fetching ${type} proof for local verification…` },
+    () => fetchProof(type),
+  );
+  if (!result.ok || !result.package) {
+    if (result.error === "cancelled") return;
+    vscode.window.showErrorMessage(result.error || "Failed to fetch proof.");
+    return;
+  }
+
+  const pkg = result.package;
+  // Verification runs entirely in the extension host (Node.js) — no network.
+  const verifyResult: VerifyResult = verifyProofLocally(pkg);
+
+  // Show results in an output channel with full detail.
+  const channel = vscode.window.createOutputChannel("Capix Proof Verification", "log");
+  channel.clear();
+  channel.appendLine("╔════════════════════════════════════════════════════════════╗");
+  channel.appendLine("║           Capix Local Merkle Proof Verification            ║");
+  channel.appendLine("╚════════════════════════════════════════════════════════════╝");
+  channel.appendLine("");
+  channel.appendLine(`Category:        ${pkg.leafCategory}`);
+  channel.appendLine(`Epoch:            ${pkg.epoch}`);
+  channel.appendLine(`Leaf Index:       ${pkg.leafIndex} / ${pkg.leafCount} leaves`);
+  channel.appendLine(`Path Length:      ${pkg.path.length} steps`);
+  channel.appendLine(`Program ID:       ${pkg.programId}`);
+  channel.appendLine(`Cluster:          ${pkg.cluster}`);
+  channel.appendLine(`Tx Signature:      ${pkg.txSignature || "none"}`);
+  channel.appendLine("");
+  channel.appendLine(`Claimed Root:     ${pkg.root}`);
+  channel.appendLine(`Computed Root:    ${verifyResult.computedRoot || "(error)"}`);
+  channel.appendLine("");
+  if (verifyResult.valid) {
+    channel.appendLine("✓ VERIFICATION PASSED — the recomputed root matches the claimed root.");
+  } else {
+    channel.appendLine(`✗ VERIFICATION FAILED — ${verifyResult.error}`);
+  }
+  channel.appendLine("");
+  channel.appendLine("Verification ran locally — no network calls were made for the cryptographic check.");
+  channel.appendLine(`Instructions:     ${pkg.verifyInstructions || "N/A"}`);
+  channel.show();
+
+  if (verifyResult.valid) {
+    vscode.window.showInformationMessage("✓ Proof verified locally — recomputed root matches.");
+  } else {
+    vscode.window.showWarningMessage(`✗ Proof verification failed: ${verifyResult.error}`);
+  }
 }
