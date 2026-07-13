@@ -10,7 +10,10 @@ OUT="$ROOT/release-artifacts"
 NAME="CapixIDE-${VERSION}-${PLATFORM}-${ARCH}-unsigned"
 
 NORMALIZED_VERSION="${VERSION#v}"
-PRODUCT_VERSION="$(node -p "require('$ROOT/product.json').capixVersion")"
+json_capix_version() {
+  node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).capixVersion)" "$1"
+}
+PRODUCT_VERSION="$(json_capix_version "$ROOT/product.json")"
 test "$NORMALIZED_VERSION" = "$PRODUCT_VERSION" || {
   echo "ERROR: release version $NORMALIZED_VERSION does not match product version $PRODUCT_VERSION"
   exit 1
@@ -44,7 +47,7 @@ fi
 
 PACKAGED_PRODUCT="$APP_RESOURCES/product.json"
 test -f "$PACKAGED_PRODUCT" || { echo "ERROR: packaged product.json not found at $PACKAGED_PRODUCT"; exit 1; }
-PACKAGED_VERSION="$(node -p "require('$PACKAGED_PRODUCT').capixVersion")"
+PACKAGED_VERSION="$(json_capix_version "$PACKAGED_PRODUCT")"
 test "$PACKAGED_VERSION" = "$PRODUCT_VERSION" || {
   echo "ERROR: packaged CapixIDE version $PACKAGED_VERSION does not match $PRODUCT_VERSION"
   exit 1
