@@ -85,7 +85,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.os }} ${{ matrix.arch }})
     needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
@@ -95,7 +95,7 @@ jobs:
           - os: macos-14
             platform: darwin
             arch: arm64
-          - os: macos-13
+          - os: macos-14
             platform: darwin
             arch: x64
           - os: ubuntu-latest
@@ -309,7 +309,7 @@ jobs:
     name: Release
     needs: [create-release, build]
     runs-on: ubuntu-latest
-    if: success()
+    if: always() && !cancelled()
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
