@@ -111,6 +111,15 @@ else
   echo "ERROR: Capix routed chat reset patch no longer applies"
   exit 1
 fi
+if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0007-disable-inherited-void-chat.patch" >/dev/null 2>&1; then
+  echo "  done: inherited Void chat already disabled"
+elif git -C "$VSCODE" apply --check "$DIR/patches/0007-disable-inherited-void-chat.patch"; then
+  git -C "$VSCODE" apply "$DIR/patches/0007-disable-inherited-void-chat.patch"
+  echo "  done: inherited Void chat disabled — Capix Code is the sole coding surface"
+else
+  echo "ERROR: inherited Void chat disable patch no longer applies"
+  exit 1
+fi
 for module in capix-auth capix-ai capix-remote capix-onboarding; do
   source_dir="$DIR/src/vs/workbench/contrib/$module"
   if [ ! -d "$source_dir" ]; then

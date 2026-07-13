@@ -1,0 +1,29 @@
+diff --git a/src/vs/workbench/contrib/void/browser/void.contribution.ts b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+--- a/src/vs/workbench/contrib/void/browser/void.contribution.ts
++++ b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+@@ -6,16 +6,18 @@
+ 
+ // register inline diffs
+-import './editCodeService.js'
++// Capix: inline diffs are part of the inherited chat surface.
++// Capix Code provides its own agent runtime — no competing chat needed.
++// import './editCodeService.js'
+ 
+ // register Sidebar pane, state, actions (keybinds, menus) (Ctrl+L)
+-import './sidebarActions.js'
+-import './sidebarPane.js'
++// Capix: disabled the inherited "Chat" sidebar to ensure one canonical coding surface.
++// import './sidebarActions.js'
++// import './sidebarPane.js'
+ 
+ // register quick edit (Ctrl+K)
+-import './quickEditActions.js'
++// import './quickEditActions.js'
+ 
+ 
+ // register Autocomplete
+-import './autocompleteService.js'
++// import './autocompleteService.js'
+ 
+ // register Context services
+ // import './contextGatheringService.js'
