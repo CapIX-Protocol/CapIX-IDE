@@ -65,6 +65,7 @@ class DeploysTreeProvider {
             this.deploys = res.deploys
                 .filter((d) => d.live)
                 .map((d) => {
+                const instance = d.instance;
                 const live = d.live;
                 const state = live.ready ? "running" :
                     live.state === "running" ? "loading" :
@@ -80,7 +81,11 @@ class DeploysTreeProvider {
                     location: live.location,
                     pricePerHr: live.pricePerHr,
                     apiKey: live.apiKey,
-                    instanceRecordId: `llm-${live.instanceId}`,
+                    // Canonical GPU/LLM deployments are saga resources, not SSH-capable
+                    // VMs. Keep their opaque owner-scoped ID so multiple provisioning
+                    // sagas never collapse into the old numeric `instanceId = 0` row.
+                    instanceRecordId: instance.id || `llm-${live.instanceId}`,
+                    canonical: Boolean(instance.id?.startsWith("gpu_")),
                 };
             })
                 .concat(res.deploys
@@ -98,6 +103,7 @@ class DeploysTreeProvider {
                     pricePerHr: 0,
                     apiKey: null,
                     instanceRecordId: inst.id || "",
+                    canonical: Boolean(inst.id?.startsWith("gpu_")),
                 };
             }));
             this.refresh();
@@ -129,7 +135,7 @@ class DeploysTreeProvider {
         }
         return this.deploys.map((d) => {
             const icon = d.state === "running" ? "$(check)" : d.state === "loading" ? "$(loading~spin)" : d.state === "stopped" ? "$(debug-stop)" : d.state === "destroyed" ? "$(trash)" : "$(circle)";
-            const ctxValue = d.state === "running" ? "capix-deploy-running" : d.state === "stopped" ? "capix-deploy-stopped" : d.state === "destroyed" ? "capix-deploy-destroyed" : "capix-deploy";
+            const ctxValue = d.canonical ? "capix-canonical-deploy" : d.state === "running" ? "capix-deploy-running" : d.state === "stopped" ? "capix-deploy-stopped" : d.state === "destroyed" ? "capix-deploy-destroyed" : "capix-deploy";
             const label = `${d.modelLabel} · ${d.state === "loading" ? "provisioning" : d.state}`;
             const desc = d.ready && d.endpoint ? `${d.gpu} · ${d.location} · $${d.pricePerHr.toFixed(2)}/hr` : d.gpu ? `${d.gpu} · ${d.location}` : "";
             const item = new DeployItem(label, ctxValue, vscode.TreeItemCollapsibleState.None);

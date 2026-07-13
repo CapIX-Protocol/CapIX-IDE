@@ -157,6 +157,11 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "capix.downloadSshKey",
+        "title": "Capix: Download SSH Key…",
+        "icon": "$(key)"
+      },
+      {
         "command": "capix.refreshInstances",
         "title": "Capix: Refresh Instances",
         "icon": "$(refresh)"
@@ -347,7 +352,12 @@
         },
         {
           "command": "capix.openTerminal",
-          "when": "viewItem =~ /^capix-deploy/ || viewItem =~ /^capix-instance/ || viewItem =~ /^capix-agent/ || viewItem =~ /^capix-job/",
+          "when": "viewItem =~ /^capix-instance/ || viewItem =~ /^capix-agent/ || viewItem =~ /^capix-job/",
+          "group": "inline"
+        },
+        {
+          "command": "capix.downloadSshKey",
+          "when": "viewItem =~ /^capix-instance/",
           "group": "inline"
         },
         {

@@ -48,6 +48,7 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const node_crypto_1 = require("node:crypto");
 const node_http_1 = require("node:http");
+const promises_1 = require("node:fs/promises");
 const apiClient_1 = require("./apiClient");
 const treeViews_1 = require("./treeViews");
 const cloudPanels_1 = require("./cloudPanels");
@@ -175,7 +176,7 @@ function activate(context) {
     // Cloud panels
     vscode.commands.registerCommand("capix.deployAgent", () => cmdDeployAgent()), vscode.commands.registerCommand("capix.triggerJob", () => cmdTriggerJob()), vscode.commands.registerCommand("capix.createApiKey", () => cmdCreateApiKey()), 
     // Terminal
-    vscode.commands.registerCommand("capix.openTerminal", (item) => cmdOpenTerminal(item)), 
+    vscode.commands.registerCommand("capix.openTerminal", (item) => cmdOpenTerminal(item)), vscode.commands.registerCommand("capix.downloadSshKey", (item) => cmdDownloadSshKey(item)),
     // Covenant
     vscode.commands.registerCommand("capix.covenantEdit", () => covenant.createSpiritFile()), vscode.commands.registerCommand("capix.covenantRemember", () => cmdCovenantRemember()), vscode.commands.registerCommand("capix.covenantClear", () => {
         covenant.clearMemory();
@@ -754,7 +755,9 @@ async function cmdOpenTerminal(item) {
     }
     if (instanceId?.startsWith("dep_")) {
         try {
-            const credential = await client.getStoredSshCredential(instanceId);
+            const credential = await getOrRecoverSshCredential(instanceId);
+            if (!credential)
+                return;
             await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label, privateKey: credential.privateKey });
         }
         catch (error) {
@@ -775,23 +778,76 @@ async function cmdOpenTerminal(item) {
         return;
     }
     const pick = await vscode.window.showQuickPick(instancesProvider.instances.map((inst) => {
-        const node = inst.nodes.find((n) => n.sshHost);
+        const node = inst.nodes.find((n) => n.sshAvailable) || inst.nodes[0];
         return {
             label: inst.tier,
-            description: `${inst.status} · ${node?.location || ""}`,
+            description: `${inst.status} · ${node?.location || "Capix network"}`,
             deploymentId: inst.id,
-            host: node?.sshHost,
-            port: node?.sshPort,
         };
-    }).filter((p) => p.host), { placeHolder: "Select an instance to SSH into" });
+    }).filter((p) => p.deploymentId.startsWith("dep_")), { placeHolder: "Select an instance to SSH into" });
     if (pick?.deploymentId) {
         try {
-            const credential = await client.getStoredSshCredential(pick.deploymentId);
+            const credential = await getOrRecoverSshCredential(pick.deploymentId);
+            if (!credential)
+                return;
             await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label: pick.label, privateKey: credential.privateKey });
         }
         catch (error) {
             vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
         }
+    }
+}
+async function getOrRecoverSshCredential(deploymentId) {
+    try {
+        return await client.getStoredSshCredential(deploymentId);
+    }
+    catch (error) {
+        if (!(error instanceof apiClient_1.CapixApiError) || error.status !== 410)
+            throw error;
+        const rotate = await vscode.window.showWarningMessage("This instance's previous SSH key is no longer retrievable. Rotate it and revoke the old key?", { modal: true, detail: "Capix will install a new public key on the running instance before releasing its matching private key." }, "Rotate SSH key");
+        if (rotate !== "Rotate SSH key")
+            return null;
+        await client.rotateSshCredential(deploymentId);
+        return client.getStoredSshCredential(deploymentId);
+    }
+}
+async function cmdDownloadSshKey(item) {
+    const directId = item?._instanceId;
+    let deploymentId = directId;
+    let label = item?.label || "Capix instance";
+    if (!deploymentId) {
+        await instancesProvider.load();
+        const pick = await vscode.window.showQuickPick(instancesProvider.instances
+            .filter((instance) => instance.id.startsWith("dep_"))
+            .map((instance) => ({ label: instance.tier, description: instance.status, deploymentId: instance.id })), { placeHolder: "Select an instance whose SSH key you want to save" });
+        if (!pick)
+            return;
+        deploymentId = pick.deploymentId;
+        label = pick.label;
+    }
+    if (!deploymentId?.startsWith("dep_")) {
+        vscode.window.showErrorMessage("SSH access is only available for compute instances.");
+        return;
+    }
+    try {
+        const credential = await getOrRecoverSshCredential(deploymentId);
+        if (!credential)
+            return;
+        const destination = await vscode.window.showSaveDialog({
+            title: `Save SSH key for ${label}`,
+            defaultUri: vscode.Uri.file(credential.filename),
+            filters: { "SSH private key": ["pem"] },
+            saveLabel: "Save SSH key",
+        });
+        if (!destination)
+            return;
+        await vscode.workspace.fs.writeFile(destination, Buffer.from(credential.privateKey.endsWith("\n") ? credential.privateKey : `${credential.privateKey}\n`, "utf8"));
+        if (destination.scheme === "file")
+            await (0, promises_1.chmod)(destination.fsPath, 0o600);
+        vscode.window.showInformationMessage(`SSH key saved securely to ${destination.fsPath || destination.path}.`);
+    }
+    catch (error) {
+        vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
     }
 }
 // Covenant: add a memory entry

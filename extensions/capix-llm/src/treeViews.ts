@@ -18,7 +18,7 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
   private _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChange.event;
 
-  public deploys: Array<{ instanceId: number; modelLabel: string; state: DeployState; endpoint: string | null; ready: boolean; gpu: string; location: string; pricePerHr: number; apiKey: string | null; instanceRecordId: string }> = [];
+  public deploys: Array<{ instanceId: number; modelLabel: string; state: DeployState; endpoint: string | null; ready: boolean; gpu: string; location: string; pricePerHr: number; apiKey: string | null; instanceRecordId: string; canonical: boolean }> = [];
 
   constructor(private client: CapixClient) {}
 
@@ -33,6 +33,7 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
       this.deploys = (res.deploys
         .filter((d) => d.live)
         .map((d) => {
+          const instance = d.instance as { id?: string };
           const live = d.live!;
           const state: DeployState =
             live.ready ? "running" :
@@ -49,9 +50,13 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
             location: live.location,
             pricePerHr: live.pricePerHr,
             apiKey: live.apiKey,
-            instanceRecordId: `llm-${live.instanceId}`,
+            // Canonical GPU/LLM deployments are saga resources, not SSH-capable
+            // VMs. Keep their opaque owner-scoped ID so multiple provisioning
+            // sagas never collapse into the old numeric `instanceId = 0` row.
+            instanceRecordId: instance.id || `llm-${live.instanceId}`,
+            canonical: Boolean(instance.id?.startsWith("gpu_")),
           };
-        }) as { instanceId: number; modelLabel: string; state: DeployState; endpoint: string | null; ready: boolean; gpu: string; location: string; pricePerHr: number; apiKey: string | null; instanceRecordId: string }[])
+        }) as { instanceId: number; modelLabel: string; state: DeployState; endpoint: string | null; ready: boolean; gpu: string; location: string; pricePerHr: number; apiKey: string | null; instanceRecordId: string; canonical: boolean }[])
         .concat(
           (res.deploys
             .filter((d) => !d.live)
@@ -68,8 +73,9 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
                 pricePerHr: 0,
                 apiKey: null,
                 instanceRecordId: inst.id || "",
+                canonical: Boolean(inst.id?.startsWith("gpu_")),
               };
-            }) as { instanceId: number; modelLabel: string; state: DeployState; endpoint: string | null; ready: boolean; gpu: string; location: string; pricePerHr: number; apiKey: string | null; instanceRecordId: string }[])
+            }) as { instanceId: number; modelLabel: string; state: DeployState; endpoint: string | null; ready: boolean; gpu: string; location: string; pricePerHr: number; apiKey: string | null; instanceRecordId: string; canonical: boolean }[])
         );
       this.refresh();
     } catch (err) {
@@ -98,7 +104,7 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
     }
     return this.deploys.map((d) => {
       const icon = d.state === "running" ? "$(check)" : d.state === "loading" ? "$(loading~spin)" : d.state === "stopped" ? "$(debug-stop)" : d.state === "destroyed" ? "$(trash)" : "$(circle)";
-      const ctxValue = d.state === "running" ? "capix-deploy-running" : d.state === "stopped" ? "capix-deploy-stopped" : d.state === "destroyed" ? "capix-deploy-destroyed" : "capix-deploy";
+      const ctxValue = d.canonical ? "capix-canonical-deploy" : d.state === "running" ? "capix-deploy-running" : d.state === "stopped" ? "capix-deploy-stopped" : d.state === "destroyed" ? "capix-deploy-destroyed" : "capix-deploy";
       const label = `${d.modelLabel} · ${d.state === "loading" ? "provisioning" : d.state}`;
       const desc = d.ready && d.endpoint ? `${d.gpu} · ${d.location} · $${d.pricePerHr.toFixed(2)}/hr` : d.gpu ? `${d.gpu} · ${d.location}` : "";
       const item = new DeployItem(label, ctxValue, vscode.TreeItemCollapsibleState.None);

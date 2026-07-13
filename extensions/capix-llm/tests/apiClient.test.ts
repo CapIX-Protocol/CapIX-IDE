@@ -359,6 +359,39 @@ describe("CapixClient", () => {
       expect(JSON.parse(secrets.get("capix.ssh.dep_1")!)).toEqual(credential);
     });
 
+    it("rotates an expired SSH credential only after the replacement was installed", async () => {
+      const secrets = new Map<string, string>([
+        ["capix.sessionToken", "cpxs_session"],
+        ["capix.ssh.dep_1", JSON.stringify({ host: "old", port: 22, privateKey: "-----BEGIN PRIVATE KEY-----\nold" })],
+      ]);
+      const storage = {
+        get: vi.fn(async (key: string) => secrets.get(key)),
+        store: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+        delete: vi.fn(async (key: string) => { secrets.delete(key); }),
+      };
+      client.setSecretStorage(storage);
+      fetchMock.mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ rotated: true, oldKeyRevokedOnInstance: true }),
+      });
+
+      await expect(client.rotateSshCredential("dep_1")).resolves.toEqual({ rotated: true, oldKeyRevokedOnInstance: true });
+      expect(fetchMock.mock.calls[0][0]).toBe("https://www.capix.network/api/v1/deployments/dep_1/ssh/rotate");
+      expect(storage.delete).toHaveBeenCalledWith("capix.ssh.dep_1");
+    });
+
+    it("does not accept a replacement SSH key that was not installed", async () => {
+      client.setSecretStorage(createMockSecretStorage("cpxs_session"));
+      fetchMock.mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ rotated: true, oldKeyRevokedOnInstance: false }),
+      });
+
+      await expect(client.rotateSshCredential("dep_1")).rejects.toMatchObject({ status: 409 });
+    });
+
     it("lists deployments from the canonical owner-scoped GPU saga endpoint", async () => {
       client.setSecretStorage(createMockSecretStorage("cpxs_session"));
       fetchMock.mockResolvedValueOnce({status:200,ok:true,json:vi.fn().mockResolvedValue({ok:true,sagas:[{sagaId:"gpu_1",state:"ALLOCATING",assetId:null,workload:"llm",modelId:"supergemma",expiresAt:"2026-07-12T00:00:00.000Z",createdAt:"2026-07-11T00:00:00.000Z"}]})});
@@ -438,7 +471,7 @@ describe("CapixClient", () => {
             phase: "RUNNING",
             createdAt: "2026-07-12T00:00:00.000Z",
             workloadSpec: { kind: "cpu", name: "Customer VM" },
-            allocations: [],
+            allocations: [{ id: "alloc_1", region: "eu", sshAvailable: true }],
           }],
         }),
       });
@@ -447,6 +480,7 @@ describe("CapixClient", () => {
 
       expect(fetchMock.mock.calls[0][0]).toBe("https://www.capix.network/api/v1/deployments?limit=100");
       expect(result.instances[0]).toMatchObject({ id: "dep_1", tier: "Customer VM", status: "running" });
+      expect(result.instances[0].nodes[0]).toMatchObject({ nodeId: "alloc_1", location: "eu", sshAvailable: true, sshHost: null });
     });
 
     it("recovers when another IDE window wins refresh-token rotation", async () => {

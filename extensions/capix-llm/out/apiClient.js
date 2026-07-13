@@ -472,6 +472,25 @@ class CapixClient {
         await this._secretStorage.store(storageKey, JSON.stringify(credential));
         return credential;
     }
+    /**
+     * Explicitly rotate an unavailable deployment key. Rotation is never an
+     * automatic retry: the caller must obtain customer confirmation because it
+     * revokes the previous key on the instance.
+     */
+    async rotateSshCredential(deploymentId) {
+        const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/deployments/${encodeURIComponent(deploymentId)}/ssh/rotate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Idempotency-Key": (0, node_crypto_1.randomUUID)() },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok)
+            throw new CapixApiError(res.status, data.detail || data.error || "SSH key rotation failed.");
+        if (!data.rotated || !data.oldKeyRevokedOnInstance) {
+            throw new CapixApiError(409, "The new SSH key could not be installed on the instance. The existing key was not replaced.");
+        }
+        await this._secretStorage?.delete(`capix.ssh.${deploymentId}`);
+        return { rotated: true, oldKeyRevokedOnInstance: true };
+    }
     // ── Deploy quote (for showing per-minute costs) ────────────────────────
     async getQuote(tierId, hours) {
         return this.get(`/api/cloud/deploy/quote?tierId=${tierId}&hours=${hours}&asset=SOL`);
