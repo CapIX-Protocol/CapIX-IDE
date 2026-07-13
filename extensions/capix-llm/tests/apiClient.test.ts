@@ -320,6 +320,45 @@ describe("CapixClient", () => {
   });
 
   describe("secret storage convenience methods", () => {
+    it("reuses a deployment SSH credential from OS SecretStorage", async () => {
+      const credential = { host: "203.0.113.10", port: 22, privateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----", filename: "dep_1.pem" };
+      const secrets = new Map([["capix.ssh.dep_1", JSON.stringify(credential)]]);
+      client.setSecretStorage({
+        get: vi.fn(async (key: string) => secrets.get(key)),
+        store: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+        delete: vi.fn(async (key: string) => { secrets.delete(key); }),
+      });
+
+      await expect(client.getStoredSshCredential("dep_1")).resolves.toEqual(credential);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("stores a first-use SSH credential in OS SecretStorage", async () => {
+      const secrets = new Map<string, string>([["capix.sessionToken", "cpxs_session"]]);
+      const storage = {
+        get: vi.fn(async (key: string) => secrets.get(key)),
+        store: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+        delete: vi.fn(async (key: string) => { secrets.delete(key); }),
+      };
+      client.setSecretStorage(storage);
+      fetchMock.mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        headers: { get: (name: string) => ({
+          "content-type": "application/x-pem-file",
+          "x-capix-ssh-host": "203.0.113.10",
+          "x-capix-ssh-port": "22",
+          "x-capix-ssh-filename": "dep_1.pem",
+        } as Record<string, string>)[name.toLowerCase()] ?? null },
+        text: vi.fn().mockResolvedValue("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----"),
+      });
+
+      const credential = await client.getStoredSshCredential("dep_1");
+
+      expect(credential.host).toBe("203.0.113.10");
+      expect(JSON.parse(secrets.get("capix.ssh.dep_1")!)).toEqual(credential);
+    });
+
     it("lists deployments from the canonical owner-scoped GPU saga endpoint", async () => {
       client.setSecretStorage(createMockSecretStorage("cpxs_session"));
       fetchMock.mockResolvedValueOnce({status:200,ok:true,json:vi.fn().mockResolvedValue({ok:true,sagas:[{sagaId:"gpu_1",state:"ALLOCATING",assetId:null,workload:"llm",modelId:"supergemma",expiresAt:"2026-07-12T00:00:00.000Z",createdAt:"2026-07-11T00:00:00.000Z"}]})});

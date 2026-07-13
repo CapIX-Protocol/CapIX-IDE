@@ -427,6 +427,37 @@ export class CapixClient {
     return { host, port, privateKey, filename };
   }
 
+  /**
+   * Return the deployment credential from the OS credential store, retrieving
+   * it from the control plane only on first use. This makes SSH reliably
+   * reusable without repeatedly exposing the private key over the network.
+   */
+  async getStoredSshCredential(deploymentId: string): Promise<{ host: string; port: number; privateKey: string; filename: string }> {
+    if (!this._secretStorage) throw new Error("OS SecretStorage is unavailable");
+    const storageKey = `capix.ssh.${deploymentId}`;
+    const stored = await this._secretStorage.get(storageKey);
+    if (stored) {
+      try {
+        const credential = JSON.parse(stored) as { host?: string; port?: number; privateKey?: string; filename?: string };
+        if (credential.host && Number.isInteger(credential.port) && credential.privateKey?.includes("PRIVATE KEY")) {
+          return {
+            host: credential.host,
+            port: Number(credential.port),
+            privateKey: credential.privateKey,
+            filename: credential.filename || `${deploymentId}.pem`,
+          };
+        }
+      } catch {
+        // Corrupt local material is removed and recovered from the server.
+      }
+      await this._secretStorage.delete(storageKey);
+    }
+
+    const credential = await this.retrieveSshCredential(deploymentId);
+    await this._secretStorage.store(storageKey, JSON.stringify(credential));
+    return credential;
+  }
+
   // ── Deploy quote (for showing per-minute costs) ────────────────────────
   async getQuote(tierId: string, hours: number): Promise<{ ok: boolean; quote?: { amountUsd: number; assetPrice: number } }> {
     return this.get(`/api/cloud/deploy/quote?tierId=${tierId}&hours=${hours}&asset=SOL`);

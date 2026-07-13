@@ -817,13 +817,7 @@ async function cmdOpenTerminal(item?: unknown) {
   const sshPort = (item as { _sshPort?: number })?._sshPort;
   const sshCommand = (item as { _sshCommand?: string })?._sshCommand;
   const instanceId = (item as { _instanceId?: string })?._instanceId;
-  const sshAvailable = (item as { _sshAvailable?: boolean })?._sshAvailable;
   const label = (item as { label?: string })?.label || "instance";
-
-  if (sshHost && sshPort) {
-    await terminalManager.openSshSession({ host: sshHost, port: sshPort, label });
-    return;
-  }
 
   // If it's a plain command string (agents/jobs store full ssh commands)
   if (sshCommand) {
@@ -836,18 +830,17 @@ async function cmdOpenTerminal(item?: unknown) {
   }
 
   if (instanceId?.startsWith("dep_")) {
-    if (!sshAvailable) {
-      vscode.window.showWarningMessage("SSH access for this instance is unavailable or its one-time key was already retrieved.", "Open instance").then((action) => {
-        if (action === "Open instance") vscode.commands.executeCommand("capix.openInstance", instanceId);
-      });
-      return;
-    }
     try {
-      const credential = await client.retrieveSshCredential(instanceId);
+      const credential = await client.getStoredSshCredential(instanceId);
       await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label, privateKey: credential.privateKey });
     } catch (error) {
       vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
     }
+    return;
+  }
+
+  if (sshHost && sshPort) {
+    await terminalManager.openSshSession({ host: sshHost, port: sshPort, label });
     return;
   }
 
@@ -864,14 +857,20 @@ async function cmdOpenTerminal(item?: unknown) {
       return {
         label: inst.tier,
         description: `${inst.status} · ${node?.location || ""}`,
+        deploymentId: inst.id,
         host: node?.sshHost,
         port: node?.sshPort,
       };
     }).filter((p) => p.host),
     { placeHolder: "Select an instance to SSH into" },
   );
-  if (pick?.host && pick.port) {
-    await terminalManager.openSshSession({ host: pick.host, port: pick.port, label: pick.label });
+  if (pick?.deploymentId) {
+    try {
+      const credential = await client.getStoredSshCredential(pick.deploymentId);
+      await terminalManager.openSshSession({ host: credential.host, port: credential.port, user: "root", label: pick.label, privateKey: credential.privateKey });
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : "Unable to retrieve SSH access.");
+    }
   }
 }
 
