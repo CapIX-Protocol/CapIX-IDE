@@ -88,6 +88,7 @@ jobs:
     name: Build (${{ matrix.os }} ${{ matrix.arch }})
     needs: create-release
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -98,6 +99,7 @@ jobs:
           - os: macos-14
             platform: darwin
             arch: x64
+            experimental: true
           - os: ubuntu-latest
             platform: linux
             arch: x64
