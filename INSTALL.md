@@ -14,7 +14,7 @@ Never continue when a downloaded artifact does not match its adjacent SHA-256 fi
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v1.2.8
+IDE_VERSION=v1.2.0-intelligence
 IDE_ARCH=arm64
 IDE_NAME="CapixIDE-${IDE_VERSION}-darwin-${IDE_ARCH}-unsigned"
 IDE_URL="https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/${IDE_VERSION}"
@@ -29,23 +29,21 @@ test "${ACTUAL}" = "${EXPECTED}" || { echo "Checksum mismatch — do not install
 
 tar -xzf "${IDE_NAME}.tar.gz"
 ditto CapixIDE.app /Applications/CapixIDE.app
-open -a CapixIDE
+open /Applications/CapixIDE.app
 ```
 
 The app is unsigned. On the first launch, control-click **CapixIDE** in Applications, choose **Open**, then choose **Open** again. If macOS continues to quarantine the verified app:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/CapixIDE.app
-open -a CapixIDE
+open /Applications/CapixIDE.app
 ```
 
 ### CapixIDE — Intel Mac
 
-Use the same commands with:
-
-```bash
-IDE_ARCH=x64
-```
+There is no verified Intel macOS artifact in the current customer release. Do
+not substitute the Apple silicon archive. Intel builds remain unavailable
+until a matching archive and SHA-256 file are published on the Releases page.
 
 ### Capix Code — Apple silicon
 
@@ -86,17 +84,18 @@ CODE_ARCH=x64
 
 ## Linux
 
-The commands support x86_64 and arm64 distributions. They install into the current user's home directory and do not require sudo.
+The current verified CapixIDE customer artifact supports x86_64 Linux. Capix
+Code supports both x86_64 and arm64. These commands install into the current
+user's home directory and do not require sudo.
 
 ### CapixIDE
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v1.2.8
+IDE_VERSION=v1.2.0-intelligence
 case "$(uname -m)" in
   x86_64) IDE_ARCH=x64 ;;
-  aarch64|arm64) IDE_ARCH=arm64 ;;
-  *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+  *) echo "No verified CapixIDE artifact is published for this Linux architecture"; exit 1 ;;
 esac
 IDE_NAME="CapixIDE-${IDE_VERSION}-linux-${IDE_ARCH}-unsigned"
 IDE_URL="https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/${IDE_VERSION}"
@@ -166,7 +165,7 @@ Open **PowerShell** as the normal user. Administrator access is not required.
 
 ```powershell
 $ErrorActionPreference = "Stop"
-$IdeVersion = "v1.2.8"
+$IdeVersion = "v1.2.0-intelligence"
 $IdeName = "CapixIDE-$IdeVersion-win32-x64-unsigned"
 $IdeUrl = "https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/$IdeVersion"
 $Download = Join-Path $env:USERPROFILE "Downloads"
