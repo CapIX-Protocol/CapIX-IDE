@@ -41,9 +41,14 @@ open /Applications/CapixIDE.app
 
 ### CapixIDE — Intel Mac
 
-There is no verified Intel macOS artifact in the current customer release. Do
-not substitute the Apple silicon archive. Intel builds remain unavailable
-until a matching archive and SHA-256 file are published on the Releases page.
+The current customer release includes a separately built and checksummed Intel
+artifact. Use the Apple-silicon commands above with:
+
+```bash
+IDE_ARCH=x64
+```
+
+Do not substitute the Apple-silicon archive on an Intel Mac.
 
 ### Capix Code — Apple silicon
 
