@@ -14,7 +14,7 @@ Never continue when a downloaded artifact does not match its adjacent SHA-256 fi
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v1.2.9
+IDE_VERSION=v1.2.10
 IDE_ARCH=arm64
 IDE_NAME="CapixIDE-${IDE_VERSION}-darwin-${IDE_ARCH}-unsigned"
 IDE_URL="https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/${IDE_VERSION}"
@@ -92,7 +92,7 @@ user's home directory and do not require sudo.
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v1.2.9
+IDE_VERSION=v1.2.10
 case "$(uname -m)" in
   x86_64) IDE_ARCH=x64 ;;
   *) echo "No verified CapixIDE artifact is published for this Linux architecture"; exit 1 ;;
@@ -165,7 +165,7 @@ Open **PowerShell** as the normal user. Administrator access is not required.
 
 ```powershell
 $ErrorActionPreference = "Stop"
-$IdeVersion = "v1.2.9"
+$IdeVersion = "v1.2.10"
 $IdeName = "CapixIDE-$IdeVersion-win32-x64-unsigned"
 $IdeUrl = "https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/$IdeVersion"
 $Download = Join-Path $env:USERPROFILE "Downloads"

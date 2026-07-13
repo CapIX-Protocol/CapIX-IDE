@@ -27,20 +27,23 @@ if [ "$PLATFORM" = darwin ]; then
     exit 1
   }
   CONTENT="$APP"
+  APP_RESOURCES="$APP/Contents/Resources/app"
 elif [ "$PLATFORM" = win32 ]; then
   CONTENT="$BUILD_ROOT"
+  APP_RESOURCES="$CONTENT/resources/app"
   find "$CONTENT" -maxdepth 2 -type f -iname 'CapixIDE.exe' -print -quit | grep -q . || {
     echo "ERROR: missing Windows executable"; exit 1;
   }
 else
   CONTENT="$BUILD_ROOT"
+  APP_RESOURCES="$CONTENT/resources/app"
   find "$CONTENT" -maxdepth 3 -type f \( -name 'capix' -o -name 'capixide' \) -perm -111 -print -quit | grep -q . || {
     echo "ERROR: missing Linux executable"; exit 1;
   }
 fi
 
-PACKAGED_PRODUCT="$(find "$CONTENT" -type f -path '*/resources/app/product.json' -print -quit)"
-test -n "$PACKAGED_PRODUCT" || { echo "ERROR: packaged product.json not found"; exit 1; }
+PACKAGED_PRODUCT="$APP_RESOURCES/product.json"
+test -f "$PACKAGED_PRODUCT" || { echo "ERROR: packaged product.json not found at $PACKAGED_PRODUCT"; exit 1; }
 PACKAGED_VERSION="$(node -p "require('$PACKAGED_PRODUCT').capixVersion")"
 test "$PACKAGED_VERSION" = "$PRODUCT_VERSION" || {
   echo "ERROR: packaged CapixIDE version $PACKAGED_VERSION does not match $PRODUCT_VERSION"
@@ -48,8 +51,8 @@ test "$PACKAGED_VERSION" = "$PRODUCT_VERSION" || {
 }
 
 for extension in capix-llm capix-cloud capix-workspace capix-agent-ui capix-intelligence; do
-  MANIFEST="$(find "$CONTENT" -type f -path "*/extensions/$extension/package.json" -print -quit)"
-  test -n "$MANIFEST" || { echo "ERROR: missing built-in $extension manifest"; exit 1; }
+  MANIFEST="$APP_RESOURCES/extensions/$extension/package.json"
+  test -f "$MANIFEST" || { echo "ERROR: missing built-in $extension manifest at $MANIFEST"; exit 1; }
   test -f "$(dirname "$MANIFEST")/out/extension.js" || {
     echo "ERROR: missing compiled built-in $extension/out/extension.js"; exit 1;
   }
