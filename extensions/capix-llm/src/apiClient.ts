@@ -336,7 +336,7 @@ export class CapixClient {
   // ── Wallet balance ────────────────────────────────────────────────────
   async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; transactions?: unknown[]; updatedAt?: string; activeInstances?: number; totalSpent?: number; instances?: unknown[]; error?: string }> {
     const [result, inventory] = await Promise.all([
-      this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; transactions?: unknown[]; error?: string }>("/api/v1/billing"),
+      this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; valuation?: { usdTotal?: number }; transactions?: unknown[]; error?: string }>("/api/v1/billing"),
       this.listInstances(),
     ]);
     if (!result.ok) return result;
@@ -352,7 +352,7 @@ export class CapixClient {
     const activeInstances = inventory.instances.filter((instance) => !["terminated", "deleted", "destroyed"].includes(instance.status)).length;
     return {
       ok: true,
-      balance: { usd: usdc, sol, usdc },
+      balance: { usd: Number.isFinite(Number(result.valuation?.usdTotal)) ? Number(result.valuation?.usdTotal) : usdc, sol, usdc },
       transactions,
       updatedAt: new Date().toISOString(),
       activeInstances,
