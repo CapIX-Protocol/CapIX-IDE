@@ -7,6 +7,7 @@
 import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import type { CatalogModel, GpuOffer, LlmDeploy, HostedEndpoint, DeployResult } from "./types";
+import { minorToDisplay, sumMinor } from "./moneyUtils";
 
 export class CapixClient {
   static readonly PRODUCTION_BASE_URL = "https://www.capix.network";
@@ -334,25 +335,28 @@ export class CapixClient {
   }
 
   // ── Wallet balance ────────────────────────────────────────────────────
-  async getBalance(): Promise<{ ok: boolean; balance?: { usd: number; sol: number; usdc: number }; transactions?: unknown[]; updatedAt?: string; activeInstances?: number; totalSpent?: number; instances?: unknown[]; error?: string }> {
+  async getBalance(): Promise<{ ok: boolean; balance?: { usd: string; sol: string; usdc: string }; transactions?: unknown[]; updatedAt?: string; activeInstances?: number; totalSpent?: string; instances?: unknown[]; error?: string }> {
     const [result, inventory] = await Promise.all([
-      this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; transactions?: unknown[]; error?: string }>("/api/v1/billing"),
+      this.get<{ ok: boolean; balances?: { SOL?: { available?: string }; USDC?: { available?: string } }; valuation?: { usdTotal?: number }; transactions?: unknown[]; error?: string }>("/api/v1/billing"),
       this.listInstances(),
     ]);
     if (!result.ok) return result;
-    const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
-    const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
+    const sol = minorToDisplay(result.balances?.SOL?.available || "0", 9, 4);
+    const usdc = minorToDisplay(result.balances?.USDC?.available || "0", 6, 2);
     const transactions = result.transactions || [];
-    const totalSpent = transactions.reduce<number>((sum, entry) => {
-      if (!entry || typeof entry !== "object") return sum;
+    const debitEntries = transactions.reduce<Array<{ amount: string; scale: number }>>((acc, entry) => {
+      if (!entry || typeof entry !== "object") return acc;
       const row = entry as { postingType?: string; posting_type?: string; amount?: string | number; asset?: string; scale?: number };
-      if ((row.postingType ?? row.posting_type) !== "debit" || row.asset !== "USDC") return sum;
-      return sum + Number(row.amount || 0) / 10 ** Number(row.scale ?? 6);
-    }, 0);
+      if ((row.postingType ?? row.posting_type) !== "debit" || row.asset !== "USDC") return acc;
+      acc.push({ amount: String(row.amount || "0"), scale: Number(row.scale ?? 6) });
+      return acc;
+    }, []);
+    const spentSum = sumMinor(debitEntries);
+    const totalSpent = minorToDisplay(spentSum.amount.toString(), spentSum.scale, 2);
     const activeInstances = inventory.instances.filter((instance) => !["terminated", "deleted", "destroyed"].includes(instance.status)).length;
     return {
       ok: true,
-      balance: { usd: usdc, sol, usdc },
+      balance: { usd: Number.isFinite(Number(result.valuation?.usdTotal)) ? Number(result.valuation?.usdTotal).toFixed(2) : usdc, sol, usdc },
       transactions,
       updatedAt: new Date().toISOString(),
       activeInstances,

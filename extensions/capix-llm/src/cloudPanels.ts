@@ -13,6 +13,7 @@
 import * as vscode from "vscode";
 import { CapixClient } from "./apiClient";
 import { logger } from "./logger";
+import { dollarsToMicro, microToDisplay } from "./moneyUtils";
 
 // ── Shared types for cloud resources ───────────────────────────────────────
 interface CloudInstance {
@@ -78,7 +79,7 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
         `capix-instance-${inst.status}`,
         vscode.TreeItemCollapsibleState.None,
       );
-      item.description = `${inst.status} · $${inst.costUsdPerHour.toFixed(2)}/hr`;
+      item.description = `${inst.status} · $${microToDisplay(dollarsToMicro(inst.costUsdPerHour), 2)}/hr`;
       item.iconPath = new vscode.ThemeIcon(
         inst.status === "running" ? "$(vm-active)" :
         inst.status === "stopped" ? "$(vm-outline)" : "$(vm-connect)",

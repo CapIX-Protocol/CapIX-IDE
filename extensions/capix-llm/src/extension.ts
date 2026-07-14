@@ -17,6 +17,10 @@ import { CapixApiError, CapixClient } from "./apiClient";
 import { DeploysTreeProvider, CatalogTreeProvider, HostedTreeProvider } from "./treeViews";
 import { InstancesTreeProvider, AgentsTreeProvider, JobsTreeProvider, ApiKeysTreeProvider } from "./cloudPanels";
 import { ProfileViewProvider } from "./profileView";
+import { CloudDashboardProvider } from "./cloudDashboard";
+import { CapixCodePanelProvider } from "./capixCodePanel";
+import { applyLayout, pickAndApplyLayout, restorePersistedLayout } from "./layoutPresets";
+import { defaultDestination, pickDestination, switchDestination } from "./activityBar";
 import { resetSessionAndSignIn } from "./authRecovery";
 import { OAuthCallbackGuard } from "./oauthCallbackGuard";
 import { TerminalManager } from "./terminalManager";
@@ -28,8 +32,18 @@ import { logger } from "./logger";
 import { initTelemetry } from "./telemetry";
 import type { CatalogModel } from "./types";
 import { AgentCommandBridge } from "./agentCommandBridge";
+import { McpAutoInstaller } from "./mcpAutoInstall";
+import { RunOnSelector, runOnLabel } from "./runOnSelector";
+import { DeploymentWizard } from "./deploymentWizard";
+import { ResourceDetailsProvider } from "./resourceDetails";
+import { OnboardingFlow } from "./onboarding";
+import { ModelSync } from "./modelSync";
+import { ModelPicker } from "./modelPicker";
+import { IntelligencePanelProvider } from "./intelligencePanel";
+import { dollarsToMicro, microToDisplay } from "./moneyUtils";
 
 let client: CapixClient;
+let mcpAutoInstaller: McpAutoInstaller;
 let deploysProvider: DeploysTreeProvider;
 let catalogProvider: CatalogTreeProvider;
 let hostedProvider: HostedTreeProvider;
@@ -38,11 +52,22 @@ let agentsProvider: AgentsTreeProvider;
 let jobsProvider: JobsTreeProvider;
 let apiKeysProvider: ApiKeysTreeProvider;
 let profileProvider: ProfileViewProvider;
+let cloudDashboardProvider: CloudDashboardProvider;
+let capixCodeProvider: CapixCodePanelProvider;
 let terminalManager: TerminalManager;
 let autoConnect: AutoConnectManager;
 let covenant: CovenantManager;
 let devTokens: DevTokenManager;
 let smartRouter: SmartRouterManager;
+let runOnSelector: RunOnSelector;
+let deploymentWizard: DeploymentWizard;
+let resourceDetailsProvider: ResourceDetailsProvider;
+let modelSync: ModelSync;
+let modelPicker: ModelPicker;
+let onboarding: OnboardingFlow;
+let intelligencePanel: IntelligencePanelProvider;
+let runOnStatusBarItem: vscode.StatusBarItem | null = null;
+let modelStatusBarItem: vscode.StatusBarItem | null = null;
 let refreshTimer: vscode.Disposable | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -55,11 +80,23 @@ export function activate(context: vscode.ExtensionContext) {
     store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
     delete: (key) => Promise.resolve(context.secrets.delete(key)),
   });
+  // ── MCP Auto-Installer: zero-config MCP server registration ────────────
+  mcpAutoInstaller = new McpAutoInstaller(client, context);
+
   client.setOAuthAccessTokenHandler(async (accessToken) => {
     // The workbench stores this short-lived OAuth token using its encrypted
     // application storage and selects Capix routed inference (`auto`). Portal
     // API keys are deliberately not copied into the desktop application.
     await vscode.commands.executeCommand(accessToken ? "capix.chat.configure" : "capix.chat.clear", ...(accessToken ? [accessToken] : []));
+    // Zero-config MCP: ensure the Capix MCP server is registered (with the
+    // inherited token) on every credential publish, and stripped on sign-out.
+    // The handler is deduped upstream (publishOAuthAccessToken), so this only
+    // fires on genuine token changes — restart included.
+    if (accessToken) {
+      void mcpAutoInstaller.ensureInstalled();
+    } else {
+      void mcpAutoInstaller.unregister();
+    }
   });
 
   // ── Tree views ────────────────────────────────────────────────────────
@@ -71,12 +108,31 @@ export function activate(context: vscode.ExtensionContext) {
   jobsProvider = new JobsTreeProvider(client);
   apiKeysProvider = new ApiKeysTreeProvider(client);
   profileProvider = new ProfileViewProvider(client, context.extensionUri);
+  cloudDashboardProvider = new CloudDashboardProvider(client, context.extensionUri);
+  capixCodeProvider = new CapixCodePanelProvider(client, context.extensionUri, context.extensionPath);
   terminalManager = new TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
   autoConnect = new AutoConnectManager(client);
   covenant = new CovenantManager(context);
   devTokens = new DevTokenManager(client);
   smartRouter = new SmartRouterManager(client);
+  runOnSelector = new RunOnSelector(context);
+  deploymentWizard = new DeploymentWizard(client);
+  resourceDetailsProvider = new ResourceDetailsProvider(client, context.extensionUri);
   context.subscriptions.push(new AgentCommandBridge(client).register());
+
+  // ── Unified Intelligence panel ───────────────────────────────────────
+  // One webview view replaces all scattered intelligence views (memory tree,
+  // graph tree, skills runtime, covenants accordion, agents tree, plans tree,
+  // receipts tree). Registered as `capix.intelligence.panel`.
+  intelligencePanel = new IntelligencePanelProvider(client, context.extensionUri);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider("capix.intelligence.panel", intelligencePanel),
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("capix.intelligence.openPanel", (tab?: string) =>
+      intelligencePanel.show((tab as "overview" | "memory" | "graph" | "skills" | "agents" | "covenant" | "receipts") ?? "overview"),
+    ),
+  );
 
   // ── Dev Token: auto-mint on git commits ────────────────────────────────
   // Watch the VS Code SCM (git) state — when HEAD changes, a commit happened.
@@ -112,7 +168,25 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()),
     deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView,
     vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider),
+    vscode.window.registerWebviewViewProvider("capix.cloud.overview", cloudDashboardProvider),
+    vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider),
+    vscode.window.registerWebviewViewProvider("capix.cloud.resource", resourceDetailsProvider),
   );
+
+  // ── Run-On target: status bar + change handler ──────────────────────────
+  runOnStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
+  runOnStatusBarItem.text = runOnLabel(runOnSelector.getCurrentTarget());
+  runOnStatusBarItem.tooltip = "Capix — Choose where this workspace runs";
+  runOnStatusBarItem.command = "capix.runOn";
+  runOnStatusBarItem.show();
+  context.subscriptions.push(runOnStatusBarItem);
+  runOnSelector.onTargetChanged((config) => {
+    if (runOnStatusBarItem) {
+      runOnStatusBarItem.text = runOnLabel(config);
+      const sub = config.capixCloudTarget?.type ?? config.target;
+      runOnStatusBarItem.tooltip = `Capix — Run target: ${sub}`;
+    }
+  });
 
   // ── Auto-refresh ───────────────────────────────────────────────────────
   setupAutoRefresh(context);
@@ -131,8 +205,58 @@ export function activate(context: vscode.ExtensionContext) {
   // Update status bar text when connection state changes
   updateStatusBar(statusBarItem);
 
+  // ── Model sync + picker + status bar ────────────────────────────────────
+  modelSync = new ModelSync(client);
+  modelPicker = new ModelPicker(modelSync);
+  onboarding = new OnboardingFlow(client, context.extensionUri, {
+    sendChatMessage: (text) => capixCodeProvider.sendTestMessage(text),
+    focusCloud: () => {
+      void vscode.commands
+        .executeCommand("capix.cloud.overview.focus")
+        .then(undefined, () =>
+          vscode.commands.executeCommand("workbench.view.extension.capix-llm"),
+        );
+    },
+  });
+
+  modelStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 51);
+  modelStatusBarItem.command = "capix.selectModel";
+  updateModelStatusBar();
+  modelStatusBarItem.show();
+
+  modelSync.startAutoRefresh();
+  void modelSync.refresh().then(() => updateModelStatusBar());
+
+  context.subscriptions.push(
+    modelStatusBarItem,
+    modelSync.onModelsChanged(() => updateModelStatusBar()),
+  );
+
   // Initial load
   refreshAll();
+  // Zero-config MCP: if the user is already signed in (returning session),
+  // ensure the MCP server is registered without prompting. Also fired via
+  // the OAuth token-publish handler on the first checkConfigured run.
+  void mcpAutoInstaller.ensureInstalled();
+
+  // ── Restore layout + destination ────────────────────────────────────────
+  void (async () => {
+    const preset = await restorePersistedLayout(context);
+    await applyLayout(preset, context);
+    await switchDestination(defaultDestination());
+  })();
+
+  // ── First-run onboarding ────────────────────────────────────────────────
+  void (async () => {
+    if (!context.globalState.get("capix.onboarded")) {
+      await context.globalState.update("capix.onboarded", true);
+      try {
+        await onboarding.start(context);
+      } catch (err) {
+        logger.error("Onboarding first-run failed", { error: String(err) });
+      }
+    }
+  })();
 
   // ── Commands ──────────────────────────────────────────────────────────
   context.subscriptions.push(
@@ -182,6 +306,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.openTerminal", (item?: unknown) => cmdOpenTerminal(item)),
     vscode.commands.registerCommand("capix.downloadSshKey", (item?: unknown) => cmdDownloadSshKey(item)),
 
+    // MCP: status-bar health check
+    vscode.commands.registerCommand("capix.mcp.health", async () => {
+      const healthy = await mcpAutoInstaller.isHealthy();
+      vscode.window.showInformationMessage(
+        healthy ? "Capix MCP is connected and configured." : "Capix MCP is not configured. Sign in to enable.",
+      );
+    }),
+
     // Covenant
     vscode.commands.registerCommand("capix.covenantEdit", () => covenant.createSpiritFile()),
     vscode.commands.registerCommand("capix.covenantRemember", () => cmdCovenantRemember()),
@@ -201,6 +333,30 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()),
     vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()),
     vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()),
+
+    // Layout + information architecture
+    vscode.commands.registerCommand("capix.setLayout", () => pickAndApplyLayout(context)),
+    vscode.commands.registerCommand("capix.cloud.deploy", () => deploymentWizard.start()),
+    vscode.commands.registerCommand("capix.cloud.resource.open", (deploymentId?: string) => resourceDetailsProvider.openCentre(deploymentId)),
+    vscode.commands.registerCommand("capix.runOn", () => runOnSelector.show()),
+    vscode.commands.registerCommand("capix.code.newSession", () => capixCodeProvider.newSession()),
+    vscode.commands.registerCommand("capix.code.focus", () => focusCapixCode()),
+    vscode.commands.registerCommand("capix.code.acceptAll", () => capixCodeProvider.acceptAll()),
+    vscode.commands.registerCommand("capix.code.revertAll", () => capixCodeProvider.revertAll()),
+    vscode.commands.registerCommand("capix.code.checkpoint", () => capixCodeProvider.checkpoint()),
+    vscode.commands.registerCommand("capix.code.cancel", () => capixCodeProvider.cancelTurn()),
+    vscode.commands.registerCommand("capix.setDestination", () => pickDestination()),
+
+    // Onboarding + model picker
+    vscode.commands.registerCommand("capix.onboarding", () => onboarding.start(context)),
+    vscode.commands.registerCommand("capix.selectModel", async () => {
+      const picked = await modelPicker.show();
+      if (picked) {
+        const ref = picked.modelRef ?? picked.id;
+        capixCodeProvider.setModel(ref);
+        updateModelStatusBar();
+      }
+    }),
   );
 
 }
@@ -218,9 +374,18 @@ async function cmdLaunchCentre(): Promise<void> {
   if (action) await vscode.commands.executeCommand(action.command);
 }
 
+// Expand / focus the Capix Code auxiliary panel.
+function focusCapixCode(): void {
+  void vscode.commands.executeCommand("workbench.view.extension.capix-code");
+  void vscode.commands.executeCommand("setContext", "capix.code.focus", true);
+  capixCodeProvider.notifyDensity(false, true);
+}
+
 export function deactivate() {
   refreshTimer?.dispose();
+  modelSync?.stopAutoRefresh();
   terminalManager?.disposeAll();
+  mcpAutoInstaller?.dispose();
 }
 
 async function cmdDeployVps(): Promise<void> {
@@ -277,6 +442,16 @@ async function updateStatusBar(item: vscode.StatusBarItem): Promise<void> {
 
 let statusBarItem: vscode.StatusBarItem | null = null;
 
+// Update the model status bar item with the current default model name.
+function updateModelStatusBar(): void {
+  if (!modelStatusBarItem) return;
+  const ref = modelPicker.getCurrentDefault();
+  const name = modelSync.resolveName(ref);
+  modelStatusBarItem.text = `$(hub) ${name}`;
+  modelStatusBarItem.tooltip = `Capix — Model: ${name} (click to change)`;
+  modelStatusBarItem.show();
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 async function refreshAll() {
   await client.checkConfigured();
@@ -284,6 +459,7 @@ async function refreshAll() {
     deploysProvider.load(), catalogProvider.load(), hostedProvider.load(),
     instancesProvider.load(), agentsProvider.load(), jobsProvider.load(),
     apiKeysProvider.load(), profileProvider.refresh(),
+    cloudDashboardProvider.refresh(),
   ]);
   if (statusBarItem) await updateStatusBar(statusBarItem);
 }
@@ -302,6 +478,7 @@ function setupAutoRefresh(context: vscode.ExtensionContext) {
       agentsProvider.load();
       jobsProvider.load();
       profileProvider.refresh();
+      cloudDashboardProvider.refresh();
     }, interval * 1000);
     refreshTimer = new vscode.Disposable(() => clearInterval(handle));
   };
@@ -382,7 +559,7 @@ async function cmdDeployModel(model?: CatalogModel) {
     return;
   }
   const offerPick = await vscode.window.showQuickPick(
-    offersRes.offers.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${o.roundedPricePerHr.toFixed(2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location} · ${(o.reliability * 100).toFixed(0)}% reliability`, offer: o })),
+    offersRes.offers.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${microToDisplay(dollarsToMicro(o.roundedPricePerHr), 2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location} · ${(o.reliability * 100).toFixed(0)}% reliability`, offer: o })),
     { placeHolder: "Select a GPU offer" },
   );
   if (!offerPick) return;
@@ -399,7 +576,7 @@ async function cmdDeployModel(model?: CatalogModel) {
   );
   if (!durPick) return;
 
-  const cost = offerPick.offer.roundedPricePerHr * durPick.value;
+  const costMicro = dollarsToMicro(offerPick.offer.roundedPricePerHr) * durPick.value;
 
   // HF token for gated models
   let hfToken: string | undefined;
@@ -415,7 +592,7 @@ async function cmdDeployModel(model?: CatalogModel) {
 
   // Confirm + deploy
   const confirm = await vscode.window.showWarningMessage(
-    `Deploy ${model.label} on ${offerPick.label} in ${offerPick.offer.location} for ${durPick.label}?\n\nCost: $${cost.toFixed(2)} (billed from your wallet balance)`,
+    `Deploy ${model.label} on ${offerPick.label} in ${offerPick.offer.location} for ${durPick.label}?\n\nCost: $${microToDisplay(costMicro, 2)} (billed from your wallet balance)`,
     { modal: true },
     "Deploy",
   );
@@ -506,7 +683,7 @@ async function cmdDeployCustomModel() {
     return;
   }
   const offerPick = await vscode.window.showQuickPick(
-    filtered.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${o.roundedPricePerHr.toFixed(2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location}`, offer: o })),
+    filtered.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${microToDisplay(dollarsToMicro(o.roundedPricePerHr), 2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location}`, offer: o })),
     { placeHolder: "Select a GPU offer" },
   );
   if (!offerPick) return;
@@ -525,9 +702,9 @@ async function cmdDeployCustomModel() {
     if (!hfToken) return;
   }
 
-  const cost = offerPick.offer.roundedPricePerHr * durPick.value;
+  const costMicro = dollarsToMicro(offerPick.offer.roundedPricePerHr) * durPick.value;
   const confirm = await vscode.window.showWarningMessage(
-    `Deploy custom model from ${link}?\n\nGPU: ${offerPick.label} · Duration: ${durPick.label} · Cost: $${cost.toFixed(2)}`,
+    `Deploy custom model from ${link}?\n\nGPU: ${offerPick.label} · Duration: ${durPick.label} · Cost: $${microToDisplay(costMicro, 2)}`,
     { modal: true },
     "Deploy",
   );
@@ -999,6 +1176,9 @@ async function cmdConnectWallet() {
       vscode.window.showInformationMessage("Capix sign-in complete.");
       await refreshAll();
       await vscode.commands.executeCommand("capix.agent.refreshAuth");
+      // Zero-config MCP: register the Capix MCP server now that auth succeeded.
+      // (Also fired via the OAuth token-publish handler — coalesced + idempotent.)
+      await mcpAutoInstaller.ensureInstalled();
     } catch (error) {
       callbackGuard.exchangeFailed();
       response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
@@ -1020,6 +1200,9 @@ async function cmdResetSessionAndSignIn() {
   await resetSessionAndSignIn(
     client,
     async () => {
+      // Strip the MCP server entry so no stale credential lingers after the
+      // session is cleared. (Also fired via the OAuth token-publish handler.)
+      await mcpAutoInstaller.unregister();
       try {
         await refreshAll();
       } catch (error) {
