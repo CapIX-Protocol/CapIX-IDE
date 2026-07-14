@@ -107,10 +107,14 @@ else
   echo "ERROR: inherited onboarding/telemetry patch no longer applies"
   exit 1
 fi
-if grep -q "registerCommand('capix.chat.configure'" "$VSCODE/src/vs/workbench/contrib/void/browser/void.contribution.ts"; then
+# Patch 0004 also carries presentation-string replacements that can already be
+# present after brand-workbench-text.mjs. Apply only its runtime-registration
+# hunk here so a prepared tree remains safely rebuildable.
+ROUTED_CHAT_FILE='src/vs/workbench/contrib/void/browser/void.contribution.ts'
+if grep -q "registerCommand('capix.chat.configure'" "$VSCODE/$ROUTED_CHAT_FILE"; then
   echo "  done: Capix routed chat already registered"
-elif git -C "$VSCODE" apply --check "$DIR/patches/0004-capix-routed-chat.patch"; then
-  git -C "$VSCODE" apply "$DIR/patches/0004-capix-routed-chat.patch"
+elif git -C "$VSCODE" apply --check --include="$ROUTED_CHAT_FILE" "$DIR/patches/0004-capix-routed-chat.patch"; then
+  git -C "$VSCODE" apply --include="$ROUTED_CHAT_FILE" "$DIR/patches/0004-capix-routed-chat.patch"
   echo "  done: Capix routed chat registered"
 else
   echo "ERROR: Capix routed chat patch no longer applies"

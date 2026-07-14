@@ -9,7 +9,7 @@ CapixIDE builds are **unsigned**. On macOS, right-click the app → **Open** on 
 Pre-built unsigned archives for macOS, Windows, and Linux are on the [official Releases page](https://github.com/CapIX-Protocol/CapIX-IDE/releases).
 
 See **[INSTALL.md](INSTALL.md)** for exact checksum, installation, authentication,
-update, and uninstall commands for macOS arm64/x64, Linux arm64/x64, and Windows x64.
+update, and uninstall commands for macOS arm64/x64, Linux x64, and Windows x64.
 
 ## What's in the box?
 
@@ -98,10 +98,13 @@ See [`docs/getting-started.md`](docs/getting-started.md) for the full walkthroug
 ## For developers — building from source
 
 ```bash
-git clone https://github.com/Ritzky/CapIX-IDE.git
-cd CapixIDE
-./scripts/bootstrap.sh   # clones the source + applies the Capix branding + installs the extension
-./scripts/dev.sh         # launches the dev build
+git clone https://github.com/CapIX-Protocol/CapIX-IDE.git
+cd CapIX-IDE
+nvm install 20.18.2
+nvm use 20.18.2
+test "$(node --version)" = "v20.18.2"
+./scripts/bootstrap.sh
+./scripts/dev.sh
 ```
 
 This repository contains the CapixIDE product source, integrated modules, brand assets, and release pipeline. The bootstrap script prepares the generated editor-source workspace used by the build.
@@ -109,11 +112,12 @@ This repository contains the CapixIDE product source, integrated modules, brand 
 To package distributable installers:
 
 ```bash
-./scripts/build.sh       # builds the app for your current platform
-npx electron-builder --mac --arm64 --config electron-builder.yml
+./scripts/build.sh
+# Current-platform output paths are listed in INSTALL.md.
+./scripts/package-release.sh v1.2.13 darwin arm64
 ```
 
-For CI/cross-platform release builds, tag a version and the [Release workflow](.github/workflows/release.yml) builds all 6 platform/arch combos in parallel.
+For CI/cross-platform release builds, tag a version and the [Release workflow](.github/workflows/release.yml) builds the four supported targets in parallel: macOS arm64/x64, Linux x64, and Windows x64.
 
 ## License
 

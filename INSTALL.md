@@ -8,6 +8,14 @@ This guide installs the unsigned customer builds published by the official Capix
 
 Never continue when a downloaded artifact does not match its adjacent SHA-256 file.
 
+## Versioning
+
+Versions are immutable `vMAJOR.MINOR.PATCH` tags. The commands below pin
+CapixIDE `v1.2.13` and Capix Code `v1.2.7`, the current customer releases with
+attached customer artifacts and adjacent checksums. Do not substitute a newer
+tag unless its release page contains the exact archive and checksum filenames
+used below.
+
 ## macOS
 
 ### CapixIDE — Apple silicon
@@ -28,15 +36,17 @@ EXPECTED="$(awk '{print $1}' "${IDE_NAME}.tar.gz.sha256")"
 test "${ACTUAL}" = "${EXPECTED}" || { echo "Checksum mismatch — do not install"; exit 1; }
 
 tar -xzf "${IDE_NAME}.tar.gz"
-ditto CapixIDE.app /Applications/CapixIDE.app
-open /Applications/CapixIDE.app
+mkdir -p "${HOME}/Applications"
+rm -rf "${HOME}/Applications/CapixIDE.app"
+ditto CapixIDE.app "${HOME}/Applications/CapixIDE.app"
+open "${HOME}/Applications/CapixIDE.app"
 ```
 
 The app is unsigned. On the first launch, control-click **CapixIDE** in Applications, choose **Open**, then choose **Open** again. If macOS continues to quarantine the verified app:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/CapixIDE.app
-open /Applications/CapixIDE.app
+xattr -dr com.apple.quarantine "${HOME}/Applications/CapixIDE.app"
+open "${HOME}/Applications/CapixIDE.app"
 ```
 
 ### CapixIDE — Intel Mac
@@ -68,6 +78,7 @@ EXPECTED="$(awk '{print $1}' "${CODE_NAME}.tar.gz.sha256")"
 test "${ACTUAL}" = "${EXPECTED}" || { echo "Checksum mismatch — do not install"; exit 1; }
 
 tar -xzf "${CODE_NAME}.tar.gz"
+rm -rf "${HOME}/.local/share/capix-code"
 mkdir -p "${HOME}/.local/share/capix-code" "${HOME}/.local/bin"
 ditto customer "${HOME}/.local/share/capix-code"
 ln -sfn "${HOME}/.local/share/capix-code/bin/capix-code" "${HOME}/.local/bin/capix-code"
@@ -146,6 +157,7 @@ EXPECTED="$(awk '{print $1}' "${CODE_NAME}.tar.gz.sha256")"
 test "${ACTUAL}" = "${EXPECTED}" || { echo "Checksum mismatch — do not install"; exit 1; }
 
 tar -xzf "${CODE_NAME}.tar.gz"
+rm -rf "${HOME}/.local/share/capix-code"
 mkdir -p "${HOME}/.local/share/capix-code" "${HOME}/.local/bin"
 cp -a customer/. "${HOME}/.local/share/capix-code/"
 ln -sfn "${HOME}/.local/share/capix-code/bin/capix-code" "${HOME}/.local/bin/capix-code"
@@ -258,6 +270,62 @@ capix-code
 
 The default is the single **Capix Auto** entry backed by the live network model catalogue.
 
+## Build from source
+
+Customer installation does not require a source build. Contributors who need
+to reproduce the current-platform artifacts should use these pinned toolchains.
+
+### Capix Code
+
+Requirements: Git, Node.js 20 or newer, Rust stable, C/C++ build tools, Bun
+`1.3.14` exactly, and network access for the pinned source and dependencies.
+
+```bash
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.14"
+export PATH="$HOME/.bun/bin:$PATH"
+git clone https://github.com/CapIX-Protocol/CapIX-Code.git
+cd CapIX-Code
+test "$(bun --version)" = "1.3.14"
+./scripts/bootstrap.sh
+./scripts/rebrand.sh
+BUN_BIN="$(command -v bun)" ./scripts/build.sh
+./dist/customer/bin/capix-code --version
+./dist/customer/bin/capix-code doctor
+```
+
+On Windows, run the equivalent commands in Git Bash with Rust and Visual Studio
+2022 C++ Build Tools installed; the final executable is
+`dist/customer/bin/capix-code.exe`.
+
+### CapixIDE
+
+CapixIDE requires exactly Node.js `20.18.2`. On macOS it also requires Xcode
+Command Line Tools and GNU libtool. Linux requires the standard Electron/VS Code
+desktop build dependencies; Windows requires Visual Studio 2022 Build Tools,
+Python, and Git Bash.
+
+```bash
+git clone https://github.com/CapIX-Protocol/CapIX-IDE.git
+cd CapIX-IDE
+nvm install 20.18.2
+nvm use 20.18.2
+test "$(node --version)" = "v20.18.2"
+./scripts/bootstrap.sh
+./scripts/build.sh
+```
+
+The unsigned output is `VSCode-darwin-arm64/CapixIDE.app` on Apple silicon,
+`VSCode-darwin-x64/CapixIDE.app` on Intel macOS,
+`VSCode-linux-x64/` on x86_64 Linux, and `VSCode-win32-x64/` on Windows.
+Package and checksum a completed build with the version in `product.json`:
+
+```bash
+./scripts/package-release.sh v1.2.13 darwin arm64
+```
+
+Replace `darwin arm64` with the platform and architecture actually built. The
+verified archive and adjacent SHA-256 file are written to `release-artifacts/`.
+
 ## Update
 
 Repeat the relevant installation section with the new version number. Verify the new checksum before replacing the existing installation.
@@ -267,7 +335,7 @@ Repeat the relevant installation section with the new version number. Verify the
 ### macOS
 
 ```bash
-rm -rf /Applications/CapixIDE.app
+rm -rf "${HOME}/Applications/CapixIDE.app"
 rm -rf "${HOME}/.local/share/capix-code"
 rm -f "${HOME}/.local/bin/capix-code"
 ```
