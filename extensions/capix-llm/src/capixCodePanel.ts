@@ -494,8 +494,16 @@ ${csp}
 
   <main class="conversation" id="conversation">
     <div class="empty-state" id="empty-state">
-      <div class="empty-glyph">$(comment-discussion)</div>
-      <p>Ask Capix Code anything. The agent can read, edit, and run code in this workspace. Use @ to add file context, or / for commands.</p>
+      <div class="empty-glyph">✦</div>
+      <span class="empty-kicker">Workspace agent</span>
+      <h2>Build from here.</h2>
+      <p>Capix Code can understand the project, edit files, run commands and verify the result.</p>
+      <div class="starter-prompts">
+        <button data-prompt="Map this codebase and tell me where to start">Map this codebase <span>→</span></button>
+        <button data-prompt="Find the highest-impact bug in this workspace and fix it">Find and fix a bug <span>→</span></button>
+        <button data-prompt="Review the current changes and identify production risks">Review current changes <span>→</span></button>
+      </div>
+      <small><kbd>@</kbd> add context <span>·</span> <kbd>/</kbd> commands <span>·</span> <kbd>⌘↵</kbd> send</small>
     </div>
   </main>
 
@@ -794,6 +802,57 @@ const PANEL_STYLES = `
 
   body.compact .meta-row, body.compact .mode-row { display: none; }
   body.compact .composer-input { min-height: 28px; }
+
+  /* Premium auxiliary rail: conversation first, composer as the anchor. */
+  :root {
+    --capix-bg: #090d13;
+    --capix-surface: rgba(255,255,255,.035);
+    --capix-border: rgba(255,255,255,.075);
+    --capix-fg: #eef2f3;
+    --capix-muted: rgba(226,232,240,.52);
+  }
+  body { background: var(--capix-bg); }
+  .panel-header { min-height: 46px; padding: 10px 14px; border-bottom-color: rgba(255,255,255,.055); }
+  .session-title { font-size: 12px; letter-spacing: -.01em; }
+  .conn-dot { order: -1; width: 6px; height: 6px; }
+  .hdr-btn { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border-radius: 7px; }
+  .meta-row { padding: 9px 14px; gap: 7px; border-bottom: 1px solid rgba(255,255,255,.04); }
+  .meta-chip { padding: 3px 7px; border: 0; border-radius: 5px; background: rgba(255,255,255,.045); font-size: 8px; }
+  #chip-model { color: var(--capix-cyan); }
+  .conversation { padding: 16px 14px 22px; scrollbar-width: thin; }
+  .empty-state { padding: clamp(38px, 12vh, 104px) 4px 24px; text-align: left; max-width: 390px; margin: 0 auto; }
+  .empty-glyph { width: 36px; height: 36px; display: grid; place-items: center; margin: 0 0 22px; border-radius: 10px; font-size: 18px; opacity: 1; color: var(--capix-cyan); background: rgba(61,206,214,.09); border: 1px solid rgba(61,206,214,.18); }
+  .empty-kicker { color: var(--capix-cyan); font: 500 9px/1 var(--vscode-editor-font-family, monospace); text-transform: uppercase; letter-spacing: .13em; }
+  .empty-state h2 { margin: 9px 0 10px; color: var(--capix-fg); font-size: 22px; line-height: 1.1; letter-spacing: -.035em; }
+  .empty-state p { margin: 0 0 24px; line-height: 1.6; font-size: 11px; }
+  .starter-prompts { border-top: 1px solid var(--capix-border); }
+  .starter-prompts button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; color: rgba(238,242,243,.78); background: transparent; border: 0; border-bottom: 1px solid var(--capix-border); font: 500 11px/1.3 inherit; cursor: pointer; text-align: left; }
+  .starter-prompts button span { color: var(--capix-cyan); opacity: .55; transition: transform .15s ease, opacity .15s ease; }
+  .starter-prompts button:hover { color: var(--capix-fg); }
+  .starter-prompts button:hover span { opacity: 1; transform: translateX(3px); }
+  .empty-state small { display: block; margin-top: 18px; color: rgba(226,232,240,.34); font-size: 9px; }
+  .empty-state kbd { padding: 1px 4px; color: rgba(226,232,240,.62); background: rgba(255,255,255,.045); border: 1px solid var(--capix-border); border-radius: 4px; font: inherit; }
+  .msg { margin-bottom: 20px; }
+  .msg-role { margin-bottom: 7px; font-size: 8px; }
+  .msg-body { font-size: 12px; line-height: 1.62; }
+  .tool-card { border-radius: 7px; background: rgba(255,255,255,.025); }
+  .composer { margin: 0 10px 10px; padding: 8px; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: #0d121a; box-shadow: 0 12px 34px rgba(0,0,0,.28); transition: border-color .16s ease, box-shadow .16s ease; }
+  .composer:focus-within { border-color: rgba(61,206,214,.34); box-shadow: 0 12px 38px rgba(0,0,0,.36), 0 0 0 1px rgba(61,206,214,.05); }
+  .mode-row { margin: 0 0 4px; gap: 1px; }
+  .mode-btn { padding: 4px 7px; border-radius: 5px; font-size: 9px; }
+  .mode-btn.active { border-color: transparent; background: rgba(61,206,214,.09); }
+  .composer-input { min-height: 58px; padding: 9px 4px; border: 0; border-radius: 0; background: transparent; font-size: 12px; line-height: 1.5; }
+  .composer-input:focus { border: 0; }
+  .composer-input::placeholder { color: rgba(226,232,240,.32); }
+  .composer-foot { margin-top: 3px; }
+  .send-btn { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 8px; background: var(--capix-cyan); }
+  .send-btn.working { width: auto; padding: 0 9px; display: inline-flex; }
+  .cost { opacity: .62; }
+  .diff-panel { margin: 0 10px 8px; border: 1px solid var(--capix-border); border-radius: 9px; overflow: hidden; }
+  @media (prefers-reduced-motion: no-preference) {
+    .empty-state { animation: code-enter .34s ease-out both; }
+    @keyframes code-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+  }
 `;
 
 const PANEL_SCRIPT = `
@@ -1063,6 +1122,14 @@ const PANEL_SCRIPT = `
       return;
     }
 
+    const prompt = t && t.closest('[data-prompt]');
+    if (prompt) {
+      input.value = prompt.getAttribute('data-prompt') || '';
+      autoGrow();
+      input.focus();
+      return;
+    }
+
     const tgt = t && t.closest('[data-cmd],[data-mode],[data-slash]');
     if (!tgt) return;
     if (t && t.dataset && t.dataset.mode) { pickMode(t.dataset.mode); vscode.postMessage({ type: 'setMode', mode: t.dataset.mode }); return; }
@@ -1154,7 +1221,7 @@ const PANEL_SCRIPT = `
         if (!$('empty-state')) {
           const es = document.createElement('div');
           es.className = 'empty-state'; es.id = 'empty-state';
-          es.innerHTML = '<div class="empty-glyph">$(comment-discussion)</div><p>Ask Capix Code anything. The agent can read, edit, and run code in this workspace.</p>';
+          es.innerHTML = '<div class="empty-glyph">✦</div><span class="empty-kicker">Workspace agent</span><h2>Build from here.</h2><p>Capix Code can understand the project, edit files, run commands and verify the result.</p>';
           conversation.appendChild(es);
         }
         break;

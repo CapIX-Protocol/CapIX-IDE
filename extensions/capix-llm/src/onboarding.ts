@@ -282,35 +282,49 @@ export class OnboardingFlow {
     <!-- Post sign-in -->
     <section class="hero signed-in" id="hero-signedin" hidden>
       <div class="hero-head">
-        <h1 class="hero-title">You're in. <span class="accent">Let's ship something.</span></h1>
-        <p class="hero-sub">Three quick starts — pick one and see what Capix can do.</p>
+        <span class="eyebrow"><span class="eyebrow-dot"></span> Workspace ready</span>
+        <h1 class="hero-title">What are we building?</h1>
+        <p class="hero-sub">Start with Capix Code, or open a cloud workflow without leaving your workspace.</p>
       </div>
 
-      <div class="cards">
+      <div class="quick-starts">
+        <button class="card card-primary" data-cmd="chat" id="card-chat">
+          <span class="card-index">01</span>
+          <span class="card-icon chat">${CHAT_SVG}</span>
+          <span class="card-copy">
+            <span class="card-title">Build with Capix Code</span>
+            <span class="card-desc">Plan, edit, run and review this workspace with the smart-routed coding agent.</span>
+          </span>
+          <span class="card-cta" id="chat-cta">Open Code <span aria-hidden="true">↗</span></span>
+        </button>
+
         <button class="card" data-cmd="deploy" id="card-deploy">
+          <span class="card-index">02</span>
           <span class="card-icon deploy">${ROCKET_SVG}</span>
-          <span class="card-title">Deploy an app</span>
-          <span class="card-desc">Scaffold a Next.js starter and publish it to the Capix Cloud.</span>
-          <span class="card-cta" id="deploy-cta">Get a live URL →</span>
+          <span class="card-copy">
+            <span class="card-title">Ship a web project</span>
+            <span class="card-desc">Scaffold a production-ready starter and continue to deployment.</span>
+          </span>
+          <span class="card-cta" id="deploy-cta">Create project <span aria-hidden="true">↗</span></span>
           <div class="card-progress" id="deploy-progress" hidden>
             <span class="progress-text" id="deploy-text">Scaffolding…</span>
             <a class="live-url" id="deploy-url" href="#" hidden target="_blank" rel="noopener"></a>
           </div>
         </button>
 
-        <button class="card" data-cmd="chat" id="card-chat">
-          <span class="card-icon chat">${CHAT_SVG}</span>
-          <span class="card-title">Chat with AI</span>
-          <span class="card-desc">Open Capix Code on the right and send your first message.</span>
-          <span class="card-cta" id="chat-cta">Open Capix Code →</span>
-        </button>
-
         <button class="card" data-cmd="explore" id="card-explore">
+          <span class="card-index">03</span>
           <span class="card-icon cloud">${CLOUD_SVG}</span>
-          <span class="card-title">Explore the Cloud</span>
-          <span class="card-desc">Balance, instances, private models, and usage — in one dashboard.</span>
-          <span class="card-cta" id="explore-cta">Open the Cloud →</span>
+          <span class="card-copy">
+            <span class="card-title">Open cloud workspace</span>
+            <span class="card-desc">Manage balance, compute, private models, endpoints and usage.</span>
+          </span>
+          <span class="card-cta" id="explore-cta">Open Cloud <span aria-hidden="true">↗</span></span>
         </button>
+      </div>
+
+      <div class="capability-line" aria-label="Available workspace capabilities">
+        <span>Smart routing</span><i></i><span>Remote compute</span><i></i><span>Private models</span><i></i><span>Project memory</span>
       </div>
     </section>
   </main>
@@ -530,6 +544,80 @@ const ONBOARDING_STYLES = `
     background: var(--capix-bg-elev); border: 1px solid var(--capix-border-strong);
     color: var(--capix-fg); padding: 12px 18px; border-radius: 10px; font-size: 13px;
     z-index: 50; box-shadow: 0 12px 40px rgba(0,0,0,0.4); max-width: 80vw;
+  }
+
+  /* CapixIDE workspace direction: quiet chrome, editorial hierarchy, one accent. */
+  body { background: #080c12; }
+  .bg-glow {
+    opacity: .85;
+    background:
+      linear-gradient(rgba(61,206,214,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(61,206,214,.025) 1px, transparent 1px),
+      radial-gradient(65% 60% at 50% -20%, rgba(61,206,214,.14), transparent 72%);
+    background-size: 64px 64px, 64px 64px, auto;
+    mask-image: linear-gradient(to bottom, #000 0%, transparent 78%);
+  }
+  .topbar { padding: 20px 28px; }
+  .brand-mark {
+    width: 30px; height: 30px; display: grid; place-items: center;
+    border: 1px solid rgba(61,206,214,.3); border-radius: 8px;
+    background: rgba(61,206,214,.07);
+  }
+  .brand-name { font-size: 15px; letter-spacing: -.02em; }
+  .balance-chip { border-radius: 8px; padding: 7px 11px; background: rgba(61,206,214,.07); }
+  .shell { align-items: flex-start; padding: 6vh clamp(34px, 7vw, 96px) 50px; text-align: left; }
+  .hero { max-width: 980px; margin: 0 auto; }
+  .hero-head { margin-bottom: 38px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;
+    color: var(--capix-muted); font: 500 10px/1 "JetBrains Mono", monospace;
+    text-transform: uppercase; letter-spacing: .14em;
+  }
+  .eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--capix-green); box-shadow: 0 0 12px rgba(20,241,149,.7); }
+  .signed-in .hero-title { max-width: 760px; font-size: clamp(42px, 6vw, 72px); letter-spacing: -.055em; line-height: .96; margin-bottom: 18px; }
+  .signed-in .hero-sub { margin: 0; max-width: 610px; font-size: 15px; }
+  .quick-starts { border-top: 1px solid var(--capix-border); }
+  .card {
+    width: 100%; min-height: 88px; display: grid;
+    grid-template-columns: 34px 42px minmax(0, 1fr) auto; align-items: center; gap: 16px;
+    margin: 0; padding: 18px 4px; border: 0; border-bottom: 1px solid var(--capix-border);
+    border-radius: 0; background: transparent; box-shadow: none;
+    transition: padding .18s ease, background .18s ease, border-color .18s ease;
+  }
+  .card:hover { padding-left: 12px; padding-right: 12px; transform: none; box-shadow: none; background: rgba(61,206,214,.035); border-color: rgba(61,206,214,.24); }
+  .card-primary { background: linear-gradient(90deg, rgba(61,206,214,.07), transparent 68%); }
+  .card-index { color: var(--capix-faint); font: 500 10px/1 "JetBrains Mono", monospace; }
+  .card-icon { width: 36px; height: 36px; margin: 0; border-radius: 9px; }
+  .card-icon svg { width: 20px; height: 20px; }
+  .card-copy { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(240px, 1.4fr); align-items: center; gap: 28px; text-align: left; }
+  .card-title { font-size: 14px; }
+  .card-desc { font-size: 12px; line-height: 1.55; }
+  .card-cta { min-width: 112px; margin: 0; text-align: right; font-size: 11px; letter-spacing: .01em; }
+  .card-cta span { margin-left: 6px; }
+  .card-progress { grid-column: 3 / -1; margin: -4px 0 0; padding: 0; border: 0; }
+  .capability-line {
+    display: flex; align-items: center; gap: 12px; margin-top: 24px;
+    color: var(--capix-faint); font: 500 9px/1 "JetBrains Mono", monospace;
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+  .capability-line i { width: 3px; height: 3px; border-radius: 50%; background: rgba(61,206,214,.45); }
+  .footer { padding: 14px 28px; }
+  @media (max-width: 760px) {
+    .shell { padding: 32px 24px; }
+    .signed-in .hero-title { font-size: 42px; }
+    .card { grid-template-columns: 24px 38px 1fr; }
+    .card-copy { display: block; }
+    .card-title, .card-desc { display: block; }
+    .card-desc { margin-top: 5px; }
+    .card-cta { grid-column: 3; text-align: left; margin-top: 4px; }
+    .capability-line { flex-wrap: wrap; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-head { animation: capix-rise .42s ease-out both; }
+    .card { animation: capix-rise .42s ease-out both; }
+    .card:nth-child(2) { animation-delay: .05s; }
+    .card:nth-child(3) { animation-delay: .1s; }
+    @keyframes capix-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   }
 `;
 

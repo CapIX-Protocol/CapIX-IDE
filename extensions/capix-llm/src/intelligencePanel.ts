@@ -1478,6 +1478,36 @@ const PANEL_STYLES = `
   .icon-btn { background: transparent; border: none; cursor: pointer; color: var(--capix-muted); font-family: inherit; font-size: 12px; padding: 2px 4px; border-radius: 4px; }
   .icon-btn:hover { background: rgba(255,255,255,0.08); color: var(--capix-fg); }
   .icon-btn.danger:hover { color: var(--capix-red); }
+
+  /* Scan-first project brain: fewer boxes, stronger rhythm, calmer empty states. */
+  body { padding: 16px 16px 28px; background: #090d13; }
+  .ws-header { min-height: 34px; margin-bottom: 12px; }
+  .ws-title { gap: 7px; }
+  .ws-mark { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: rgba(61,206,214,.08); font-size: 12px; }
+  .ws-name { font-size: 13px; letter-spacing: -.015em; }
+  .ws-sub { opacity: .65; font-size: 9px; }
+  .nav-bar { flex-wrap: nowrap; gap: 14px; padding: 0; margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
+  .nav-tab { padding: 8px 0 9px; border-radius: 0; white-space: nowrap; font-size: 10px; letter-spacing: .02em; }
+  .card { padding: 13px 0; margin: 0; border: 0; border-bottom: 1px solid var(--capix-border); border-radius: 0; background: transparent; }
+  .grid-2 { gap: 0 20px; }
+  .stat-row { padding: 12px 0 16px; border-top: 1px solid var(--capix-border); border-bottom: 1px solid var(--capix-border); gap: 0; }
+  .stat { padding: 3px 5px; border-right: 1px solid var(--capix-border); }
+  .stat:last-child { border-right: 0; }
+  .stat-value { font-size: 17px; letter-spacing: -.03em; }
+  .stat-label { margin-top: 5px; font-size: 8px; line-height: 1.3; }
+  .section-head { margin-bottom: 8px; }
+  .section-head h2 { letter-spacing: .1em; font-size: 9px; }
+  .ov-row { min-height: 34px; padding: 7px 4px; transition: background .14s ease, padding .14s ease; }
+  .ov-row:hover { padding-left: 8px; background: rgba(61,206,214,.035); }
+  .state.subtle { min-height: 74px; display: grid; place-items: center; padding: 14px 8px; opacity: .42; border: 1px dashed rgba(255,255,255,.08); border-radius: 8px; }
+  .mem-card, .skill-card { padding: 11px 4px; margin: 0; border: 0; border-bottom: 1px solid var(--capix-border); border-radius: 0; background: transparent; }
+  .mem-card.pinned { padding-left: 9px; border-left: 2px solid var(--capix-amber); background: linear-gradient(90deg, rgba(255,174,0,.035), transparent); }
+  .toolbar input[type="text"], .toolbar select { min-height: 34px; border-radius: 8px; background: rgba(255,255,255,.025); }
+  .btn { border-radius: 7px; }
+  @media (max-width: 520px) {
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .stat { border-bottom: 1px solid var(--capix-border); }
+  }
 `;
 
 // ── Panel client script ─────────────────────────────────────────────────────
