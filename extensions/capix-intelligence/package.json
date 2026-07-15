@@ -13,6 +13,11 @@
     "views": {
       "capix-llm": [
         {
+          "id": "capix.intelligence.workspace",
+          "name": "Intelligence",
+          "type": "webview"
+        },
+        {
           "id": "capix.intelligence.plan",
           "name": "Current Plan"
         },
@@ -77,6 +82,26 @@
         "command": "capix.intelligence.retrieveMemory",
         "title": "Capix Intelligence: Search Memory…",
         "icon": "$(search)"
+      },
+      {
+        "command": "capix.intelligence.search",
+        "title": "Capix Intelligence: Search…",
+        "icon": "$(search)"
+      },
+      {
+        "command": "capix.intelligence.installSkill",
+        "title": "Capix Intelligence: Install Skill…",
+        "icon": "$(extensions)"
+      },
+      {
+        "command": "capix.intelligence.invokeSkill",
+        "title": "Capix Intelligence: Invoke Skill…",
+        "icon": "$(run)"
+      },
+      {
+        "command": "capix.intelligence.openWorkspace",
+        "title": "Capix Intelligence: Open Workspace",
+        "icon": "$(layout-sidebar-left)"
       },
       {
         "command": "capix.intelligence.ratifyCovenant",

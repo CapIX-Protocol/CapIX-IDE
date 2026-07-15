@@ -18,22 +18,37 @@
           "title": "Capix",
           "icon": "resources/capix-activitybar.svg"
         }
+      ],
+      "auxiliarybar": [
+        {
+          "id": "capix-code",
+          "title": "Capix Code",
+          "icon": "resources/capix-activitybar.svg"
+        }
       ]
     },
     "views": {
       "capix-llm": [
         {
-          "id": "capix.llm.profile",
-          "name": "Profile",
+          "id": "capix.cloud.overview",
+          "name": "Cloud",
           "type": "webview"
         },
         {
+          "id": "capix.llm.profile",
+          "name": "Profile",
+          "type": "webview",
+          "when": "false"
+        },
+        {
           "id": "capix.llm.deploys",
-          "name": "My Deploys"
+          "name": "My Deploys",
+          "when": "false"
         },
         {
           "id": "capix.llm.instances",
-          "name": "Instances"
+          "name": "Instances",
+          "when": "false"
         },
         {
           "id": "capix.llm.agents",
@@ -47,15 +62,37 @@
         },
         {
           "id": "capix.llm.apikeys",
-          "name": "API Keys"
+          "name": "API Keys",
+          "when": "false"
         },
         {
           "id": "capix.llm.catalog",
-          "name": "Model Catalog"
+          "name": "Model Catalog",
+          "when": "false"
         },
         {
           "id": "capix.llm.hosted",
-          "name": "Ready Now (Hosted)"
+          "name": "Ready Now (Hosted)",
+          "when": "false"
+        },
+        {
+          "id": "capix.cloud.resource",
+          "name": "Resource",
+          "type": "webview",
+          "when": "false"
+        },
+        {
+          "id": "capix.intelligence.panel",
+          "name": "Intelligence",
+          "type": "webview",
+          "when": "capix.dest.intelligence"
+        }
+      ],
+      "capix-code": [
+        {
+          "id": "capix.code.chat",
+          "name": "Capix Code",
+          "type": "webview"
         }
       ]
     },
@@ -117,6 +154,11 @@
         "command": "capix.openConsole",
         "title": "Capix: Open Web Console",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "capix.intelligence.openPanel",
+        "title": "Capix: Open Intelligence",
+        "icon": "$(sparkle)"
       },
       {
         "command": "capix.connectWallet",
@@ -243,6 +285,70 @@
       {
         "command": "capix.routerFavorModel",
         "title": "Capix: Favor Model (Always Prefer)…"
+      },
+      {
+        "command": "capix.setLayout",
+        "title": "Capix: Switch Layout…",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "capix.cloud.deploy",
+        "title": "Capix: New Cloud Resource…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.cloud.resource.open",
+        "title": "Capix: Open Resource Details",
+        "icon": "$(server)"
+      },
+      {
+        "command": "capix.runOn",
+        "title": "Capix: Run on…",
+        "icon": "$(device-desktop)"
+      },
+      {
+        "command": "capix.code.newSession",
+        "title": "Capix Code: New Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "capix.code.focus",
+        "title": "Capix Code: Focus Panel",
+        "icon": "$(chrome-maximize)"
+      },
+      {
+        "command": "capix.code.acceptAll",
+        "title": "Capix Code: Accept All Changes",
+        "icon": "$(check)"
+      },
+      {
+        "command": "capix.code.revertAll",
+        "title": "Capix Code: Revert All Changes",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "capix.code.checkpoint",
+        "title": "Capix Code: Create Checkpoint",
+        "icon": "$(save)"
+      },
+      {
+        "command": "capix.code.cancel",
+        "title": "Capix Code: Cancel Agent",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "capix.setDestination",
+        "title": "Capix: Switch Destination…"
+      },
+      {
+        "command": "capix.onboarding",
+        "title": "Capix: Open Onboarding",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "capix.selectModel",
+        "title": "Capix: Select Model…",
+        "icon": "$(hub)"
       }
     ],
     "menus": {

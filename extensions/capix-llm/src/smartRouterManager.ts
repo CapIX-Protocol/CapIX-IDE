@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { logger } from "./logger";
+import { dollarsToMicro, microToDisplay } from "./moneyUtils";
 
 export type TaskType = "reasoning" | "coding";
 export type RouteMode = "auto" | "private" | "loop";
@@ -154,7 +155,7 @@ export class SmartRouterManager {
     // Step 4: pick the cheapest offer.
     const cheapest = offersRes.offers.sort((a, b) => a.pricePerHr - b.pricePerHr)[0];
     const confirm = await vscode.window.showWarningMessage(
-      `Deploy ${pick.label} on ${cheapest.gpu} in ${cheapest.location}?\n$${cheapest.pricePerHr.toFixed(2)}/hr`,
+      `Deploy ${pick.label} on ${cheapest.gpu} in ${cheapest.location}?\n$${microToDisplay(dollarsToMicro(cheapest.pricePerHr), 2)}/hr`,
       { modal: true },
       "Deploy",
     );

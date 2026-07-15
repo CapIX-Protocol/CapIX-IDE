@@ -37,6 +37,11 @@ import {
 	type IntelligenceTreeNode,
 } from "./treeProviders.js";
 import { GraphViewProvider } from "./graphView.js";
+import { SkillsRuntime } from "./skillsRuntime.js";
+import {
+	IntelligenceWorkspaceProvider,
+	type IntelligenceTab,
+} from "./intelligenceWorkspace.js";
 import type {
 	MemoryType,
 	TrustLevel,
@@ -52,6 +57,8 @@ let decisionsProvider: DecisionsTreeProvider;
 let checkpointsProvider: CheckpointsTreeProvider;
 let receiptsProvider: ReceiptsTreeProvider;
 let graphProvider: GraphViewProvider;
+let skillsRuntime: SkillsRuntime;
+let workspaceProvider: IntelligenceWorkspaceProvider;
 
 export function activate(context: vscode.ExtensionContext): void {
 	client = new IntelligenceClient();
@@ -60,7 +67,15 @@ export function activate(context: vscode.ExtensionContext): void {
 	};
 	client.setSecretStorage(secretStore);
 
-	// Tree view providers
+	const outputChannel = vscode.window.createOutputChannel("Capix Intelligence");
+	context.subscriptions.push(outputChannel);
+
+	// ── DEPRECATED: Tree view providers ─────────────────────────────────
+	// These tree views are superseded by the unified Intelligence panel
+	// (capix.intelligence.panel) registered in the capix-llm extension. They
+	// remain registered for one release cycle so existing command bindings
+	// and context menus keep working during migration. New code should use
+	// `capix.intelligence.openPanel(tab)`.
 	planProvider = new PlanTreeProvider(client);
 	agentsProvider = new AgentsTreeProvider(client);
 	memoryProvider = new MemoryTreeProvider(client);
@@ -70,6 +85,38 @@ export function activate(context: vscode.ExtensionContext): void {
 	receiptsProvider = new ReceiptsTreeProvider(client);
 	graphProvider = new GraphViewProvider(client, context.extensionUri);
 
+	// Skills Runtime — the IDE-side authority for signed/versioned/sandboxed
+	// skills. Shared by the Intelligence workspace Skills tab and the
+	// capix.intelligence.installSkill / invoke flows.
+	skillsRuntime = new SkillsRuntime({
+		client,
+		// The runtime resolves `ask`-level permissions synchronously here.
+		// VS Code's real prompt (showQuickPick) is async, so the default here is
+		// "deny"; interactive approval is handled by the workspace's invokeSkill
+		// command, which wraps SkillsRuntime.invoke and surfaces confirmations.
+		prompt: () => false,
+		logger: (message, meta) => {
+			outputChannel.appendLine(
+				`[${new Date().toISOString()}] ${message}${meta ? " " + JSON.stringify(meta) : ""}`,
+			);
+		},
+	});
+
+	// ── DEPRECATED: Intelligence workspace ──────────────────────────────────
+	// The IntelligenceWorkspaceProvider below is superseded by
+	// IntelligencePanelProvider in the capix-llm extension (registered as
+	// `capix.intelligence.panel`). This registration remains for one release
+	// cycle so existing `when` clauses and command routes keep resolving.
+	workspaceProvider = new IntelligenceWorkspaceProvider(
+		client,
+		skillsRuntime,
+		context.extensionUri,
+	);
+
+	// ── DEPRECATED: Tree view + workspace registrations ─────────────────────
+	// All of these are superseded by `capix.intelligence.panel` in the
+	// capix-llm extension. They remain registered so context menus, `when`
+	// clauses, and existing command flows keep functioning during migration.
 	context.subscriptions.push(
 		vscode.window.createTreeView("capix.intelligence.plan", {
 			treeDataProvider: planProvider,
@@ -103,6 +150,10 @@ export function activate(context: vscode.ExtensionContext): void {
 			"capix.intelligence.graph",
 			graphProvider,
 		),
+		vscode.window.registerWebviewViewProvider(
+			"capix.intelligence.workspace",
+			workspaceProvider,
+		), // ← deprecated; use capix.intelligence.panel
 	);
 
 	// Commands
@@ -146,6 +197,18 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand("capix.intelligence.retrieveMemory", () =>
 			searchMemory(),
 		),
+		vscode.commands.registerCommand("capix.intelligence.search", () =>
+			searchMemory(),
+		),
+		vscode.commands.registerCommand("capix.intelligence.installSkill", () =>
+			installSkill(),
+		),
+		vscode.commands.registerCommand("capix.intelligence.invokeSkill", () =>
+			invokeSkill(),
+		),
+		vscode.commands.registerCommand("capix.intelligence.openWorkspace", (tab?: string) =>
+			workspaceProvider.show((tab as IntelligenceTab) ?? "overview"),
+		),
 		vscode.commands.registerCommand("capix.intelligence.ratifyCovenant", () =>
 			ratifyCovenant(),
 		),
@@ -185,6 +248,7 @@ async function autoLoad(context: vscode.ExtensionContext): Promise<void> {
 	void covenantProvider.refresh();
 	void memoryProvider.refresh();
 	void planProvider.refresh();
+	void workspaceProvider.refresh();
 }
 
 // ── command flows ──────────────────────────────────────────────────────────
@@ -196,6 +260,85 @@ async function searchMemory(): Promise<void> {
 	});
 	if (query === undefined) return;
 	memoryProvider.setSearchQuery(query);
+}
+
+async function installSkill(): Promise<void> {
+	const source = await vscode.window.showInputBox({
+		prompt: "Install skill from URL, registry:name@version, first-party:name, or JSON manifest",
+		placeHolder: "https://capix.network/skills/my-skill.json",
+	});
+	if (!source) return;
+	try {
+		const rec = await skillsRuntime.install(source, { enable: false });
+		void workspaceProvider.refresh();
+		vscode.window.showInformationMessage(
+			`Capix: skill installed — ${rec.name}@${rec.version} (` +
+				`${rec.provenance.verified ? "verified" : "unverified — review before enabling"}).`,
+		);
+	} catch (err) {
+		handleError(err, "Install skill failed");
+	}
+}
+
+async function invokeSkill(): Promise<void> {
+	const installed = await skillsRuntime.listInstalled();
+	const enabled = installed.filter((s) => s.enabled);
+	if (enabled.length === 0) {
+		vscode.window.showWarningMessage("Capix: no enabled skills. Install or enable one first.");
+		return;
+	}
+	const pick = await vscode.window.showQuickPick(
+		enabled.map((s) => ({
+			label: s.name,
+			description: `v${s.version}`,
+			detail: s.description,
+			id: s.id,
+		})),
+		{ placeHolder: "Select a skill to invoke" },
+	);
+	if (!pick) return;
+	const task = await vscode.window.showInputBox({
+		prompt: "Task description",
+		placeHolder: "What should the skill do?",
+	});
+	if (task === undefined) return;
+	try {
+		const result = await skillsRuntime.invoke(pick.id, { task });
+		if (result.ok) {
+			vscode.window.showInformationMessage(
+				`Capix: ${pick.label} completed in ${result.receipt.durationMs}ms ` +
+					`(${result.receipt.costMinor} ${result.receipt.currency} minor).`,
+			);
+		} else {
+			vscode.window.showWarningMessage(`Capix: ${pick.label} failed — ${result.error}`);
+		}
+		void workspaceProvider.refresh();
+	} catch (err) {
+		handleError(err, "Invoke skill failed");
+	}
+}
+
+async function autoSelectSkill(task: string): Promise<void> {
+	const match = await skillsRuntime.autoSelect(task);
+	if (!match) {
+		vscode.window.showInformationMessage("Capix: no skill matched this task.");
+		return;
+	}
+	const choice = await vscode.window.showInformationMessage(
+		`Capix: best match — ${match.skill.name} v${match.skill.version}`,
+		{ modal: false },
+		"Invoke",
+	);
+	if (choice !== "Invoke") return;
+	try {
+		const result = await skillsRuntime.invoke(match.skill.id, { task });
+		if (!result.ok) {
+			vscode.window.showWarningMessage(`Capix: ${match.skill.name} failed — ${result.error}`);
+		}
+		void workspaceProvider.refresh();
+	} catch (err) {
+		handleError(err, "Auto-invoke skill failed");
+	}
 }
 
 async function createPlan(): Promise<void> {
