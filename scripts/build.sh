@@ -55,6 +55,7 @@ for required in \
   extensions/capix-agent-ui/package.json \
   extensions/capix-intelligence/package.json \
   src/main/capix-broker.ts \
+  src/main/capix-desktop-instance.ts \
   src/main/capix-ipc-registration.ts \
   src/main/capix-native-auth.ts \
   src/main/capix-runtime-bootstrap.ts \

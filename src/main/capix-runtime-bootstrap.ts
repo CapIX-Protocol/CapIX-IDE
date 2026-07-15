@@ -1,7 +1,8 @@
-import { app, ipcMain, safeStorage, shell } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { CapixMainBroker, CapixNotImplementedError, type CapixSdkClient } from "./capix-broker.js";
+import { createCapixDesktopInstanceGuard } from "./capix-desktop-instance.js";
 import { registerCapixIpc } from "./capix-ipc-registration.js";
 import { CapixNativePkceAuth, type SecureCredentialStore } from "./capix-native-auth.js";
 
@@ -11,6 +12,17 @@ interface CapixProductConfig {
 	capixOAuthAuthorizePath?: string;
 	capixOAuthTokenPath?: string;
 	capixOAuthRevokePath?: string;
+}
+
+const claimDesktopInstance = createCapixDesktopInstanceGuard();
+
+/**
+ * Keep every installed/build copy of CapixIDE on one Electron profile owner.
+ * Running two bundle paths against the same userData directory can corrupt the
+ * shared vscode-webview Service Worker database and leave every webview blank.
+ */
+export function claimCapixDesktopInstance(): boolean {
+	return claimDesktopInstance(app, () => BrowserWindow.getAllWindows());
 }
 
 export function resolveControlPlaneOrigin(product: CapixProductConfig, env: NodeJS.ProcessEnv = process.env): string {
@@ -128,6 +140,7 @@ export function createControlPlaneSdk(origin: string, auth: CapixNativePkceAuth,
 }
 
 export function startCapixNativeRuntime(rawProduct: unknown): () => void {
+	if (!claimCapixDesktopInstance()) return () => undefined;
 	const product = rawProduct as CapixProductConfig;
 	const origin = resolveControlPlaneOrigin(product);
 	const auth = new CapixNativePkceAuth({ baseUrl: origin, authorizePath: product.capixOAuthAuthorizePath || "/oauth/authorize", tokenPath: product.capixOAuthTokenPath || "/oauth/token", revokePath: product.capixOAuthRevokePath || "/oauth/revoke", clientId: "capix-ide", scope: "openid account catalog" }, new ElectronSafeCredentialStore(), { openExternal: async url => { await shell.openExternal(url); } });
