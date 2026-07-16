@@ -256,6 +256,8 @@ export class CapixCodeEngine {
     options?: {
       mode?: EngineMode;
       model?: string;
+      preferredProvider?: "auto" | "usepod" | "openrouter" | "surplus";
+      preferredModel?: string;
       contextFiles?: string[];
     },
   ): AsyncGenerator<EngineEvent> {
@@ -272,6 +274,8 @@ export class CapixCodeEngine {
       message,
       mode: options?.mode,
       model: options?.model,
+      preferredProvider: options?.preferredProvider,
+      preferredModel: options?.preferredModel,
       contextFiles: options?.contextFiles,
     });
 

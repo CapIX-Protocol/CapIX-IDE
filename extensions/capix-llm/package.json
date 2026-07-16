@@ -490,6 +490,23 @@
           "default": "auto",
           "description": "Smart router mode: 'auto' (dynamic model selection), 'private' (use deployed private LLM), 'loop' (private + continuous build until done)."
         },
+        "capix.ai.preferredProvider": {
+          "type": "string",
+          "enum": ["auto", "usepod", "openrouter", "surplus"],
+          "enumDescriptions": [
+            "Mix OpenRouter and UsePod with automatic price-aware failover.",
+            "Prefer UsePod, then fall back to another enabled route.",
+            "Prefer OpenRouter, then fall back to another enabled route.",
+            "Prefer Surplus when the route is enabled; currently paused in production."
+          ],
+          "default": "auto",
+          "description": "Preferred inference route. This is a preference, never a hard lock; Capix falls back when unavailable."
+        },
+        "capix.ai.preferredModel": {
+          "type": "string",
+          "default": "",
+          "description": "Preferred model used by Capix Auto. Leave empty for task-aware model selection."
+        },
         "capix.enableCrashReporting": {
           "type": "boolean",
           "default": false,

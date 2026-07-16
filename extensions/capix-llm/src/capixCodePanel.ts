@@ -30,6 +30,7 @@ import { CapixCodeEngine, type EngineEvent, type EngineMode } from "./capixCodeE
 import { logger } from "./logger";
 
 type ComposerMode = EngineMode;
+type ProviderPreference = "auto" | "usepod" | "openrouter" | "surplus";
 
 interface AttachedContext {
   name: string;
@@ -58,6 +59,8 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   private configured = false;
   private streaming = false;
   private model = "auto";
+  private preferredProvider: ProviderPreference = "auto";
+  private preferredModel = "";
   private mode: ComposerMode = "ask";
   private costUsd = 0;
   private attached: AttachedContext | null = null;
@@ -173,6 +176,8 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   private async bootState(): Promise<void> {
     const config = vscode.workspace.getConfiguration("capix");
     this.model = config.get<string>("ai.model") || "auto";
+    this.preferredProvider = config.get<ProviderPreference>("ai.preferredProvider") || "auto";
+    this.preferredModel = config.get<string>("ai.preferredModel") || "";
     this.configured = await this.client.checkConfigured();
     this.pushState();
   }
@@ -183,6 +188,7 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
       type: "state",
       configured: this.configured,
       model: this.model,
+      preferredProvider: this.preferredProvider,
       mode: this.mode,
       project: vscode.workspace.workspaceFolders?.[0]?.name ?? "—",
       streaming: this.streaming,
@@ -264,6 +270,7 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
     text?: string;
     mode?: ComposerMode;
     model?: string;
+    provider?: ProviderPreference;
     callId?: string;
     approved?: boolean;
     filePath?: string;
@@ -291,6 +298,17 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
         break;
       case "setModel":
         if (msg.model) this.model = msg.model;
+        break;
+      case "setProvider":
+        if (msg.provider && ["auto", "usepod", "openrouter", "surplus"].includes(msg.provider)) {
+          this.preferredProvider = msg.provider;
+          void vscode.workspace.getConfiguration("capix").update(
+            "ai.preferredProvider",
+            msg.provider,
+            vscode.ConfigurationTarget.Global,
+          );
+          this.pushState();
+        }
         break;
       case "attach":
         void this.attachActiveEditor();
@@ -377,6 +395,8 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
       for await (const evt of this.engine.sendMessage(content, {
         mode,
         model: this.model,
+        preferredProvider: this.preferredProvider,
+        preferredModel: this.preferredModel,
         contextFiles,
       })) {
         this.onEngineEvent(evt, mode);
@@ -490,6 +510,15 @@ ${csp}
     <span class="meta-chip" id="chip-project" title="Project">—</span>
     <span class="meta-chip" id="chip-model" title="Model">auto</span>
     <span class="meta-chip" id="chip-mode" title="Mode">Ask</span>
+    <label class="route-control" title="Preferred route; Capix automatically falls back">
+      <span>Route</span>
+      <select id="provider-select" aria-label="Preferred inference provider">
+        <option value="auto">OpenRouter + UsePod mix</option>
+        <option value="usepod">UsePod preferred</option>
+        <option value="openrouter">OpenRouter preferred</option>
+        <option value="surplus" disabled>Surplus paused</option>
+      </select>
+    </label>
   </div>
 
   <main class="conversation" id="conversation">
@@ -601,6 +630,9 @@ const PANEL_STYLES = `
     background: var(--capix-surface); border: 1px solid var(--capix-border);
     color: var(--capix-muted); text-transform: uppercase; letter-spacing: .04em;
   }
+  .route-control { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; color: var(--capix-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+  .route-control select { max-width: 132px; border: 1px solid var(--capix-border); border-radius: 999px; background: var(--capix-surface); color: var(--capix-fg); font: inherit; padding: 2px 7px; outline: none; }
+  .route-control select:focus { border-color: rgba(61,206,214,.55); }
   #chip-mode { color: var(--capix-cyan); }
   .conversation { flex: 1; overflow-y: auto; padding: 10px; }
   .empty-state { text-align: center; color: var(--capix-muted); padding: 40px 16px; }
@@ -1168,6 +1200,9 @@ const PANEL_SCRIPT = `
       $('send-btn').click();
     }
   });
+  $('provider-select').addEventListener('change', (e) => {
+    vscode.postMessage({ type: 'setProvider', provider: e.target.value });
+  });
 
   // ── Messages from extension host ─────────────────────────────────────────
   window.addEventListener('message', (e) => {
@@ -1178,6 +1213,7 @@ const PANEL_SCRIPT = `
         $('session-title').textContent = msg.sessionId ? ('Session ' + String(msg.sessionId).slice(0, 8)) : 'Capix Code';
         $('chip-project').textContent = msg.project || '—';
         $('chip-model').textContent = msg.model || 'auto';
+        $('provider-select').value = msg.preferredProvider || 'auto';
         if (msg.mode) pickMode(msg.mode);
         if (msg.streaming) setStreaming(true);
         break;
