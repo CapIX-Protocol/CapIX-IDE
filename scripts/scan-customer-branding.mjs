@@ -48,7 +48,7 @@ if (!sourceOnly) {
       const relative = String(entry);
       // Skip node_modules dependencies — third-party test files are not customer-facing
       if (relative.includes("node_modules/")) continue;
-      const relative = String(entry); if (forbidden.test(relative)) failures.push(`${name}: forbidden customer-visible path ${relative}`);
+      if (forbidden.test(relative)) failures.push(`${name}: forbidden customer-visible path ${relative}`);
       if (/\.(md|txt)$/i.test(relative)) { const file = path.join(ext, relative); if (fs.statSync(file).isFile() && forbidden.test(fs.readFileSync(file, "utf8"))) failures.push(`${name}: forbidden documentation text in ${relative}`); }
     }
   }
