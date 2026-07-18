@@ -62,13 +62,12 @@ if [ -d "$CODE_CUSTOMER_DIR" ]; then
 if [ -d "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules" ]; then
   mkdir -p "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/.bin"
   MCP_BIN="$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/.bin/capix-mcp"
-  if [ ! -f "$MCP_BIN" ]; then
-    cat > "$MCP_BIN" << 'MCPEOF'
-#!/usr/bin/env node
-require("../capix-mcp/dist/index.js");
-MCPEOF
-    chmod +x "$MCP_BIN"
-    echo "  done: created .bin/capix-mcp"
+  MCP_REAL="$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/capix-mcp/dist/index.js"
+  if [ ! -f "$MCP_BIN" ] && [ -f "$MCP_REAL" ]; then
+    mkdir -p "$(dirname "$MCP_BIN")"
+    ln -sf "$MCP_REAL" "$MCP_BIN"
+    chmod +x "$MCP_REAL"
+    echo "  done: created .bin/capix-mcp symlink"
   fi
 fi
 
