@@ -58,7 +58,21 @@ if [ -d "$CODE_CUSTOMER_DIR" ]; then
   fi
   tar -czf "$DIR/extensions/capix-llm/tools/capix-code/runtime.tar.gz" -C "$DIR/extensions/capix-llm/tools/capix-code/runtime" .
   rm -rf "$DIR/extensions/capix-llm/tools/capix-code/runtime"
-  if [ -z "$CODE_EXE_SUFFIX" ]; then
+  # Ensure MCP .bin symlink exists (VS Code build system checks for it)
+if [ -d "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules" ]; then
+  mkdir -p "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/.bin"
+  MCP_BIN="$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/.bin/capix-mcp"
+  if [ ! -f "$MCP_BIN" ]; then
+    cat > "$MCP_BIN" << 'MCPEOF'
+#!/usr/bin/env node
+const{join}=require("node:path");const{homedir}=require("node:os");const p=require(join(__dirname,"..","capix-mcp","dist","index.js"));if(p&&p.main)p.main();
+MCPEOF
+    chmod +x "$MCP_BIN"
+    echo "  done: created .bin/capix-mcp"
+  fi
+fi
+
+if [ -z "$CODE_EXE_SUFFIX" ]; then
     cp "$DIR/scripts/capix-code-bundled.sh" "$DIR/extensions/capix-llm/tools/capix-code/bin/capix-code"
     chmod +x "$DIR/extensions/capix-llm/tools/capix-code/bin/capix-code" "$DIR/extensions/capix-llm/tools/capix-code/engine/capix-engine"
   else
