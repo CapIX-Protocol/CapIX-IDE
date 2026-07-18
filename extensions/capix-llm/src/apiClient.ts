@@ -7,12 +7,23 @@
 import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import type { CatalogModel, GpuOffer, LlmDeploy, HostedEndpoint, DeployResult } from "./types";
-import { minorToDisplay, sumMinor } from "./moneyUtils";
+import { minorToDisplay, sumMinor, usageCostToMicroUsd } from "./moneyUtils";
+
+/**
+ * Shared-broker token provider. When set, every authenticated request reads
+ * (and refreshes) its access token through the shared `@capix/auth-broker`
+ * instead of the legacy SecretStorage slots — one identity across all Capix
+ * apps.
+ */
+export interface CapixTokenProvider {
+  getAccessToken(): Promise<string>;
+}
 
 export class CapixClient {
   static readonly PRODUCTION_BASE_URL = "https://www.capix.network";
   /** Cached session token (loaded from SecretStorage on first use) */
   private _sessionToken: string | null = null;
+  private _tokenProvider?: CapixTokenProvider;
   private _secretStorage?: { get: (key: string) => Promise<string | undefined>; store: (key: string, value: string) => Promise<void>; delete: (key: string) => Promise<void> };
   private _onOAuthAccessToken?: (accessToken: string | null) => Promise<void>;
   private _lastPublishedOAuthAccessToken: string | null = null;
@@ -93,7 +104,24 @@ export class CapixClient {
     return "";
   }
 
+  /** Delegate all token reads/refreshes to the shared auth broker. */
+  setTokenProvider(provider: CapixTokenProvider): void {
+    this._tokenProvider = provider;
+  }
+
   private async getAuthHeaders(): Promise<Record<string, string>> {
+    if (this._tokenProvider) {
+      try {
+        const token = await this._tokenProvider.getAccessToken();
+        if (token) {
+          this._sessionToken = token;
+          return { Authorization: `Bearer ${token}` };
+        }
+      } catch {
+        // Broker has no valid grant — fall through to the legacy store so the
+        // 401 retry path can surface a definitive signed-out state.
+      }
+    }
     const token = await this.getStoredToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
@@ -107,6 +135,17 @@ export class CapixClient {
   }
 
   private async performOAuthRefresh(recoverCrossWindow: boolean): Promise<boolean> {
+    if (this._tokenProvider) {
+      try {
+        const token = await this._tokenProvider.getAccessToken();
+        this._sessionToken = token;
+        await this.publishOAuthAccessToken(token);
+        return true;
+      } catch {
+        await this.clearExpiredOAuthSession();
+        return false;
+      }
+    }
     const refreshToken = await this._secretStorage?.get("capix.refreshToken");
     if (!refreshToken) {
       await this.clearExpiredOAuthSession();
@@ -187,6 +226,18 @@ export class CapixClient {
 
   /** Async config check (used by tools that can await) */
   async checkConfigured(): Promise<boolean> {
+    if (this._tokenProvider) {
+      try {
+        const token = await this._tokenProvider.getAccessToken();
+        if (this.isOAuthAccessToken(token)) {
+          this._sessionToken = token;
+          await this.publishOAuthAccessToken(token);
+          return true;
+        }
+      } catch {
+        // No valid broker grant — fall through to the legacy probe.
+      }
+    }
     const stored = await this._secretStorage?.get("capix.sessionToken");
     const token = stored || await this.getStoredToken();
     this._sessionToken = token;
@@ -232,12 +283,23 @@ export class CapixClient {
   }
 
   async streamAgentChat(input: unknown, signal: AbortSignal, onEvent: (event: Record<string, any>) => Promise<void>): Promise<void> {
-    const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/chat/completions`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
+    // Canonical streaming inference route — /api/v1/chat/completions is the
+    // non-streaming JSON compatibility surface and silently yields zero SSE
+    // events, so the chat panel must stream from the canonical route.
+    const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/inference/chat/completions`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
     if (!res.ok || !res.body) throw new CapixApiError(res.status, `inference_failed_${res.status}`);
     const reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; let data: string[] = [];
     const emit = async (raw: string) => {
       if (raw === "[DONE]") return;
       let parsed: any; try { parsed = JSON.parse(raw); } catch { return; }
+      // Canonical Capix stream contract (@capix/contracts inference-stream).
+      if (parsed.type === "capix.route") { await onEvent({ type: "route", receiptId: String(parsed.receiptId ?? ""), model: String(parsed.modelCapability ?? (input && (input as any).model) ?? ""), region: String(parsed.region ?? "global"), privacy: parsed.privacyClass }); return; }
+      if (parsed.type === "content.delta") { await onEvent({ type: "delta", content: typeof parsed.content === "string" ? parsed.content : "", toolCalls: undefined }); return; }
+      if (parsed.type === "tool.delta") { await onEvent({ type: "delta", content: undefined, toolCalls: [{ id: parsed.toolCallId, function: parsed.function, index: parsed.index }] }); return; }
+      if (parsed.type === "capix.usage") { await onEvent({ type: "usage", inputTokens: Number(parsed.inputUnits ?? 0), outputTokens: Number(parsed.outputUnits ?? 0), costMinor: usageCostToMicroUsd(parsed.provisionalCost), currency: "USD" }); return; }
+      if (parsed.type === "capix.final") { await onEvent({ type: "final", finishReason: String(parsed.finishReason ?? "stop"), receiptId: String(parsed.receiptId ?? "") }); return; }
+      if (parsed.type === "capix.error") throw new CapixApiError(Number(parsed.status ?? 500), String(parsed.capixCode ?? "inference_error"));
+      // OpenAI-compatible chunks (compatibility surface / older gateways).
       const choice = parsed.choices?.[0];
       if (choice?.delta?.content !== undefined || choice?.delta?.tool_calls !== undefined) await onEvent({ type: "delta", content: choice.delta.content, toolCalls: choice.delta.tool_calls });
       if (parsed.capix?.receiptId || parsed.receiptId) await onEvent({ type: "route", receiptId: parsed.capix?.receiptId ?? parsed.receiptId, model: parsed.model ?? (input && (input as any).model), region: parsed.capix?.region ?? "global", privacy: parsed.capix?.privacy });

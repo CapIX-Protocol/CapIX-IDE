@@ -44,6 +44,7 @@ exports.ProfileViewProvider = void 0;
 const vscode = __importStar(require("vscode"));
 const apiClient_1 = require("./apiClient");
 const logger_1 = require("./logger");
+const moneyUtils_1 = require("./moneyUtils");
 class ProfileViewProvider {
     client;
     extensionUri;
@@ -89,7 +90,7 @@ class ProfileViewProvider {
                 this.billing = {
                     balance: br.balance,
                     activeInstances: br.activeInstances || 0,
-                    totalSpent: br.totalSpent || 0,
+                    totalSpent: br.totalSpent || "0.00",
                     updatedAt: br.updatedAt,
                     transactions: br.transactions || [],
                     instances: (br.instances || []),
@@ -123,8 +124,8 @@ class ProfileViewProvider {
         if (!this.configured || !this.billing)
             return '<div class="connect-prompt"><p>Sign in to synchronize your Capix balance and compute.</p><button class="btn btn-primary" onclick="vscode.postMessage({ type: \'resetSession\' })">Sign In</button></div>';
         const b = this.billing.balance;
-        const rows = this.billing.instances.map((instance) => `<div class="deploy-row"><div><span class="deploy-name">${esc(instance.tier)}</span><span class="deploy-status ${instance.status === "running" ? "status-running" : "status-stopped"}">${esc(instance.status)}</span></div><span class="deploy-rate">$${Number(instance.costUsdPerHour || 0).toFixed(2)}/hr</span></div>`).join("") || '<div class="empty">No compute instances</div>';
-        return `<div class="card"><div class="balance-label">Wallet Balance</div><div class="balance-main">$${Number(b.usd || 0).toFixed(2)}</div><div class="stats"><div class="stat-box"><div class="stat-value">${Number(b.sol || 0).toFixed(4)}</div><div class="stat-label">SOL</div></div><div class="stat-box"><div class="stat-value">${Number(b.usdc || 0).toFixed(2)}</div><div class="stat-label">USDC</div></div></div><div style="margin-top:12px"><button class="btn btn-primary" onclick="vscode.postMessage({ type: 'topUp' })">+ Top Up</button><button class="btn btn-secondary" onclick="vscode.postMessage({ type: 'openBilling' })">Billing →</button></div></div><div class="card"><div class="balance-label">Compute · ${this.billing.activeInstances} active</div>${rows}</div>`;
+        const rows = this.billing.instances.map((instance) => `<div class="deploy-row"><div><span class="deploy-name">${esc(instance.tier)}</span><span class="deploy-status ${instance.status === "running" ? "status-running" : "status-stopped"}">${esc(instance.status)}</span></div><span class="deploy-rate">$${(0, moneyUtils_1.microToDisplay)((0, moneyUtils_1.dollarsToMicro)(instance.costUsdPerHour), 2)}/hr</span></div>`).join("") || '<div class="empty">No compute instances</div>';
+        return `<div class="card"><div class="balance-label">Wallet Balance</div><div class="balance-main">$${b.usd || "0.00"}</div><div class="stats"><div class="stat-box"><div class="stat-value">${b.sol || "0.0000"}</div><div class="stat-label">SOL</div></div><div class="stat-box"><div class="stat-value">${b.usdc || "0.00"}</div><div class="stat-label">USDC</div></div></div><div style="margin-top:12px"><button class="btn btn-primary" onclick="vscode.postMessage({ type: 'topUp' })">+ Top Up</button><button class="btn btn-secondary" onclick="vscode.postMessage({ type: 'openBilling' })">Billing →</button></div></div><div class="card"><div class="balance-label">Compute · ${this.billing.activeInstances} active</div>${rows}</div>`;
     }
     handleMessage(msg) {
         switch (msg.type) {
@@ -310,6 +311,19 @@ ${cspMeta}
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
+    // Integer minor-unit money helpers — avoid floating-point arithmetic.
+    function toMicro(d) { return Math.round((d || 0) * 10000); }
+    function fromMicro(m, decimals) {
+      decimals = decimals || 2;
+      var v = Math.round(m);
+      var sign = v < 0 ? '-' : '';
+      var abs = Math.abs(v);
+      var whole = Math.floor(abs / 10000);
+      var frac = abs % 10000;
+      var fracStr = String(frac).padStart(4, '0').slice(0, decimals);
+      return sign + whole + '.' + fracStr;
+    }
+
     function render(data) {
       const content = document.getElementById('content');
       if (!data && !isConfigured) {
@@ -329,8 +343,8 @@ ${cspMeta}
       const b = data.balance || {};
       const instances = data.instances || [];
       const activeCount = instances.filter(i => i.status === 'running').length;
-      const hourlyTotal = instances.filter(i => i.status === 'running').reduce((s, i) => s + (i.costUsdPerHour || 0), 0);
-      const minuteRate = (hourlyTotal / 60).toFixed(4);
+      const hourlyMicro = instances.filter(i => i.status === 'running').reduce((s, i) => s + toMicro(i.costUsdPerHour), 0);
+      const minuteMicro = Math.round(hourlyMicro / 60);
       const updated = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString() : 'just now';
       const recentRows = (data.transactions || []).slice(0, 5).map(tx => {
         const kind = esc(tx.type || tx.kind || tx.description || 'Ledger entry');
@@ -352,8 +366,8 @@ ${cspMeta}
                 <span class="deploy-status \${esc(statusClass)}">\${esc(inst.status)}</span>
               </div>
               <div style="text-align: right">
-                <div class="deploy-rate">$\${(inst.costUsdPerHour || 0).toFixed(2)}/hr</div>
-                <div class="billing-rate">$\\\{(inst.costUsdPerHour / 60).toFixed(4)}/min</div>
+                <div class="deploy-rate">$\${fromMicro(toMicro(inst.costUsdPerHour), 2)}/hr</div>
+                <div class="billing-rate">$\${fromMicro(Math.round(toMicro(inst.costUsdPerHour) / 60), 4)}/min</div>
               </div>
             </div>
           \`;
@@ -365,16 +379,16 @@ ${cspMeta}
           <div class="balance-row">
             <div>
               <div class="balance-label">Wallet Balance</div>
-              <div class="balance-main">$\${(b.usd || 0).toFixed(2)}</div>
+              <div class="balance-main">$\${b.usd || '0.00'}</div>
             </div>
           </div>
           <div class="stats">
             <div class="stat-box">
-              <div class="stat-value">$\${(b.sol || 0).toFixed(4)}</div>
+              <div class="stat-value">$\${b.sol || '0.0000'}</div>
               <div class="stat-label">≈ SOL</div>
             </div>
             <div class="stat-box">
-              <div class="stat-value">$\${(b.usdc || 0).toFixed(2)}</div>
+              <div class="stat-value">$\${b.usdc || '0.00'}</div>
               <div class="stat-label">≈ USDC</div>
             </div>
           </div>
@@ -390,12 +404,12 @@ ${cspMeta}
           <div class="balance-row">
             <div>
               <div class="balance-label">Active Billing</div>
-              <div style="font-size: 20px; font-weight: 600; color: #14F195;">$\${hourlyTotal.toFixed(2)}/hr</div>
-              <div class="billing-rate">$\${minuteRate}/min · \${activeCount} active deploys</div>
+              <div style="font-size: 20px; font-weight: 600; color: #14F195;">$\${fromMicro(hourlyMicro, 2)}/hr</div>
+              <div class="billing-rate">$\${fromMicro(minuteMicro, 4)}/min · \${activeCount} active deploys</div>
             </div>
             <div>
               <div class="stat-label">Total Spent</div>
-              <div class="stat-value" style="font-size: 14px;">$\${(data.totalSpent || 0).toFixed(2)}</div>
+              <div class="stat-value" style="font-size: 14px;">$\${data.totalSpent || '0.00'}</div>
             </div>
           </div>
           <div class="section-title">Active Deploy Costs</div>

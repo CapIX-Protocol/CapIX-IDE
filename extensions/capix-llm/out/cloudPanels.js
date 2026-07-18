@@ -47,6 +47,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CloudItem = exports.ApiKeysTreeProvider = exports.JobsTreeProvider = exports.AgentsTreeProvider = exports.InstancesTreeProvider = void 0;
 const vscode = __importStar(require("vscode"));
 const logger_1 = require("./logger");
+const moneyUtils_1 = require("./moneyUtils");
 // ── Instances tree ──────────────────────────────────────────────────────────
 class InstancesTreeProvider {
     client;
@@ -84,7 +85,7 @@ class InstancesTreeProvider {
         }
         return this.instances.map((inst) => {
             const item = new CloudItem(`${inst.tier}`, `capix-instance-${inst.status}`, vscode.TreeItemCollapsibleState.None);
-            item.description = `${inst.status} · $${inst.costUsdPerHour.toFixed(2)}/hr`;
+            item.description = `${inst.status} · $${(0, moneyUtils_1.microToDisplay)((0, moneyUtils_1.dollarsToMicro)(inst.costUsdPerHour), 2)}/hr`;
             item.iconPath = new vscode.ThemeIcon(inst.status === "running" ? "$(vm-active)" :
                 inst.status === "stopped" ? "$(vm-outline)" : "$(vm-connect)");
             item.tooltip = `${inst.tier}\n${inst.nodes.length} node(s) · since ${new Date(inst.startedAt).toLocaleString()}`;

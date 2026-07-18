@@ -432,41 +432,43 @@ class BrokerSdkClient implements CapixSdkClient {
 	}
 
 	// --- Typed API methods ---
+	// All paths target the Next.js control-plane routes served from the
+	// product origin (`<origin>/api/v1/*`); there is no separate API host.
 
 	account = {
 		get: (signal?: AbortSignal) =>
-			this.request("GET", "/v1/me", { signal }),
+			this.request("GET", "/api/v1/me", { signal }),
 	};
 
 	catalog = {
 		listModels: (signal?: AbortSignal) =>
-			this.request<unknown[]>("GET", "/v1/models", { signal }),
+			this.request<unknown[]>("GET", "/api/v1/models", { signal }),
 	};
 
 	quote = {
 		create: (input: unknown, signal?: AbortSignal) =>
-			this.request("POST", "/v1/quotes", { body: input, signal }),
+			this.request("POST", "/api/v1/quotes", { body: input, signal }),
 	};
 
 	deployment = {
 		create: (input: unknown, signal?: AbortSignal) =>
-			this.request("POST", "/v1/deployments", { body: input, signal }),
+			this.request("POST", "/api/v1/deployments", { body: input, signal }),
 		get: (id: string, signal?: AbortSignal) =>
-			this.request("GET", `/v1/deployments/${encodeURIComponent(id)}`, { signal }),
+			this.request("GET", `/api/v1/deployments/${encodeURIComponent(id)}`, { signal }),
 		list: (cursor?: string, signal?: AbortSignal) => {
 			const qs = cursor
 				? `?cursor=${encodeURIComponent(cursor)}`
 				: "";
-			return this.request("GET", `/v1/deployments${qs}`, { signal });
+			return this.request("GET", `/api/v1/deployments${qs}`, { signal });
 		},
 		setDesired: (id: string, desired: unknown, signal?: AbortSignal) =>
 			this.request(
 				"PATCH",
-				`/v1/deployments/${encodeURIComponent(id)}`,
+				`/api/v1/deployments/${encodeURIComponent(id)}`,
 				{ body: { desiredState: desired }, signal },
 			),
 		delete: (id: string, signal?: AbortSignal) =>
-			this.request("DELETE", `/v1/deployments/${encodeURIComponent(id)}`, { signal }),
+			this.request("DELETE", `/api/v1/deployments/${encodeURIComponent(id)}`, { signal }),
 	};
 
 	operation = {
@@ -474,14 +476,14 @@ class BrokerSdkClient implements CapixSdkClient {
 			Promise.resolve(
 				this.streamSse(
 					"GET",
-					`/v1/operations/${encodeURIComponent(id)}/events`,
+					`/api/v1/operations/${encodeURIComponent(id)}/events`,
 					{ signal },
 				),
 			),
 		cancel: (id: string, signal?: AbortSignal) =>
 			this.request(
 				"POST",
-				`/v1/operations/${encodeURIComponent(id)}/cancel`,
+				`/api/v1/operations/${encodeURIComponent(id)}`,
 				{ signal },
 			),
 	};
@@ -489,28 +491,26 @@ class BrokerSdkClient implements CapixSdkClient {
 	inference = {
 		stream: (input: unknown, signal?: AbortSignal) =>
 			Promise.resolve(
-				this.streamSse("POST", "/v1/inference/stream", { body: input, signal }),
+				this.streamSse("POST", "/api/v1/inference/chat/completions", { body: input, signal }),
 			),
-		cancel: (sessionId: string, signal?: AbortSignal) =>
-			this.request(
-				"POST",
-				`/v1/inference/${encodeURIComponent(sessionId)}/cancel`,
-				{ signal },
-			),
+		// No server-side cancel route exists: the control plane finalizes the
+		// stream on client disconnect, which the broker drives through its
+		// AbortController before delegating here.
+		cancel: () => Promise.resolve(undefined),
 	};
 
 	billing = {
 		getBalance: (signal?: AbortSignal) =>
-			this.request("GET", "/v1/billing/balance", { signal }),
+			this.request("GET", "/api/v1/billing", { signal }),
 		listInvoices: (signal?: AbortSignal) =>
-			this.request("GET", "/v1/billing/invoices", { signal }),
+			this.request("GET", "/api/v1/billing", { signal }),
 	};
 
 	receipt = {
 		get: (id: string, signal?: AbortSignal) =>
 			this.request(
 				"GET",
-				`/v1/route-receipts/${encodeURIComponent(id)}`,
+				`/api/v1/route-receipts/${encodeURIComponent(id)}`,
 				{ signal },
 			),
 	};
@@ -519,19 +519,19 @@ class BrokerSdkClient implements CapixSdkClient {
 		openSession: (workspaceId: string, signal?: AbortSignal) =>
 			this.request(
 				"POST",
-				`/v1/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
+				`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
 				{ signal },
 			),
 		openPort: (workspaceId: string, port: number, signal?: AbortSignal) =>
 			this.request(
 				"POST",
-				`/v1/workspaces/${encodeURIComponent(workspaceId)}/ports`,
+				`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/ports`,
 				{ body: { port }, signal },
 			),
 		closeSession: (workspaceId: string, signal?: AbortSignal) =>
 			this.request(
 				"DELETE",
-				`/v1/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
+				`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/sessions`,
 				{ signal },
 			),
 	};
@@ -542,11 +542,13 @@ class BrokerSdkClient implements CapixSdkClient {
 // ===========================================================================
 
 /**
- * Default auth service implementing PKCE (RFC 8252 / RFC 7636) with token
- * storage in memory. In production, refresh tokens and device keys live in the
- * OS credential store (Keychain / Credential Manager / Secret Service). This
- * implementation gives a working, secure flow for development and production
- * builds without hard-coded secrets.
+ * In-file fallback auth service implementing PKCE (RFC 8252 / RFC 7636) with
+ * token storage in memory. Used only when the shared `@capix/auth-broker`
+ * package is not importable — see {@link SharedBrokerAuthService}, which is
+ * the primary auth path. In production, refresh tokens and device keys live
+ * in the OS credential store (Keychain / Credential Manager / Secret Service)
+ * via the shared package. This fallback gives a working, secure flow for
+ * development builds without hard-coded secrets.
  */
 class BrokerAuthService implements CapixBrokerAuth {
 	private verifier: string | undefined;
@@ -854,6 +856,221 @@ class BrokerAuthService implements CapixBrokerAuth {
 }
 
 // ===========================================================================
+// Shared @capix/auth-broker adapter
+// ===========================================================================
+
+/**
+ * Structural surface of the shared `@capix/auth-broker` package (protocol
+ * workspace, packages/auth-broker). The package is an optional runtime peer
+ * of the IDE: it ships with full Capix installs and is absent from minimal
+ * dev checkouts, so it is loaded via a guarded dynamic import and every
+ * operation falls back to {@link BrokerAuthService} when unavailable.
+ */
+interface SharedAuthBrokerLike {
+	startLogin(): Promise<{ authorizeUrl: string; state: string }>;
+	completeLogin(
+		code: string,
+		state: string,
+	): Promise<{ accountId: string; projectId?: string; expiresAt: number }>;
+	getAccessToken(opts?: {
+		audience?: string;
+		scopes?: string[];
+	}): Promise<string>;
+	getState(): "authenticated" | "unauthenticated" | "refreshing" | "error";
+	getAccount(): {
+		accountId: string;
+		projectId?: string;
+		expiresAt: number;
+	} | null;
+	logout(): Promise<void>;
+	onEvent(handler: (event: { type: string }) => void): void;
+}
+
+interface SharedAuthBrokerModule {
+	AuthBroker: new (
+		config: {
+			baseUrl: string;
+			clientId: string;
+			scope?: string;
+			audience?: string;
+		},
+		store: unknown,
+	) => SharedAuthBrokerLike;
+	createDefaultCredentialStore(service: string): unknown;
+}
+
+/**
+ * Auth service backed by the shared `@capix/auth-broker` package: PKCE login,
+ * short-lived access tokens, rotating refresh tokens with dual-slot reuse
+ * detection, single-flight refresh, and OS keychain storage (Keychain /
+ * Credential Manager / Secret Service) are all owned by the shared package.
+ * When the package cannot be imported, every call transparently delegates to
+ * the in-file {@link BrokerAuthService} fallback.
+ */
+class SharedBrokerAuthService implements CapixBrokerAuth {
+	private readonly brokerPromise: Promise<SharedAuthBrokerLike | null>;
+	/** Shared broker once resolved (undefined = not yet resolved). */
+	private shared: SharedAuthBrokerLike | null | undefined;
+	/** In-file fallback, created only when the shared package is unavailable. */
+	private fallback: BrokerAuthService | undefined;
+
+	constructor(
+		private readonly authorizeUrl: string,
+		private readonly tokenUrl: string,
+		private readonly revokeUrl: string,
+		private readonly clientId: string,
+		private readonly redirectUri: string,
+	) {
+		this.brokerPromise = SharedBrokerAuthService.load(tokenUrl, clientId);
+	}
+
+	private static async load(
+		tokenUrl: string,
+		clientId: string,
+	): Promise<SharedAuthBrokerLike | null> {
+		try {
+			// Variable specifier: the module is an optional peer and must not be
+			// resolved (or bundled) at build time.
+			const specifier = "@capix/auth-broker";
+			const mod = (await import(specifier)) as SharedAuthBrokerModule;
+			const store = mod.createDefaultCredentialStore(clientId);
+			// Derive the OAuth issuer origin from the token endpoint
+			// (`<base>/oauth/token`); the shared broker owns the full endpoint set.
+			const baseUrl = new URL(tokenUrl).origin;
+			return new mod.AuthBroker(
+				{
+					baseUrl,
+					clientId,
+					scope: "openid profile offline_access",
+					audience: "https://api.capix.network",
+				},
+				store,
+			);
+		} catch (err) {
+			console.warn(
+				`capix-broker: @capix/auth-broker unavailable, using built-in auth service: ${redactError(err)}`,
+			);
+			return null;
+		}
+	}
+
+	private async broker(): Promise<BrokerAuthService | SharedAuthBrokerLike> {
+		if (this.shared !== undefined) {
+			return this.shared ?? this.fallback!;
+		}
+		const shared = await this.brokerPromise;
+		this.shared = shared;
+		if (shared) return shared;
+		if (!this.fallback) {
+			this.fallback = new BrokerAuthService(
+				this.authorizeUrl,
+				this.tokenUrl,
+				this.revokeUrl,
+				this.clientId,
+				this.redirectUri,
+			);
+		}
+		return this.fallback;
+	}
+
+	async startLogin(): Promise<{ authorizeUrl: string; state: string }> {
+		const broker = await this.broker();
+		const result = await broker.startLogin();
+		console.log(
+			`capix-broker: auth login started (state=${result.state.slice(0, 8)}...)`,
+		);
+		return result;
+	}
+
+	async completeLogin(code: string, state: string): Promise<unknown> {
+		const broker = await this.broker();
+		if (broker instanceof BrokerAuthService) {
+			return broker.completeLogin(code, state);
+		}
+		try {
+			await broker.completeLogin(code, state);
+		} catch (err) {
+			if (err instanceof CapixBrokerError) throw err;
+			throw new CapixBrokerError({
+				type: "about:blank",
+				title: "Token exchange failed",
+				status: 400,
+				detail: redactError(err),
+				capixCode: "AUTH_TOKEN_EXCHANGE_FAILED",
+			});
+		}
+		console.log("capix-broker: auth callback succeeded (shared broker)");
+		return this.getState();
+	}
+
+	async logout(): Promise<void> {
+		const broker = await this.broker();
+		await broker.logout();
+		console.log("capix-broker: logout complete");
+	}
+
+	async getAccessToken(): Promise<{ token: string; expiresAt: number }> {
+		const broker = await this.broker();
+		if (broker instanceof BrokerAuthService) {
+			return broker.getAccessToken();
+		}
+		try {
+			const token = await broker.getAccessToken();
+			const account = broker.getAccount();
+			return {
+				token,
+				expiresAt: account?.expiresAt ?? Date.now() + 5 * 60 * 1000,
+			};
+		} catch (err) {
+			const name = (err as Error).name;
+			if (name === "TokenReuseError") {
+				throw new CapixBrokerError({
+					type: "about:blank",
+					title: "Refresh token reuse detected",
+					status: 401,
+					detail:
+						"A rotated-out refresh token was presented. The device session was revoked; please log in again.",
+					capixCode: "AUTH_TOKEN_REUSE_DETECTED",
+				});
+			}
+			throw new CapixBrokerError({
+				type: "about:blank",
+				title: "Not authenticated",
+				status: 401,
+				detail: redactError(err),
+				capixCode: "AUTH_NOT_AUTHENTICATED",
+			});
+		}
+	}
+
+	/** Current observable state for the UI (no secrets). */
+	getState(): AuthState {
+		if (this.shared) {
+			const account = this.shared.getAccount();
+			switch (this.shared.getState()) {
+				case "authenticated":
+					return {
+						status: "authenticated",
+						...(account?.accountId ? { accountId: account.accountId } : {}),
+						...(account?.projectId ? { projectId: account.projectId } : {}),
+						...(account?.expiresAt
+							? { accessTokenExpiry: account.expiresAt }
+							: {}),
+					};
+				case "refreshing":
+					return { status: "authenticating" };
+				case "error":
+					return { status: "expired" };
+				default:
+					return { status: "unauthenticated" };
+			}
+		}
+		if (this.fallback) return this.fallback.getState();
+		return { status: "unauthenticated" };
+	}
+}
+
+// ===========================================================================
 // Broker
 // ===========================================================================
 
@@ -902,7 +1119,7 @@ export class CapixMainBroker {
 	private agentRuntimePath: string | undefined;
 
 	/** Capix control-plane endpoints (product-controlled, not workspace-overridable). */
-	private static readonly API_BASE = "https://api.capix.network";
+	private static readonly API_BASE = "https://www.capix.network";
 	private static readonly AUTH_BASE = "https://www.capix.network";
 	private static readonly CLIENT_ID = "capix-ide";
 	private static readonly REDIRECT_URI = "capix://auth/callback";
@@ -1048,10 +1265,13 @@ export class CapixMainBroker {
 	protected acquireAuthService(): CapixBrokerAuth {
 		if (this.dependencies?.auth) return this.dependencies.auth;
 		if (!this._authService) {
-			this._authService = new BrokerAuthService(
+			// Shared @capix/auth-broker first (OS keychain storage, single-flight
+			// refresh, dual-slot rotation with reuse detection); falls back to
+			// the in-file BrokerAuthService when the package is not installed.
+			this._authService = new SharedBrokerAuthService(
 				`${CapixMainBroker.AUTH_BASE}/oauth/authorize`,
-				`${CapixMainBroker.API_BASE}/oauth/token`,
-				`${CapixMainBroker.API_BASE}/oauth/revoke`,
+				`${CapixMainBroker.AUTH_BASE}/oauth/token`,
+				`${CapixMainBroker.AUTH_BASE}/oauth/revoke`,
 				CapixMainBroker.CLIENT_ID,
 				CapixMainBroker.REDIRECT_URI,
 			);

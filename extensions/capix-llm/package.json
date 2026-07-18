@@ -5,10 +5,17 @@
   "version": "1.0.0",
   "publisher": "capix",
   "license": "Apache-2.0",
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Machine Learning", "Other"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
   "icon": "resources/capix-icon.png",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -297,6 +304,36 @@
         "icon": "$(add)"
       },
       {
+        "command": "capix.cloud.create.vm",
+        "title": "Capix: New Virtual Machine…",
+        "icon": "$(vm)"
+      },
+      {
+        "command": "capix.cloud.create.gpu",
+        "title": "Capix: New Dedicated GPU…",
+        "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "capix.cloud.create.model",
+        "title": "Capix: New Private Model…",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "capix.cloud.create.container",
+        "title": "Capix: New Container Service…",
+        "icon": "$(package)"
+      },
+      {
+        "command": "capix.cloud.create.website",
+        "title": "Capix: New Website…",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "capix.cloud.create.job",
+        "title": "Capix: New Serverless Job…",
+        "icon": "$(zap)"
+      },
+      {
         "command": "capix.cloud.resource.open",
         "title": "Capix: Open Resource Details",
         "icon": "$(server)"
@@ -486,13 +523,22 @@
         },
         "capix.routeMode": {
           "type": "string",
-          "enum": ["auto", "private", "loop"],
+          "enum": [
+            "auto",
+            "private",
+            "loop"
+          ],
           "default": "auto",
           "description": "Smart router mode: 'auto' (dynamic model selection), 'private' (use deployed private LLM), 'loop' (private + continuous build until done)."
         },
         "capix.ai.preferredProvider": {
           "type": "string",
-          "enum": ["auto", "usepod", "openrouter", "surplus"],
+          "enum": [
+            "auto",
+            "usepod",
+            "openrouter",
+            "surplus"
+          ],
           "enumDescriptions": [
             "Mix OpenRouter and UsePod with automatic price-aware failover.",
             "Prefer UsePod, then fall back to another enabled route.",
@@ -528,20 +574,29 @@
     "lint:fix": "eslint --fix src/"
   },
   "lint-staged": {
-    "src/**/*.{ts,js}": ["prettier --write", "eslint --fix"],
-    "*.{json,md}": ["prettier --write"]
+    "src/**/*.{ts,js}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
-    "@types/vscode": "^1.90.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.7.0",
-    "prettier": "^3.4.0",
-    "eslint": "^9.17.0",
-    "typescript-eslint": "^8.18.0",
     "@eslint/js": "^9.17.0",
-    "vitest": "^2.1.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
     "@vitest/coverage-v8": "^2.1.0",
+    "eslint": "^9.17.0",
     "husky": "^9.1.0",
-    "lint-staged": "^15.3.0"
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1"
   }
 }

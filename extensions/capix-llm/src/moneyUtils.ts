@@ -49,6 +49,23 @@ export function dollarsToMicro(dollars: number): number {
 }
 
 /**
+ * Normalize a Capix usage cost (`{ amount, asset, scale }` integer minor
+ * units — e.g. the inference gateway's USD-credit at scale 6) into the
+ * micro-USD scale (4) the IDE cost surfaces render. Integer-only end to end.
+ */
+export function usageCostToMicroUsd(cost: unknown): string {
+  if (!cost || typeof cost !== "object") return "0";
+  const { amount, scale } = cost as { amount?: unknown; scale?: unknown };
+  const digits = typeof amount === "string" || typeof amount === "number" ? String(amount) : "";
+  if (!/^\d+$/.test(digits)) return "0";
+  const fromScale = typeof scale === "number" && Number.isInteger(scale) && scale >= 0 ? scale : 6;
+  const value = BigInt(digits);
+  if (fromScale === 4) return value.toString();
+  if (fromScale > 4) return (value / 10n ** BigInt(fromScale - 4)).toString();
+  return (value * 10n ** BigInt(4 - fromScale)).toString();
+}
+
+/**
  * Convert integer micro-units (1/10 000 dollar) to a display string.
  *
  * @param micro     integer micro-dollar amount

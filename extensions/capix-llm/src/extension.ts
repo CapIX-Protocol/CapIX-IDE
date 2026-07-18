@@ -10,10 +10,9 @@
  */
 
 import * as vscode from "vscode";
-import { createHash, randomBytes } from "node:crypto";
-import { createServer } from "node:http";
 import { chmod } from "node:fs/promises";
 import { CapixApiError, CapixClient } from "./apiClient";
+import { CapixAuthBrokerService } from "./authBroker";
 import { DeploysTreeProvider, CatalogTreeProvider, HostedTreeProvider } from "./treeViews";
 import { InstancesTreeProvider, AgentsTreeProvider, JobsTreeProvider, ApiKeysTreeProvider } from "./cloudPanels";
 import { ProfileViewProvider } from "./profileView";
@@ -22,7 +21,6 @@ import { CapixCodePanelProvider } from "./capixCodePanel";
 import { applyLayout, pickAndApplyLayout, restorePersistedLayout } from "./layoutPresets";
 import { defaultDestination, pickDestination, switchDestination } from "./activityBar";
 import { resetSessionAndSignIn } from "./authRecovery";
-import { OAuthCallbackGuard } from "./oauthCallbackGuard";
 import { TerminalManager } from "./terminalManager";
 import { AutoConnectManager } from "./autoConnect";
 import { CovenantManager } from "./covenant";
@@ -34,7 +32,7 @@ import type { CatalogModel } from "./types";
 import { AgentCommandBridge } from "./agentCommandBridge";
 import { McpAutoInstaller } from "./mcpAutoInstall";
 import { RunOnSelector, runOnLabel } from "./runOnSelector";
-import { DeploymentWizard } from "./deploymentWizard";
+import { CreationWizard, type CreationKind } from "./creationWizard";
 import { ResourceDetailsProvider } from "./resourceDetails";
 import { OnboardingFlow } from "./onboarding";
 import { ModelSync } from "./modelSync";
@@ -43,6 +41,7 @@ import { IntelligencePanelProvider } from "./intelligencePanel";
 import { dollarsToMicro, microToDisplay } from "./moneyUtils";
 
 let client: CapixClient;
+let authBroker: CapixAuthBrokerService;
 let mcpAutoInstaller: McpAutoInstaller;
 let deploysProvider: DeploysTreeProvider;
 let catalogProvider: CatalogTreeProvider;
@@ -60,7 +59,7 @@ let covenant: CovenantManager;
 let devTokens: DevTokenManager;
 let smartRouter: SmartRouterManager;
 let runOnSelector: RunOnSelector;
-let deploymentWizard: DeploymentWizard;
+let creationWizard: CreationWizard;
 let resourceDetailsProvider: ResourceDetailsProvider;
 let modelSync: ModelSync;
 let modelPicker: ModelPicker;
@@ -79,6 +78,30 @@ export function activate(context: vscode.ExtensionContext) {
     get: (key) => Promise.resolve(context.secrets.get(key)),
     store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
     delete: (key) => Promise.resolve(context.secrets.delete(key)),
+  });
+
+  // ── Shared auth broker: one identity across all Capix apps ─────────────
+  // All API calls authenticate through the shared @capix/auth-broker (PKCE,
+  // single-flight refresh, rotation reuse detection, SecretStorage-backed
+  // credential store). Legacy sessions are migrated once on activation.
+  authBroker = new CapixAuthBrokerService(context, CapixClient.PRODUCTION_BASE_URL);
+  client.setTokenProvider(authBroker);
+  context.subscriptions.push(
+    (() => {
+      let disposed = false;
+      void authBroker.migrateLegacySession({ get: (key) => Promise.resolve(context.secrets.get(key)) }).then(() => {
+        if (!disposed) void client.checkConfigured();
+      });
+      return { dispose: () => { disposed = true; } };
+    })(),
+  );
+  authBroker.onEvent((event) => {
+    if (event.type === "token_reuse_detected") {
+      logger.error("Capix auth: refresh token reuse detected — session revoked");
+      void client.resetOAuthSession();
+    } else if (event.type === "refresh_failed") {
+      logger.warn("Capix auth: token refresh failed", { reason: event.reason });
+    }
   });
   // ── MCP Auto-Installer: zero-config MCP server registration ────────────
   mcpAutoInstaller = new McpAutoInstaller(client, context);
@@ -116,7 +139,7 @@ export function activate(context: vscode.ExtensionContext) {
   devTokens = new DevTokenManager(client);
   smartRouter = new SmartRouterManager(client);
   runOnSelector = new RunOnSelector(context);
-  deploymentWizard = new DeploymentWizard(client);
+  creationWizard = new CreationWizard(client);
   resourceDetailsProvider = new ResourceDetailsProvider(client, context.extensionUri);
   context.subscriptions.push(new AgentCommandBridge(client).register());
 
@@ -336,7 +359,16 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Layout + information architecture
     vscode.commands.registerCommand("capix.setLayout", () => pickAndApplyLayout(context)),
-    vscode.commands.registerCommand("capix.cloud.deploy", () => deploymentWizard.start()),
+    // Native creation wizards — one deterministic flow per workload kind,
+    // with a live quote and explicit confirmation before any spend.
+    vscode.commands.registerCommand("capix.cloud.deploy", () => creationWizard.start()),
+    vscode.commands.registerCommand("capix.cloud.create", (kind?: CreationKind) => creationWizard.start(kind)),
+    vscode.commands.registerCommand("capix.cloud.create.vm", () => creationWizard.start("cpu_vm")),
+    vscode.commands.registerCommand("capix.cloud.create.gpu", () => creationWizard.start("dedicated_gpu")),
+    vscode.commands.registerCommand("capix.cloud.create.model", () => creationWizard.start("private_model")),
+    vscode.commands.registerCommand("capix.cloud.create.container", () => creationWizard.start("container_service")),
+    vscode.commands.registerCommand("capix.cloud.create.website", () => creationWizard.start("website")),
+    vscode.commands.registerCommand("capix.cloud.create.job", () => creationWizard.start("serverless_job")),
     vscode.commands.registerCommand("capix.cloud.resource.open", (deploymentId?: string) => resourceDetailsProvider.openCentre(deploymentId)),
     vscode.commands.registerCommand("capix.runOn", () => runOnSelector.show()),
     vscode.commands.registerCommand("capix.code.newSession", () => capixCodeProvider.newSession()),
@@ -1132,71 +1164,31 @@ async function cmdCovenantRemember() {
   devTokens.onDecision();
 }
 
-// Authentication is owned by the native main-process PKCE broker. The legacy
-// extension must never accept bearer credentials from a query string,
-// clipboard, input box or workspace setting.
+// Authentication is owned by the shared @capix/auth-broker (one identity for
+// every Capix client). The extension never accepts bearer credentials from a
+// query string, clipboard, input box or workspace setting, and never runs its
+// own PKCE/token-exchange plumbing.
 async function cmdConnectWallet() {
-  const verifier = randomBytes(48).toString("base64url");
-  const state = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
-  const callbackGuard = new OAuthCallbackGuard(state);
-  let timeout: NodeJS.Timeout | undefined;
-  const server = createServer(async (request, response) => {
-    const decision = callbackGuard.inspect(request.url || "/");
-    if (decision.kind === "ignore") {
-      response.writeHead(204, { "cache-control": "no-store" });
-      response.end();
-      return;
-    }
-    if (decision.kind === "invalid") {
-      response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
-      response.end(decision.message);
-      return;
-    }
-    if (decision.kind === "duplicate") {
-      response.writeHead(409, { "content-type": "text/plain", "cache-control": "no-store" });
-      response.end("This Capix sign-in callback is already being processed.");
-      return;
-    }
-    try {
-      const redirectUri = `http://127.0.0.1:${(server.address() as { port: number }).port}/oauth/callback`;
-      const tokenResponse = await fetch("https://www.capix.network/oauth/token", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-        body: new URLSearchParams({ grant_type: "authorization_code", code: decision.code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
-      });
-      const tokens = await tokenResponse.json() as { access_token?: string; refresh_token?: string; error?: string };
-      if (!tokenResponse.ok || !tokens.access_token) throw new Error(tokens.error || `Token exchange failed (${tokenResponse.status})`);
-      await client.saveOAuthTokens(tokens.access_token, tokens.refresh_token);
-      callbackGuard.exchangeSucceeded();
-      response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
-      response.end("Capix sign-in complete. Return to CapixIDE.");
-      if (timeout) clearTimeout(timeout);
-      server.close();
-      vscode.window.showInformationMessage("Capix sign-in complete.");
-      await refreshAll();
-      await vscode.commands.executeCommand("capix.agent.refreshAuth");
-      // Zero-config MCP: register the Capix MCP server now that auth succeeded.
-      // (Also fired via the OAuth token-publish handler — coalesced + idempotent.)
-      await mcpAutoInstaller.ensureInstalled();
-    } catch (error) {
-      callbackGuard.exchangeFailed();
-      response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
-      response.end("Capix sign-in failed. Return to CapixIDE.");
-      vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  });
-  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
-  const address = server.address();
-  if (!address || typeof address === "string") { server.close(); throw new Error("Unable to create secure sign-in callback"); }
-  timeout = setTimeout(() => server.close(), 120_000);
-  const redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`;
-  const authorize = new URL("https://www.capix.network/oauth/authorize");
-  Object.entries({ response_type: "code", client_id: "capix-ide", redirect_uri: redirectUri, scope: "openid account catalog", code_challenge: challenge, code_challenge_method: "S256", state, nonce: randomBytes(24).toString("base64url") }).forEach(([key, value]) => authorize.searchParams.set(key, value));
-  await vscode.env.openExternal(vscode.Uri.parse(authorize.toString()));
+  try {
+    await authBroker.signIn();
+    // Publish the fresh access token to the chat surface + MCP installer via
+    // the canonical configured check.
+    await client.checkConfigured();
+    vscode.window.showInformationMessage("Capix sign-in complete.");
+    await refreshAll();
+    await vscode.commands.executeCommand("capix.agent.refreshAuth");
+    // Zero-config MCP: register the Capix MCP server now that auth succeeded.
+    // (Also fired via the OAuth token-publish handler — coalesced + idempotent.)
+    await mcpAutoInstaller.ensureInstalled();
+  } catch (error) {
+    vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function cmdResetSessionAndSignIn() {
+  await authBroker.signOut().catch((error) => {
+    logger.warn("Capix broker sign-out failed", { error: String(error) });
+  });
   await resetSessionAndSignIn(
     client,
     async () => {
