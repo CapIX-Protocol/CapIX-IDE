@@ -65,7 +65,7 @@ if [ -d "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules" ]; then
   if [ ! -f "$MCP_BIN" ]; then
     cat > "$MCP_BIN" << 'MCPEOF'
 #!/usr/bin/env node
-const{join}=require("node:path");const{homedir}=require("node:os");const p=require(join(__dirname,"..","capix-mcp","dist","index.js"));if(p&&p.main)p.main();
+require("../capix-mcp/dist/index.js");
 MCPEOF
     chmod +x "$MCP_BIN"
     echo "  done: created .bin/capix-mcp"
