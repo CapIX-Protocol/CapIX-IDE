@@ -32,6 +32,8 @@ export {
 	CAPIX_ASSISTANT_MIN_WIDTH,
 	CAPIX_ASSISTANT_MAX_WIDTH,
 	type CapixAssistantMode,
+	type CapixAssistantStatus,
+	type CapixAssistantError,
 	type CapixAssistantBridge,
 	type CapixAssistantStorage,
 	type CapixAssistantSnapshot,
@@ -42,6 +44,7 @@ export {
 export {
 	mountCapixAssistant,
 	type CapixAssistantViewHandle,
+	type CapixAssistantViewOptions,
 } from "./assistant/assistantView.js";
 
 /**

@@ -168,6 +168,21 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "capix.webControl.openPanel",
+        "title": "Capix: Open Web Control",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "capix.infra.openPanel",
+        "title": "Capix: Open Infrastructure",
+        "icon": "$(server-environment)"
+      },
+      {
+        "command": "capix.infra.architectPlan",
+        "title": "Capix: Architect Mode — Plan Infra…",
+        "icon": "$(symbol-misc)"
+      },
+      {
         "command": "capix.connectWallet",
         "title": "Capix: Sign In"
       },

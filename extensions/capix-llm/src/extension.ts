@@ -38,6 +38,13 @@ import { OnboardingFlow } from "./onboarding";
 import { ModelSync } from "./modelSync";
 import { ModelPicker } from "./modelPicker";
 import { IntelligencePanelProvider } from "./intelligencePanel";
+import { WebControlManager } from "./webControl";
+import { WebControlPanel } from "./webControlPanel";
+import { createBrowserTools } from "./browserTools";
+import { InfraStackService } from "./infraStack";
+import { createInfraTools } from "./infraTools";
+import { InfraPanel } from "./infraPanel";
+import { ArchitectMode } from "./architectMode";
 import { dollarsToMicro, microToDisplay } from "./moneyUtils";
 
 let client: CapixClient;
@@ -65,6 +72,9 @@ let modelSync: ModelSync;
 let modelPicker: ModelPicker;
 let onboarding: OnboardingFlow;
 let intelligencePanel: IntelligencePanelProvider;
+let webControlManager: WebControlManager;
+let infraService: InfraStackService;
+let architectMode: ArchitectMode;
 let runOnStatusBarItem: vscode.StatusBarItem | null = null;
 let modelStatusBarItem: vscode.StatusBarItem | null = null;
 let refreshTimer: vscode.Disposable | null = null;
@@ -132,8 +142,21 @@ export function activate(context: vscode.ExtensionContext) {
   apiKeysProvider = new ApiKeysTreeProvider(client);
   profileProvider = new ProfileViewProvider(client, context.extensionUri);
   cloudDashboardProvider = new CloudDashboardProvider(client, context.extensionUri);
-  capixCodeProvider = new CapixCodePanelProvider(client, context.extensionUri, context.extensionPath);
+  // ── Web control: shared manager + browser tools for the assistant ──────
+  webControlManager = new WebControlManager();
+  // ── Infra stack: live deployments, logs, SSH/tunnels, scaling ──────────
+  // The terminal manager is created before the chat provider so the infra
+  // tools (SSH, tunnels) and the panel can share it.
   terminalManager = new TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
+  infraService = new InfraStackService(client, terminalManager);
+  architectMode = new ArchitectMode(client, infraService);
+  context.subscriptions.push({ dispose: () => infraService.dispose() });
+  capixCodeProvider = new CapixCodePanelProvider(
+    client,
+    context.extensionUri,
+    context.extensionPath,
+    [...createBrowserTools(webControlManager), ...createInfraTools(client, infraService)],
+  );
   autoConnect = new AutoConnectManager(client);
   covenant = new CovenantManager(context);
   devTokens = new DevTokenManager(client);
@@ -155,6 +178,33 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.intelligence.openPanel", (tab?: string) =>
       intelligencePanel.show((tab as "overview" | "memory" | "graph" | "skills" | "agents" | "covenant" | "receipts") ?? "overview"),
     ),
+  );
+
+  // ── Web Control panel ─────────────────────────────────────────────────
+  context.subscriptions.push(
+    vscode.commands.registerCommand("capix.webControl.openPanel", () =>
+      WebControlPanel.createOrShow(context.extensionUri, webControlManager),
+    ),
+  );
+
+  // ── Infra Stack panel + architect mode ────────────────────────────────
+  context.subscriptions.push(
+    vscode.commands.registerCommand("capix.infra.openPanel", () =>
+      InfraPanel.createOrShow(context.extensionUri, infraService),
+    ),
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("capix.infra.architectPlan", async () => {
+      const goal = await vscode.window.showInputBox({
+        prompt: "What are you building? (architect mode plans infra + cost)",
+        placeHolder: "e.g. a coding assistant backend for my team",
+      });
+      if (!goal) return;
+      const plan = await architectMode.buildPlan(goal, { kind: "coding" });
+      const estimate = plan.estimate ? ` — est. ${plan.estimate.displayTotal}` : "";
+      void vscode.window.showInformationMessage(`Architect plan: ${plan.recommendation.rationale}${estimate}`);
+      InfraPanel.createOrShow(context.extensionUri, infraService);
+    }),
   );
 
   // ── Dev Token: auto-mint on git commits ────────────────────────────────

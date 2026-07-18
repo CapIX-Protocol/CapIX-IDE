@@ -1,0 +1,131 @@
+/* ============================================================================
+   Capix Unified Theme — shared design tokens
+   ----------------------------------------------------------------------------
+   Token-only export of the Capix design system used by the assistant webview
+   (`styles/assistant.css`) and mirrored 1:1 by the capix-code TUI
+   (`code/src/tui/unified-theme.ts`). Keep all three files in sync — the TUI
+   consumes these values as hex strings and maps them to xterm-256 colors.
+
+   Semantics: cyan = active, green = success, amber = attention, red = failure.
+   Themes: dark (default), `body.vscode-light`, `body.vscode-high-contrast`.
+   ========================================================================== */
+
+:root {
+  /* Surfaces */
+  --cpx-bg: var(--vscode-sideBar-background, #0a0d10);
+  --cpx-surface: var(--vscode-sideBarSectionHeader-background, #10151b);
+  --cpx-surface-2: #151c24;
+  --cpx-surface-3: #1b242f;
+  --cpx-overlay: rgba(4, 6, 8, 0.6);
+
+  /* Borders */
+  --cpx-border: var(--vscode-panel-border, #1e2833);
+  --cpx-border-strong: #2a3745;
+
+  /* Text — all body text pairs meet WCAG AA (≥ 4.5:1) on their surfaces */
+  --cpx-fg: var(--vscode-foreground, #e6edf2);
+  --cpx-fg-2: var(--vscode-descriptionForeground, #9aa8b5);
+  --cpx-muted: #6b7c8a;
+
+  /* Signal colors */
+  --cpx-accent: #3dced6;
+  --cpx-accent-strong: #5fe3ea;
+  --cpx-accent-soft: rgba(61, 206, 214, 0.12);
+  --cpx-accent-line: rgba(61, 206, 214, 0.34);
+  --cpx-on-accent: #062a2c;
+  --cpx-success: #14f195;
+  --cpx-success-soft: rgba(20, 241, 149, 0.1);
+  --cpx-success-line: rgba(20, 241, 149, 0.34);
+  --cpx-warning: #ffae00;
+  --cpx-warning-soft: rgba(255, 174, 0, 0.1);
+  --cpx-warning-line: rgba(255, 174, 0, 0.34);
+  --cpx-danger: #ff6464;
+  --cpx-danger-fg: #ffb3b3;
+  --cpx-danger-soft: rgba(255, 100, 100, 0.1);
+  --cpx-danger-line: rgba(255, 100, 100, 0.34);
+  --cpx-violet: #b48cff;
+
+  /* Syntax */
+  --cpx-tok-keyword: #7ee0e6;
+  --cpx-tok-string: #9ee8a6;
+  --cpx-tok-comment: #5c6b78;
+  --cpx-tok-number: #ffcf8a;
+  --cpx-tok-function: #c9b0ff;
+  --cpx-tok-operator: #8fa3b3;
+
+  /* Shape + depth */
+  --cpx-radius-sm: 6px;
+  --cpx-radius: 10px;
+  --cpx-radius-lg: 14px;
+  --cpx-radius-pill: 999px;
+  --cpx-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --cpx-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
+
+  /* Type */
+  --cpx-font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif);
+  --cpx-mono: var(--vscode-editor-font-family, "SF Mono", "Cascadia Code", Consolas, monospace);
+  --cpx-size: 12.5px;
+  --cpx-size-sm: 11px;
+  --cpx-size-xs: 10px;
+
+  /* Motion */
+  --cpx-ease: cubic-bezier(0.2, 0, 0, 1);
+  --cpx-fast: 120ms;
+  --cpx-med: 200ms;
+
+  /* Agent modes — mirrored by UNIFIED_MODES in the TUI theme module */
+  --cpx-mode-ask: #3dced6;
+  --cpx-mode-plan: #8fd9de;
+  --cpx-mode-build: #14f195;
+  --cpx-mode-debug: #ffae00;
+  --cpx-mode-review: #b48cff;
+}
+
+/* ── Light theme ────────────────────────────────────────────────────────── */
+body.vscode-light {
+  --cpx-bg: var(--vscode-sideBar-background, #f7f9fa);
+  --cpx-surface: #ffffff;
+  --cpx-surface-2: #eef2f4;
+  --cpx-surface-3: #e2e9ed;
+  --cpx-overlay: rgba(247, 249, 250, 0.7);
+  --cpx-border: var(--vscode-panel-border, #d5dfe5);
+  --cpx-border-strong: #b9c8d1;
+  --cpx-fg: var(--vscode-foreground, #1c2733);
+  --cpx-fg-2: var(--vscode-descriptionForeground, #4a5b69);
+  --cpx-muted: #71818e;
+  --cpx-accent: #0e9aa3;
+  --cpx-accent-strong: #0b8a92;
+  --cpx-accent-soft: rgba(14, 154, 163, 0.1);
+  --cpx-accent-line: rgba(14, 154, 163, 0.36);
+  --cpx-on-accent: #ffffff;
+  --cpx-success: #0a9d5f;
+  --cpx-success-soft: rgba(10, 157, 95, 0.1);
+  --cpx-success-line: rgba(10, 157, 95, 0.36);
+  --cpx-warning: #a86e00;
+  --cpx-warning-soft: rgba(168, 110, 0, 0.1);
+  --cpx-warning-line: rgba(168, 110, 0, 0.36);
+  --cpx-danger: #c93a3a;
+  --cpx-danger-fg: #a82e2e;
+  --cpx-danger-soft: rgba(201, 58, 58, 0.08);
+  --cpx-danger-line: rgba(201, 58, 58, 0.34);
+  --cpx-violet: #7a5af5;
+  --cpx-tok-keyword: #0b7d85;
+  --cpx-tok-string: #1e7d32;
+  --cpx-tok-comment: #8a97a2;
+  --cpx-tok-number: #9a6200;
+  --cpx-tok-function: #6a4fd0;
+  --cpx-tok-operator: #54626e;
+  --cpx-shadow: 0 8px 24px rgba(28, 39, 51, 0.1);
+  --cpx-shadow-lg: 0 16px 48px rgba(28, 39, 51, 0.16);
+}
+
+/* ── High contrast ──────────────────────────────────────────────────────── */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --cpx-border: var(--vscode-contrastBorder, #6fc3df);
+  --cpx-border-strong: var(--vscode-contrastActiveBorder, #6fc3df);
+  --cpx-accent-soft: transparent;
+  --cpx-success-soft: transparent;
+  --cpx-warning-soft: transparent;
+  --cpx-danger-soft: transparent;
+}

@@ -30,6 +30,7 @@ import { randomBytes } from "node:crypto";
 import { CapixClient } from "./apiClient";
 import { AgentRuntimeEngine, type EngineEvent, type EngineMode } from "./agentRuntimeEngine";
 import { logger } from "./logger";
+import type { ToolDefinition } from "./shared/agent-runtime/index";
 
 type ComposerMode = EngineMode;
 type ProviderPreference = "auto" | "usepod" | "openrouter" | "surplus";
@@ -79,8 +80,10 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
     // Kept for signature compatibility with activation; the shared runtime
     // needs no bundled binary path.
     _extensionPath: string,
+    /** Extra host tools (e.g. web-control browser tools) registered on the runtime. */
+    extraTools: ToolDefinition[] = [],
   ) {
-    this.engine = new AgentRuntimeEngine({ client });
+    this.engine = new AgentRuntimeEngine({ client, extraTools });
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {

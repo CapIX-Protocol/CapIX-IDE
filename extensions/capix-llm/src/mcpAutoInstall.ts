@@ -200,7 +200,7 @@ export class McpAutoInstaller {
       // Green debug-start icon signals "live"; no background (reserved for
       // urgent states) per VS Code status-bar conventions.
       this.statusBarItem.text = "$(debug-start) MCP: Connected";
-      this.statusBarItem.tooltip = "Capix MCP — all 59 tools available to Capix Code";
+      this.statusBarItem.tooltip = "Capix MCP — all 64 tools available to Capix Code";
       this.statusBarItem.command = "capix.mcp.health";
     } else {
       this.statusBarItem.text = "$(circle-slash) MCP: Not Connected";

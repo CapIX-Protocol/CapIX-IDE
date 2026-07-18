@@ -36,6 +36,7 @@ import {
   type ModelChunk,
   type ModelInvoker,
   type Session,
+  type ToolDefinition,
 } from "./shared/agent-runtime/index";
 
 export type EngineMode = "ask" | "plan" | "build" | "debug" | "review";
@@ -77,6 +78,11 @@ export interface AgentRuntimeEngineOptions {
   client: CapixClient;
   /** Override the shared runtime database (defaults to ~/.capix-code/agent-runtime.db). */
   dbPath?: string;
+  /**
+   * Extra host tools (e.g. the web-control browser tools) registered on the
+   * runtime at boot, on top of the built-in workspace tools.
+   */
+  extraTools?: ToolDefinition[];
 }
 
 /** Routing preferences captured from the composer and forwarded to the server-authoritative router. */
@@ -116,6 +122,7 @@ export class AgentRuntimeEngine {
 
   private readonly client: CapixClient;
   private readonly dbPath?: string;
+  private readonly extraTools: ToolDefinition[];
 
   private streaming = false;
   private disposed = false;
@@ -132,6 +139,7 @@ export class AgentRuntimeEngine {
   constructor(options: AgentRuntimeEngineOptions) {
     this.client = options.client;
     this.dbPath = options.dbPath;
+    this.extraTools = options.extraTools ?? [];
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
@@ -160,6 +168,7 @@ export class AgentRuntimeEngine {
       workspaceRoot,
       modelInvoker: this.createModelInvoker(),
     });
+    for (const tool of this.extraTools) runtime.registerTool(tool);
 
     // Resume the most recent session for this workspace when one exists —
     // the shared store is durable across IDE restarts AND across clients.
