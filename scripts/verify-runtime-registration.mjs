@@ -75,10 +75,18 @@ for (const [name, { manifest }] of manifests) {
     }
   }
 }
-for (const requiredView of ["capix.agent.sessions", "capix.agent.chat"]) {
+for (const requiredView of ["capix.agent.sessions"]) {
   if (contributedViews.get(requiredView) !== "capix-agent-ui") {
     fail(`${requiredView} must be packaged as a capix-agent-ui view contribution`);
   }
+}
+// The canonical chat surface is capix.code.chat in capix-llm; the legacy
+// capix.agent.chat view is retired (duplicate panel removed).
+if (contributedViews.get("capix.code.chat") !== "capix-llm") {
+  fail("capix.code.chat must be packaged as a capix-llm view contribution");
+}
+if (contributedViews.has("capix.agent.chat")) {
+  fail("capix.agent.chat is retired; the canonical chat surface is capix.code.chat");
 }
 for (const [viewId, contributor] of contributedViews) {
   const providers = registrations.get(viewId) ?? [];

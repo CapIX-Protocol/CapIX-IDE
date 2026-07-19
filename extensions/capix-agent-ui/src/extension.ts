@@ -52,9 +52,11 @@ export function activate(context: vscode.ExtensionContext): void {
 		showCollapseAll: false,
 	});
 
+	// NOTE: capix.agent.chat is retired — the canonical chat surface is
+	// capix.code.chat (capix-llm). The provider object stays for approval
+	// flows; show() redirects focus to the canonical panel.
 	context.subscriptions.push(
 		sessionsView,
-		vscode.window.registerWebviewViewProvider("capix.agent.chat", chatProvider),
 	);
 
 	context.subscriptions.push(
