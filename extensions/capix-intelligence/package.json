@@ -5,13 +5,20 @@
   "version": "1.0.0",
   "publisher": "capix",
   "license": "Apache-2.0",
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Machine Learning", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "views": {
-      "capix-llm": [
+      "capix-intelligence": [
         {
           "id": "capix.intelligence.workspace",
           "name": "Intelligence",
@@ -55,7 +62,7 @@
     "commands": [
       {
         "command": "capix.intelligence.createPlan",
-        "title": "Capix Intelligence: Create Plan…",
+        "title": "Capix Intelligence: Create Plan\u2026",
         "icon": "$(add)"
       },
       {
@@ -65,7 +72,7 @@
       },
       {
         "command": "capix.intelligence.spawnAgent",
-        "title": "Capix Intelligence: Spawn Agent…",
+        "title": "Capix Intelligence: Spawn Agent\u2026",
         "icon": "$(robot)"
       },
       {
@@ -75,27 +82,27 @@
       },
       {
         "command": "capix.intelligence.writeMemory",
-        "title": "Capix Intelligence: Write Memory…",
+        "title": "Capix Intelligence: Write Memory\u2026",
         "icon": "$(add)"
       },
       {
         "command": "capix.intelligence.retrieveMemory",
-        "title": "Capix Intelligence: Search Memory…",
+        "title": "Capix Intelligence: Search Memory\u2026",
         "icon": "$(search)"
       },
       {
         "command": "capix.intelligence.search",
-        "title": "Capix Intelligence: Search…",
+        "title": "Capix Intelligence: Search\u2026",
         "icon": "$(search)"
       },
       {
         "command": "capix.intelligence.installSkill",
-        "title": "Capix Intelligence: Install Skill…",
+        "title": "Capix Intelligence: Install Skill\u2026",
         "icon": "$(extensions)"
       },
       {
         "command": "capix.intelligence.invokeSkill",
-        "title": "Capix Intelligence: Invoke Skill…",
+        "title": "Capix Intelligence: Invoke Skill\u2026",
         "icon": "$(run)"
       },
       {
@@ -105,22 +112,22 @@
       },
       {
         "command": "capix.intelligence.ratifyCovenant",
-        "title": "Capix Intelligence: Ratify Covenant…",
+        "title": "Capix Intelligence: Ratify Covenant\u2026",
         "icon": "$(shield-check)"
       },
       {
         "command": "capix.intelligence.checkPermission",
-        "title": "Capix Intelligence: Check Permission…",
+        "title": "Capix Intelligence: Check Permission\u2026",
         "icon": "$(key)"
       },
       {
         "command": "capix.intelligence.createCheckpoint",
-        "title": "Capix Intelligence: Create Checkpoint…",
+        "title": "Capix Intelligence: Create Checkpoint\u2026",
         "icon": "$(add)"
       },
       {
         "command": "capix.intelligence.createReceipt",
-        "title": "Capix Intelligence: Create Work Receipt…",
+        "title": "Capix Intelligence: Create Work Receipt\u2026",
         "icon": "$(add)"
       },
       {
@@ -285,5 +292,8 @@
     "typescript": "^5.7.0",
     "prettier": "^3.4.0",
     "eslint": "^9.17.0"
-  }
+  },
+  "extensionDependencies": [
+    "capix.capix-llm"
+  ]
 }

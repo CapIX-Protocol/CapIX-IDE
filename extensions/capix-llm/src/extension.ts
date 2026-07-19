@@ -91,6 +91,18 @@ let refreshTimer: vscode.Disposable | null = null;
 export function activate(context: vscode.ExtensionContext) {
   initTelemetry(context);
 
+  // First-run default: apply the Capix Dark theme unless the user has
+  // explicitly chosen a theme already. One-shot, keyed in globalState.
+  if (!context.globalState.get("capix.themeDefaultApplied")) {
+    const inspect = vscode.workspace.getConfiguration().inspect("workbench.colorTheme");
+    if (!inspect?.globalValue && !inspect?.workspaceValue) {
+      void vscode.workspace
+        .getConfiguration()
+        .update("workbench.colorTheme", "Capix Dark", vscode.ConfigurationTarget.Global);
+    }
+    void context.globalState.update("capix.themeDefaultApplied", true);
+  }
+
   client = new CapixClient();
   // Security: use VS Code SecretStorage for the session token instead of plaintext settings.json
   client.setSecretStorage({

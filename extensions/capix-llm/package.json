@@ -2,7 +2,7 @@
   "name": "capix-llm",
   "displayName": "Capix LLM",
   "description": "Deploy and manage LLM endpoints on the Capix GPU network \u2014 right from the IDE.",
-  "version": "1.0.0",
+  "version": "2.3.2",
   "publisher": "capix",
   "license": "Apache-2.0",
   "engines": {
@@ -21,21 +21,24 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "capix-llm",
-          "title": "Capix",
-          "icon": "resources/capix-activitybar.svg"
-        }
-      ],
-      "auxiliarybar": [
+          "id": "capix-cloud",
+          "title": "Capix Cloud",
+          "icon": "resources/icon-cloud.svg"
+        },
+        {
+          "id": "capix-intelligence",
+          "title": "Intelligence",
+          "icon": "resources/icon-brain.svg"
+        },
         {
           "id": "capix-code",
           "title": "Capix Code",
-          "icon": "resources/capix-activitybar.svg"
+          "icon": "resources/icon-code.svg"
         }
       ]
     },
     "views": {
-      "capix-llm": [
+      "capix-cloud": [
         {
           "id": "capix.cloud.overview",
           "name": "Cloud",
@@ -44,55 +47,47 @@
         {
           "id": "capix.llm.profile",
           "name": "Profile",
-          "type": "webview",
-          "when": "false"
+          "type": "webview"
         },
         {
           "id": "capix.llm.deploys",
-          "name": "My Deploys",
-          "when": "false"
+          "name": "My Deploys"
         },
         {
           "id": "capix.llm.instances",
-          "name": "Instances",
-          "when": "false"
-        },
-        {
-          "id": "capix.llm.agents",
-          "name": "Agents",
-          "when": "false"
+          "name": "Instances"
         },
         {
           "id": "capix.llm.jobs",
-          "name": "Serverless Jobs",
-          "when": "false"
+          "name": "Serverless Jobs"
         },
         {
           "id": "capix.llm.apikeys",
-          "name": "API Keys",
-          "when": "false"
+          "name": "API Keys"
         },
         {
           "id": "capix.llm.catalog",
-          "name": "Model Catalog",
-          "when": "false"
+          "name": "Model Catalog"
         },
         {
           "id": "capix.llm.hosted",
-          "name": "Ready Now (Hosted)",
-          "when": "false"
+          "name": "Ready Now (Hosted)"
         },
         {
           "id": "capix.cloud.resource",
           "name": "Resource",
-          "type": "webview",
-          "when": "false"
-        },
+          "type": "webview"
+        }
+      ],
+      "capix-intelligence": [
         {
           "id": "capix.intelligence.panel",
           "name": "Intelligence",
-          "type": "webview",
-          "when": "capix.dest.intelligence"
+          "type": "webview"
+        },
+        {
+          "id": "capix.llm.agents",
+          "name": "Agents"
         }
       ],
       "capix-code": [
@@ -631,7 +626,15 @@
           "description": "How long to wait after the last keystroke before requesting an inline completion (milliseconds)."
         }
       }
-    }
+    },
+    "themes": [
+      {
+        "label": "Capix Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/capix-dark.json",
+        "id": "capix-dark"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "tsc -p ./",

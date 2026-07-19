@@ -18,7 +18,7 @@
   "main": "./out/extension.js",
   "contributes": {
     "views": {
-      "capix-llm": [
+      "capix-code": [
         {
           "id": "capix.agent.sessions",
           "name": "Agent Sessions"
@@ -43,7 +43,7 @@
       },
       {
         "command": "capix.agent.startSession",
-        "title": "Capix: Start Agent Session…",
+        "title": "Capix: Start Agent Session\u2026",
         "icon": "$(add)"
       },
       {
@@ -53,7 +53,7 @@
       },
       {
         "command": "capix.agent.selectModel",
-        "title": "Capix: Select Model…",
+        "title": "Capix: Select Model\u2026",
         "icon": "$(symbol-method)"
       },
       {
@@ -108,5 +108,8 @@
     "eslint": "^9.17.0",
     "prettier": "^3.4.0",
     "typescript": "^5.9.3"
-  }
+  },
+  "extensionDependencies": [
+    "capix.capix-llm"
+  ]
 }

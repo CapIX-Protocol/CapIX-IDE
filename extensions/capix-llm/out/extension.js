@@ -49,11 +49,16 @@ const vscode = __importStar(require("vscode"));
 const promises_1 = require("node:fs/promises");
 const apiClient_1 = require("./apiClient");
 const authBroker_1 = require("./authBroker");
+const cliTokenBroker_1 = require("./cliTokenBroker");
 const treeViews_1 = require("./treeViews");
 const cloudPanels_1 = require("./cloudPanels");
 const profileView_1 = require("./profileView");
 const cloudDashboard_1 = require("./cloudDashboard");
 const capixCodePanel_1 = require("./capixCodePanel");
+const orchestrationView_1 = require("./orchestrationView");
+const agentTimelinePanel_1 = require("./agentTimelinePanel");
+const agentDebuggerPanel_1 = require("./agentDebuggerPanel");
+const orchestration_1 = require("./shared/agent-runtime/orchestration");
 const layoutPresets_1 = require("./layoutPresets");
 const activityBar_1 = require("./activityBar");
 const authRecovery_1 = require("./authRecovery");
@@ -73,13 +78,14 @@ const onboarding_1 = require("./onboarding");
 const modelSync_1 = require("./modelSync");
 const modelPicker_1 = require("./modelPicker");
 const intelligencePanel_1 = require("./intelligencePanel");
+const editPreviewPanel_1 = require("./editPreviewPanel");
 const webControl_1 = require("./webControl");
 const webControlPanel_1 = require("./webControlPanel");
-const browserTools_1 = require("./browserTools");
 const infraStack_1 = require("./infraStack");
-const infraTools_1 = require("./infraTools");
 const infraPanel_1 = require("./infraPanel");
 const architectMode_1 = require("./architectMode");
+const inlineCompletionProvider_1 = require("./inlineCompletionProvider");
+const full_tool_set_1 = require("./full-tool-set");
 const moneyUtils_1 = require("./moneyUtils");
 let client;
 let authBroker;
@@ -106,6 +112,7 @@ let modelSync;
 let modelPicker;
 let onboarding;
 let intelligencePanel;
+let editPreviewPanel;
 let webControlManager;
 let infraService;
 let architectMode;
@@ -114,6 +121,17 @@ let modelStatusBarItem = null;
 let refreshTimer = null;
 function activate(context) {
     (0, telemetry_1.initTelemetry)(context);
+    // First-run default: apply the Capix Dark theme unless the user has
+    // explicitly chosen a theme already. One-shot, keyed in globalState.
+    if (!context.globalState.get("capix.themeDefaultApplied")) {
+        const inspect = vscode.workspace.getConfiguration().inspect("workbench.colorTheme");
+        if (!inspect?.globalValue && !inspect?.workspaceValue) {
+            void vscode.workspace
+                .getConfiguration()
+                .update("workbench.colorTheme", "Capix Dark", vscode.ConfigurationTarget.Global);
+        }
+        void context.globalState.update("capix.themeDefaultApplied", true);
+    }
     client = new apiClient_1.CapixClient();
     // Security: use VS Code SecretStorage for the session token instead of plaintext settings.json
     client.setSecretStorage({
@@ -125,8 +143,20 @@ function activate(context) {
     // All API calls authenticate through the shared @capix/auth-broker (PKCE,
     // single-flight refresh, rotation reuse detection, SecretStorage-backed
     // credential store). Legacy sessions are migrated once on activation.
+    // When the IDE has no grant of its own, fall back to the Capix Code CLI as
+    // the native credential broker so a CLI sign-in carries into the IDE.
     authBroker = new authBroker_1.CapixAuthBrokerService(context, apiClient_1.CapixClient.PRODUCTION_BASE_URL);
-    client.setTokenProvider(authBroker);
+    const cliTokenBroker = new cliTokenBroker_1.CliTokenBroker();
+    client.setTokenProvider({
+        getAccessToken: async () => {
+            try {
+                return await authBroker.getAccessToken();
+            }
+            catch {
+                return cliTokenBroker.getAccessToken();
+            }
+        },
+    });
     context.subscriptions.push((() => {
         let disposed = false;
         void authBroker.migrateLegacySession({ get: (key) => Promise.resolve(context.secrets.get(key)) }).then(() => {
@@ -181,11 +211,16 @@ function activate(context) {
     infraService = new infraStack_1.InfraStackService(client, terminalManager);
     architectMode = new architectMode_1.ArchitectMode(client, infraService);
     context.subscriptions.push({ dispose: () => infraService.dispose() });
-    capixCodeProvider = new capixCodePanel_1.CapixCodePanelProvider(client, context.extensionUri, context.extensionPath, [...(0, browserTools_1.createBrowserTools)(webControlManager), ...(0, infraTools_1.createInfraTools)(client, infraService)]);
+    capixCodeProvider = new capixCodePanel_1.CapixCodePanelProvider(client, context.extensionUri, context.extensionPath, (0, full_tool_set_1.createFullToolSet)(client, architectMode, infraService, webControlManager));
     autoConnect = new autoConnect_1.AutoConnectManager(client);
     covenant = new covenant_1.CovenantManager(context);
     devTokens = new devTokenManager_1.DevTokenManager(client);
     smartRouter = new smartRouterManager_1.SmartRouterManager(client);
+    // ── Inline code completion (Copilot-style ghost text) ─────────────────
+    // Debounced, cached, multi-line suggestions through the same completion
+    // engine and canonical smart-router route as the Capix Code CLI. Tab
+    // accepts, Escape rejects (keybindings contributed in package.json).
+    (0, inlineCompletionProvider_1.registerInlineCompletions)(context, client);
     runOnSelector = new runOnSelector_1.RunOnSelector(context);
     creationWizard = new creationWizard_1.CreationWizard(client);
     resourceDetailsProvider = new resourceDetails_1.ResourceDetailsProvider(client, context.extensionUri);
@@ -199,6 +234,12 @@ function activate(context) {
     context.subscriptions.push(vscode.commands.registerCommand("capix.intelligence.openPanel", (tab) => intelligencePanel.show(tab ?? "overview")));
     // ── Web Control panel ─────────────────────────────────────────────────
     context.subscriptions.push(vscode.commands.registerCommand("capix.webControl.openPanel", () => webControlPanel_1.WebControlPanel.createOrShow(context.extensionUri, webControlManager)));
+    // ── Atomic edit preview: native diff review for multi-file edits ──────
+    // The agent runtime invokes `capix.edits.preview` with the pending
+    // PreviewChange[] for a turn; each change is reviewed in a native diff
+    // editor and accepted edits are applied atomically (rollback on failure).
+    editPreviewPanel = new editPreviewPanel_1.EditPreviewPanel(context);
+    context.subscriptions.push(vscode.commands.registerCommand("capix.edits.preview", (changes) => editPreviewPanel.preview(Array.isArray(changes) ? changes : [])));
     // ── Infra Stack panel + architect mode ────────────────────────────────
     context.subscriptions.push(vscode.commands.registerCommand("capix.infra.openPanel", () => infraPanel_1.InfraPanel.createOrShow(context.extensionUri, infraService)));
     context.subscriptions.push(vscode.commands.registerCommand("capix.infra.architectPlan", async () => {
@@ -246,7 +287,11 @@ function activate(context) {
     const agentsView = vscode.window.createTreeView("capix.llm.agents", { treeDataProvider: agentsProvider });
     const jobsView = vscode.window.createTreeView("capix.llm.jobs", { treeDataProvider: jobsProvider });
     const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
-    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider), vscode.window.registerWebviewViewProvider("capix.cloud.overview", cloudDashboardProvider), vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider), vscode.window.registerWebviewViewProvider("capix.cloud.resource", resourceDetailsProvider));
+    const orchestrationEngine = new orchestration_1.OrchestrationEngine({ maxParallel: 3 });
+    const orchestrationProvider = new orchestrationView_1.CapixOrchestrationViewProvider(orchestrationEngine, context.extensionUri);
+    const agentTimelineProvider = new agentTimelinePanel_1.CapixAgentTimelineViewProvider(context.extensionUri);
+    const agentDebuggerProvider = new agentDebuggerPanel_1.CapixAgentDebuggerViewProvider(context.extensionUri);
+    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider), vscode.window.registerWebviewViewProvider("capix.cloud.overview", cloudDashboardProvider), vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider), vscode.window.registerWebviewViewProvider("capix.cloud.resource", resourceDetailsProvider), vscode.window.registerWebviewViewProvider("capix.orchestration.view", orchestrationProvider), vscode.window.registerWebviewViewProvider("capix.agentTimeline.view", agentTimelineProvider), vscode.window.registerWebviewViewProvider("capix.agentDebugger.view", agentDebuggerProvider));
     // ── Run-On target: status bar + change handler ──────────────────────────
     runOnStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
     runOnStatusBarItem.text = (0, runOnSelector_1.runOnLabel)(runOnSelector.getCurrentTarget());
