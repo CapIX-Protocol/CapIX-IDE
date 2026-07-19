@@ -73,6 +73,13 @@ const onboarding_1 = require("./onboarding");
 const modelSync_1 = require("./modelSync");
 const modelPicker_1 = require("./modelPicker");
 const intelligencePanel_1 = require("./intelligencePanel");
+const webControl_1 = require("./webControl");
+const webControlPanel_1 = require("./webControlPanel");
+const browserTools_1 = require("./browserTools");
+const infraStack_1 = require("./infraStack");
+const infraTools_1 = require("./infraTools");
+const infraPanel_1 = require("./infraPanel");
+const architectMode_1 = require("./architectMode");
 const moneyUtils_1 = require("./moneyUtils");
 let client;
 let authBroker;
@@ -99,6 +106,9 @@ let modelSync;
 let modelPicker;
 let onboarding;
 let intelligencePanel;
+let webControlManager;
+let infraService;
+let architectMode;
 let runOnStatusBarItem = null;
 let modelStatusBarItem = null;
 let refreshTimer = null;
@@ -162,8 +172,16 @@ function activate(context) {
     apiKeysProvider = new cloudPanels_1.ApiKeysTreeProvider(client);
     profileProvider = new profileView_1.ProfileViewProvider(client, context.extensionUri);
     cloudDashboardProvider = new cloudDashboard_1.CloudDashboardProvider(client, context.extensionUri);
-    capixCodeProvider = new capixCodePanel_1.CapixCodePanelProvider(client, context.extensionUri, context.extensionPath);
+    // ── Web control: shared manager + browser tools for the assistant ──────
+    webControlManager = new webControl_1.WebControlManager();
+    // ── Infra stack: live deployments, logs, SSH/tunnels, scaling ──────────
+    // The terminal manager is created before the chat provider so the infra
+    // tools (SSH, tunnels) and the panel can share it.
     terminalManager = new terminalManager_1.TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
+    infraService = new infraStack_1.InfraStackService(client, terminalManager);
+    architectMode = new architectMode_1.ArchitectMode(client, infraService);
+    context.subscriptions.push({ dispose: () => infraService.dispose() });
+    capixCodeProvider = new capixCodePanel_1.CapixCodePanelProvider(client, context.extensionUri, context.extensionPath, [...(0, browserTools_1.createBrowserTools)(webControlManager), ...(0, infraTools_1.createInfraTools)(client, infraService)]);
     autoConnect = new autoConnect_1.AutoConnectManager(client);
     covenant = new covenant_1.CovenantManager(context);
     devTokens = new devTokenManager_1.DevTokenManager(client);
@@ -179,6 +197,22 @@ function activate(context) {
     intelligencePanel = new intelligencePanel_1.IntelligencePanelProvider(client, context.extensionUri);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider("capix.intelligence.panel", intelligencePanel));
     context.subscriptions.push(vscode.commands.registerCommand("capix.intelligence.openPanel", (tab) => intelligencePanel.show(tab ?? "overview")));
+    // ── Web Control panel ─────────────────────────────────────────────────
+    context.subscriptions.push(vscode.commands.registerCommand("capix.webControl.openPanel", () => webControlPanel_1.WebControlPanel.createOrShow(context.extensionUri, webControlManager)));
+    // ── Infra Stack panel + architect mode ────────────────────────────────
+    context.subscriptions.push(vscode.commands.registerCommand("capix.infra.openPanel", () => infraPanel_1.InfraPanel.createOrShow(context.extensionUri, infraService)));
+    context.subscriptions.push(vscode.commands.registerCommand("capix.infra.architectPlan", async () => {
+        const goal = await vscode.window.showInputBox({
+            prompt: "What are you building? (architect mode plans infra + cost)",
+            placeHolder: "e.g. a coding assistant backend for my team",
+        });
+        if (!goal)
+            return;
+        const plan = await architectMode.buildPlan(goal, { kind: "coding" });
+        const estimate = plan.estimate ? ` — est. ${plan.estimate.displayTotal}` : "";
+        void vscode.window.showInformationMessage(`Architect plan: ${plan.recommendation.rationale}${estimate}`);
+        infraPanel_1.InfraPanel.createOrShow(context.extensionUri, infraService);
+    }));
     // ── Dev Token: auto-mint on git commits ────────────────────────────────
     // Watch the VS Code SCM (git) state — when HEAD changes, a commit happened.
     let lastHead;

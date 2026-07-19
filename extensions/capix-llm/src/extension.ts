@@ -45,6 +45,7 @@ import { InfraStackService } from "./infraStack";
 import { createInfraTools } from "./infraTools";
 import { InfraPanel } from "./infraPanel";
 import { ArchitectMode } from "./architectMode";
+import { createFullToolSet } from "./full-tool-set";
 import { dollarsToMicro, microToDisplay } from "./moneyUtils";
 
 let client: CapixClient;
@@ -155,7 +156,7 @@ export function activate(context: vscode.ExtensionContext) {
     client,
     context.extensionUri,
     context.extensionPath,
-    [...createBrowserTools(webControlManager), ...createInfraTools(client, infraService)],
+    createFullToolSet(client, architectMode, infraService, webControlManager),
   );
   autoConnect = new AutoConnectManager(client);
   covenant = new CovenantManager(context);

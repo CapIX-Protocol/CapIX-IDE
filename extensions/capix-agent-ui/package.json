@@ -5,9 +5,16 @@
   "version": "1.0.0",
   "publisher": "capix",
   "license": "Apache-2.0",
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Machine Learning", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "views": {
@@ -96,10 +103,10 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@types/vscode": "^1.90.0",
     "@types/node": "^20.0.0",
-    "typescript": "^5.7.0",
+    "@types/vscode": "^1.90.0",
+    "eslint": "^9.17.0",
     "prettier": "^3.4.0",
-    "eslint": "^9.17.0"
+    "typescript": "^5.9.3"
   }
 }

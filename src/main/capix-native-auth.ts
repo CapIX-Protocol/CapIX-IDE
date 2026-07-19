@@ -139,6 +139,9 @@ export class CapixNativePkceAuth {
 		}
 	}
 
+	/** The authenticated account id, if known. */
+	getAccountId(): string | undefined { return this.accountId; }
+
 	private async acceptLoopback(rawUrl: string | undefined, response: import("node:http").ServerResponse): Promise<void> {
 		const pending = this.pending; if (!pending || !rawUrl) throw new Error("No pending login");
 		const url = new URL(rawUrl, pending.redirectUri);
