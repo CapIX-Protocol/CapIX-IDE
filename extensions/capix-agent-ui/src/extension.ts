@@ -365,7 +365,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 		if (this.view) {
 			this.view.show?.(true);
 		} else {
-			void vscode.commands.executeCommand("capix.agent.chat.focus");
+			// The canonical Capix Code chat lives in the capix-llm panel.
+			void vscode.commands.executeCommand("capix.code.chat.focus");
 		}
 	}
 

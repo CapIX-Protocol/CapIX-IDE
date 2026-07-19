@@ -17,48 +17,6 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "views": {
-      "capix-intelligence": [
-        {
-          "id": "capix.intelligence.workspace",
-          "name": "Intelligence",
-          "type": "webview"
-        },
-        {
-          "id": "capix.intelligence.plan",
-          "name": "Current Plan"
-        },
-        {
-          "id": "capix.intelligence.agents",
-          "name": "Active Agents & Delegated Tasks"
-        },
-        {
-          "id": "capix.intelligence.memory",
-          "name": "Memory Search"
-        },
-        {
-          "id": "capix.intelligence.covenant",
-          "name": "Project Covenant"
-        },
-        {
-          "id": "capix.intelligence.graph",
-          "name": "Knowledge Graph",
-          "type": "webview"
-        },
-        {
-          "id": "capix.intelligence.decisions",
-          "name": "Decisions"
-        },
-        {
-          "id": "capix.intelligence.checkpoints",
-          "name": "Checkpoints"
-        },
-        {
-          "id": "capix.intelligence.receipts",
-          "name": "Work Receipts"
-        }
-      ]
-    },
     "commands": [
       {
         "command": "capix.intelligence.createPlan",

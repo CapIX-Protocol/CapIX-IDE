@@ -22,11 +22,6 @@
         {
           "id": "capix.agent.sessions",
           "name": "Agent Sessions"
-        },
-        {
-          "id": "capix.agent.chat",
-          "name": "Capix Code",
-          "type": "webview"
         }
       ]
     },
