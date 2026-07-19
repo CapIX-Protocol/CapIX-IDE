@@ -1,14 +1,21 @@
 {
   "name": "capix-llm",
   "displayName": "Capix LLM",
-  "description": "Deploy and manage LLM endpoints on the Capix GPU network — right from the IDE.",
+  "description": "Deploy and manage LLM endpoints on the Capix GPU network \u2014 right from the IDE.",
   "version": "1.0.0",
   "publisher": "capix",
   "license": "Apache-2.0",
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Machine Learning", "Other"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
   "icon": "resources/capix-icon.png",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -93,10 +100,27 @@
           "id": "capix.code.chat",
           "name": "Capix Code",
           "type": "webview"
+        },
+        {
+          "id": "capix.orchestration.view",
+          "name": "Orchestration"
+        },
+        {
+          "id": "capix.agentTimeline.view",
+          "name": "Agent Timeline"
+        },
+        {
+          "id": "capix.agentDebugger.view",
+          "name": "Agent Debugger"
         }
       ]
     },
     "commands": [
+      {
+        "command": "capix.edits.preview",
+        "title": "Capix: Preview Pending Edits",
+        "icon": "$(diff)"
+      },
       {
         "command": "capix.launchCentre",
         "title": "Capix: Open Launch Centre",
@@ -104,12 +128,12 @@
       },
       {
         "command": "capix.deployModel",
-        "title": "Capix: Deploy LLM…",
+        "title": "Capix: Deploy LLM\u2026",
         "icon": "$(rocket)"
       },
       {
         "command": "capix.deployCustomModel",
-        "title": "Capix: Deploy Custom Model (Hugging Face link)…",
+        "title": "Capix: Deploy Custom Model (Hugging Face link)\u2026",
         "icon": "$(add)"
       },
       {
@@ -161,6 +185,21 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "capix.webControl.openPanel",
+        "title": "Capix: Open Web Control",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "capix.infra.openPanel",
+        "title": "Capix: Open Infrastructure",
+        "icon": "$(server-environment)"
+      },
+      {
+        "command": "capix.infra.architectPlan",
+        "title": "Capix: Architect Mode \u2014 Plan Infra\u2026",
+        "icon": "$(symbol-misc)"
+      },
+      {
         "command": "capix.connectWallet",
         "title": "Capix: Sign In"
       },
@@ -170,12 +209,12 @@
       },
       {
         "command": "capix.execOnInstance",
-        "title": "Capix: Run Command on GPU Instance…",
+        "title": "Capix: Run Command on GPU Instance\u2026",
         "icon": "$(terminal)"
       },
       {
         "command": "capix.topUp",
-        "title": "Capix: Top Up Wallet Balance…",
+        "title": "Capix: Top Up Wallet Balance\u2026",
         "icon": "$(credit-card)"
       },
       {
@@ -200,7 +239,7 @@
       },
       {
         "command": "capix.downloadSshKey",
-        "title": "Capix: Download SSH Key…",
+        "title": "Capix: Download SSH Key\u2026",
         "icon": "$(key)"
       },
       {
@@ -225,17 +264,17 @@
       },
       {
         "command": "capix.deployAgent",
-        "title": "Capix: Deploy Agent (GitHub repo)…",
+        "title": "Capix: Deploy Agent (GitHub repo)\u2026",
         "icon": "$(github)"
       },
       {
         "command": "capix.triggerJob",
-        "title": "Capix: Trigger Serverless Job…",
+        "title": "Capix: Trigger Serverless Job\u2026",
         "icon": "$(play)"
       },
       {
         "command": "capix.createApiKey",
-        "title": "Capix: Create API Key…",
+        "title": "Capix: Create API Key\u2026",
         "icon": "$(add)"
       },
       {
@@ -245,7 +284,7 @@
       },
       {
         "command": "capix.covenantRemember",
-        "title": "Capix: Remember (Save to Memory)…"
+        "title": "Capix: Remember (Save to Memory)\u2026"
       },
       {
         "command": "capix.covenantClear",
@@ -258,11 +297,11 @@
       },
       {
         "command": "capix.setRouteMode",
-        "title": "Capix: Set Routing Mode (Auto / Private / Loop)…"
+        "title": "Capix: Set Routing Mode (Auto / Private / Loop)\u2026"
       },
       {
         "command": "capix.deployPrivateLlm",
-        "title": "Capix: Deploy Private LLM (Uncensored)…",
+        "title": "Capix: Deploy Private LLM (Uncensored)\u2026",
         "icon": "$(shield)"
       },
       {
@@ -280,21 +319,51 @@
       },
       {
         "command": "capix.routerBlockModel",
-        "title": "Capix: Block Model (Never Suggest)…"
+        "title": "Capix: Block Model (Never Suggest)\u2026"
       },
       {
         "command": "capix.routerFavorModel",
-        "title": "Capix: Favor Model (Always Prefer)…"
+        "title": "Capix: Favor Model (Always Prefer)\u2026"
       },
       {
         "command": "capix.setLayout",
-        "title": "Capix: Switch Layout…",
+        "title": "Capix: Switch Layout\u2026",
         "icon": "$(layout)"
       },
       {
         "command": "capix.cloud.deploy",
-        "title": "Capix: New Cloud Resource…",
+        "title": "Capix: New Cloud Resource\u2026",
         "icon": "$(add)"
+      },
+      {
+        "command": "capix.cloud.create.vm",
+        "title": "Capix: New Virtual Machine\u2026",
+        "icon": "$(vm)"
+      },
+      {
+        "command": "capix.cloud.create.gpu",
+        "title": "Capix: New Dedicated GPU\u2026",
+        "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "capix.cloud.create.model",
+        "title": "Capix: New Private Model\u2026",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "capix.cloud.create.container",
+        "title": "Capix: New Container Service\u2026",
+        "icon": "$(package)"
+      },
+      {
+        "command": "capix.cloud.create.website",
+        "title": "Capix: New Website\u2026",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "capix.cloud.create.job",
+        "title": "Capix: New Serverless Job\u2026",
+        "icon": "$(zap)"
       },
       {
         "command": "capix.cloud.resource.open",
@@ -303,7 +372,7 @@
       },
       {
         "command": "capix.runOn",
-        "title": "Capix: Run on…",
+        "title": "Capix: Run on\u2026",
         "icon": "$(device-desktop)"
       },
       {
@@ -338,7 +407,7 @@
       },
       {
         "command": "capix.setDestination",
-        "title": "Capix: Switch Destination…"
+        "title": "Capix: Switch Destination\u2026"
       },
       {
         "command": "capix.onboarding",
@@ -347,8 +416,38 @@
       },
       {
         "command": "capix.selectModel",
-        "title": "Capix: Select Model…",
+        "title": "Capix: Select Model\u2026",
         "icon": "$(hub)"
+      },
+      {
+        "command": "capix.inlineCompletion.toggle",
+        "title": "Capix: Toggle Inline Code Completion",
+        "icon": "$(symbol-snippet)"
+      },
+      {
+        "command": "capix.inlineCompletion.accept",
+        "title": "Capix: Accept Inline Suggestion"
+      },
+      {
+        "command": "capix.inlineCompletion.reject",
+        "title": "Capix: Dismiss Inline Suggestion"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "capix.inlineCompletion.accept",
+        "key": "tab",
+        "when": "inlineSuggestionVisible && capix.inlineCompletion.enabled && !editorTabMovesFocus"
+      },
+      {
+        "command": "capix.inlineCompletion.reject",
+        "key": "escape",
+        "when": "inlineSuggestionVisible && capix.inlineCompletion.enabled"
+      },
+      {
+        "command": "capix.inlineCompletion.toggle",
+        "key": "ctrl+alt+space",
+        "mac": "cmd+alt+space"
       }
     ],
     "menus": {
@@ -486,13 +585,22 @@
         },
         "capix.routeMode": {
           "type": "string",
-          "enum": ["auto", "private", "loop"],
+          "enum": [
+            "auto",
+            "private",
+            "loop"
+          ],
           "default": "auto",
           "description": "Smart router mode: 'auto' (dynamic model selection), 'private' (use deployed private LLM), 'loop' (private + continuous build until done)."
         },
         "capix.ai.preferredProvider": {
           "type": "string",
-          "enum": ["auto", "usepod", "openrouter", "surplus"],
+          "enum": [
+            "auto",
+            "usepod",
+            "openrouter",
+            "surplus"
+          ],
           "enumDescriptions": [
             "Mix OpenRouter and UsePod with automatic price-aware failover.",
             "Prefer UsePod, then fall back to another enabled route.",
@@ -511,6 +619,16 @@
           "type": "boolean",
           "default": false,
           "description": "Enable opt-in crash reporting"
+        },
+        "capix.inlineCompletion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Capix inline code completion (Copilot-style ghost text). Accept with Tab, dismiss with Escape."
+        },
+        "capix.inlineCompletion.debounceMs": {
+          "type": "number",
+          "default": 300,
+          "description": "How long to wait after the last keystroke before requesting an inline completion (milliseconds)."
         }
       }
     }
@@ -528,20 +646,29 @@
     "lint:fix": "eslint --fix src/"
   },
   "lint-staged": {
-    "src/**/*.{ts,js}": ["prettier --write", "eslint --fix"],
-    "*.{json,md}": ["prettier --write"]
+    "src/**/*.{ts,js}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
-    "@types/vscode": "^1.90.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.7.0",
-    "prettier": "^3.4.0",
-    "eslint": "^9.17.0",
-    "typescript-eslint": "^8.18.0",
     "@eslint/js": "^9.17.0",
-    "vitest": "^2.1.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
     "@vitest/coverage-v8": "^2.1.0",
+    "eslint": "^9.17.0",
     "husky": "^9.1.0",
-    "lint-staged": "^15.3.0"
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1"
   }
 }

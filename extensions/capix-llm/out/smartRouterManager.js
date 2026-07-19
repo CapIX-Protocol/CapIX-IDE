@@ -55,6 +55,7 @@ const node_fs_1 = require("node:fs");
 const node_os_1 = require("node:os");
 const node_path_1 = require("node:path");
 const logger_1 = require("./logger");
+const moneyUtils_1 = require("./moneyUtils");
 function getConfigDir() {
     switch (process.platform) {
         case "darwin": return (0, node_path_1.join)((0, node_os_1.homedir)(), "Library", "Application Support", "capix-code");
@@ -158,7 +159,7 @@ class SmartRouterManager {
         }
         // Step 4: pick the cheapest offer.
         const cheapest = offersRes.offers.sort((a, b) => a.pricePerHr - b.pricePerHr)[0];
-        const confirm = await vscode.window.showWarningMessage(`Deploy ${pick.label} on ${cheapest.gpu} in ${cheapest.location}?\n$${cheapest.pricePerHr.toFixed(2)}/hr`, { modal: true }, "Deploy");
+        const confirm = await vscode.window.showWarningMessage(`Deploy ${pick.label} on ${cheapest.gpu} in ${cheapest.location}?\n$${(0, moneyUtils_1.microToDisplay)((0, moneyUtils_1.dollarsToMicro)(cheapest.pricePerHr), 2)}/hr`, { modal: true }, "Deploy");
         if (confirm !== "Deploy")
             return null;
         // Step 5: deploy + wait for ready.

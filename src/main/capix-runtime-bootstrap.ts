@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { CapixMainBroker, CapixNotImplementedError, type CapixSdkClient } from "./capix-broker.js";
@@ -58,14 +59,64 @@ export function createControlPlaneSdk(origin: string, auth: CapixNativePkceAuth,
 		const body = await response.json(); if (!response.ok) throw new Error(`Capix API ${response.status}: ${body?.error ?? body?.title ?? "request failed"}`); return body;
 	}
 
-	async function postJson(pathname: string, signal?: AbortSignal): Promise<any> {
+	async function sendJson(method: string, pathname: string, body?: unknown, signal?: AbortSignal, extraHeaders?: Record<string, string>): Promise<any> {
 		const token = await auth.getAccessToken();
 		const url = new URL(pathname, origin);
-		const response = await fetchImpl(url, { method: "POST", headers: { authorization: `Bearer ${token.token}`, accept: "application/json" }, signal });
+		const headers: Record<string, string> = { authorization: `Bearer ${token.token}`, accept: "application/json", ...extraHeaders };
+		if (body !== undefined) { headers["content-type"] = "application/json"; headers["idempotency-key"] = randomUUID(); }
+		const response = await fetchImpl(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal });
 		const text = await response.text();
-		if (!response.ok) { let detail = text; try { detail = JSON.parse(text)?.error ?? text; } catch {} throw new Error(`Capix API ${response.status}: ${detail || "request failed"}`); }
+		if (!response.ok) { let detail = text; try { detail = JSON.parse(text)?.error ?? JSON.parse(text)?.title ?? text; } catch {} throw new Error(`Capix API ${response.status}: ${detail || "request failed"}`); }
 		if (!text) return undefined;
 		try { return JSON.parse(text); } catch { return undefined; }
+	}
+
+	const postJson = (pathname: string, body?: unknown, signal?: AbortSignal) => sendJson("POST", pathname, body, signal);
+
+	async function* streamSse(pathname: string, signal?: AbortSignal): AsyncGenerator<unknown> {
+		const token = await auth.getAccessToken();
+		const response = await fetchImpl(new URL(pathname, origin), { headers: { authorization: `Bearer ${token.token}`, accept: "text/event-stream" }, signal });
+		if (!response.ok || !response.body) {
+			const text = await response.text().catch(() => "");
+			let detail = text; try { detail = JSON.parse(text)?.error ?? text; } catch {}
+			throw new Error(`Capix API ${response.status}: ${detail || "stream request failed"}`);
+		}
+		const reader = response.body!.getReader();
+		const decoder = new TextDecoder();
+		let buffer = "";
+		let dataLines: string[] = [];
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				let newlineIdx: number;
+				while ((newlineIdx = buffer.indexOf("\n")) >= 0) {
+					const line = buffer.slice(0, newlineIdx).replace(/\r$/, "");
+					buffer = buffer.slice(newlineIdx + 1);
+					if (line === "") {
+						if (dataLines.length > 0) {
+							const raw = dataLines.join("\n");
+							let data: unknown = raw;
+							try { data = JSON.parse(raw); } catch {}
+							yield data;
+						}
+						dataLines = [];
+						continue;
+					}
+					if (line.startsWith(":")) continue;
+					if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+				}
+			}
+			if (dataLines.length > 0) {
+				const raw = dataLines.join("\n");
+				let data: unknown = raw;
+				try { data = JSON.parse(raw); } catch {}
+				yield data;
+			}
+		} finally {
+			reader.releaseLock();
+		}
 	}
 
 	async function* streamInference(input: unknown, signal?: AbortSignal): AsyncGenerator<unknown> {
@@ -129,11 +180,56 @@ export function createControlPlaneSdk(origin: string, auth: CapixNativePkceAuth,
 	return {
 		account: { get: () => getJson("/api/v1/account") },
 		catalog: { listModels: async () => (await getJson("/api/v1/models")).models },
-		quote: { create: unsupported("quote creation is not enabled in the IDE native runtime") },
-		deployment: { create: unsupported("deployment creation is not enabled in the IDE native runtime"), get: unsupported("deployment access is not enabled in the IDE native runtime"), list: unsupported("deployment listing is not enabled in the IDE native runtime"), setDesired: unsupported("deployment lifecycle is not enabled in the IDE native runtime"), delete: unsupported("deployment deletion is not enabled in the IDE native runtime") },
-		operation: { subscribe: unsupported("operation streaming is not enabled in the IDE native runtime"), cancel: unsupported("operation cancellation is not enabled in the IDE native runtime") },
-		inference: { stream: (input: unknown, signal?: AbortSignal) => Promise.resolve(streamInference(input, signal)), cancel: (sessionId: string, signal?: AbortSignal) => postJson(`/api/v1/inference/${encodeURIComponent(sessionId)}/cancel`, signal) },
-		billing: { getBalance: (signal?: AbortSignal) => getJson("/api/v1/billing", signal), listInvoices: unsupported("billing is not enabled in the IDE native runtime") },
+		quote: { create: (input: unknown, signal?: AbortSignal) => postJson("/api/v1/quotes", input, signal) },
+		deployment: {
+			create: (input: unknown, signal?: AbortSignal) => postJson("/api/v1/deployments", input, signal),
+			get: (id: string, signal?: AbortSignal) => getJson(`/api/v1/deployments/${encodeURIComponent(id)}`, signal),
+			list: (cursor?: string, signal?: AbortSignal) => getJson(`/api/v1/deployments?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, signal),
+			setDesired: async (id: string, desired: unknown, signal?: AbortSignal) => {
+				// The control plane requires If-Match with the current version.
+				const current = await getJson(`/api/v1/deployments/${encodeURIComponent(id)}`, signal);
+				const version = Number(current?.version ?? current?.data?.version ?? 0);
+				const desiredState = typeof desired === "string" ? desired : (desired as { desiredState?: unknown })?.desiredState;
+				return sendJson("PATCH", `/api/v1/deployments/${encodeURIComponent(id)}`, { desiredState }, signal, { "if-match": String(version) });
+			},
+			delete: (id: string, signal?: AbortSignal) => sendJson("DELETE", `/api/v1/deployments/${encodeURIComponent(id)}`, undefined, signal),
+		},
+		operation: {
+			subscribe: (id: string, signal?: AbortSignal) => Promise.resolve(streamSse(`/api/v1/operations/${encodeURIComponent(id)}/events`, signal)),
+			cancel: (id: string, signal?: AbortSignal) => postJson(`/api/v1/operations/${encodeURIComponent(id)}`, {}, signal),
+		},
+		inference: {
+			stream: (input: unknown, signal?: AbortSignal) => Promise.resolve(streamInference(input, signal)),
+			// No server-side cancel route exists: the control plane finalizes the
+			// stream on client disconnect, which the broker drives through its
+			// AbortController before delegating here.
+			cancel: () => Promise.resolve(undefined),
+		},
+		billing: {
+			getBalance: (signal?: AbortSignal) => getJson("/api/v1/billing", signal),
+			// The control plane has no separate invoice ledger: finalized route
+			// receipts are the bill of record. Derive invoice rows from settled
+			// debit entries so the billing surface shows real customer data.
+			listInvoices: async (signal?: AbortSignal) => {
+				const billing = await getJson("/api/v1/billing", signal);
+				const entries = Array.isArray(billing?.transactions) ? billing.transactions : [];
+				const invoices = entries
+					.filter((row: any) => row && (row.postingType ?? row.posting_type) === "debit" && (row.asset === "USDC" || row.asset === "USD-credit"))
+					.map((row: any, index: number) => {
+						const occurredAt = Date.parse(row.createdAt ?? row.created_at ?? "") || 0;
+						return {
+							id: String(row.id ?? row.entryId ?? `inv_${index}`),
+							number: String(row.receiptId ?? row.reference ?? row.id ?? `inv_${index}`),
+							periodStart: occurredAt,
+							periodEnd: occurredAt,
+							totalMinor: String(row.amount ?? "0"),
+							currency: "USD",
+							status: "paid",
+						};
+					});
+				return { invoices };
+			},
+		},
 		receipt: { get: (id: string, signal?: AbortSignal) => getJson(`/api/v1/route-receipts/${encodeURIComponent(id)}`, signal) },
 		workspace: { openSession: unsupported("remote workspace transport is unavailable"), openPort: unsupported("remote workspace transport is unavailable"), closeSession: unsupported("remote workspace transport is unavailable") },
 	};

@@ -7,10 +7,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CapixApiError = exports.CapixClient = void 0;
 const node_crypto_1 = require("node:crypto");
+const moneyUtils_1 = require("./moneyUtils");
 class CapixClient {
     static PRODUCTION_BASE_URL = "https://www.capix.network";
     /** Cached session token (loaded from SecretStorage on first use) */
     _sessionToken = null;
+    _tokenProvider;
     _secretStorage;
     _onOAuthAccessToken;
     _lastPublishedOAuthAccessToken = null;
@@ -89,7 +91,24 @@ class CapixClient {
         }
         return "";
     }
+    /** Delegate all token reads/refreshes to the shared auth broker. */
+    setTokenProvider(provider) {
+        this._tokenProvider = provider;
+    }
     async getAuthHeaders() {
+        if (this._tokenProvider) {
+            try {
+                const token = await this._tokenProvider.getAccessToken();
+                if (token) {
+                    this._sessionToken = token;
+                    return { Authorization: `Bearer ${token}` };
+                }
+            }
+            catch {
+                // Broker has no valid grant — fall through to the legacy store so the
+                // 401 retry path can surface a definitive signed-out state.
+            }
+        }
         const token = await this.getStoredToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
     }
@@ -102,6 +121,18 @@ class CapixClient {
         return this._refreshPromise;
     }
     async performOAuthRefresh(recoverCrossWindow) {
+        if (this._tokenProvider) {
+            try {
+                const token = await this._tokenProvider.getAccessToken();
+                this._sessionToken = token;
+                await this.publishOAuthAccessToken(token);
+                return true;
+            }
+            catch {
+                await this.clearExpiredOAuthSession();
+                return false;
+            }
+        }
         const refreshToken = await this._secretStorage?.get("capix.refreshToken");
         if (!refreshToken) {
             await this.clearExpiredOAuthSession();
@@ -180,6 +211,19 @@ class CapixClient {
     }
     /** Async config check (used by tools that can await) */
     async checkConfigured() {
+        if (this._tokenProvider) {
+            try {
+                const token = await this._tokenProvider.getAccessToken();
+                if (this.isOAuthAccessToken(token)) {
+                    this._sessionToken = token;
+                    await this.publishOAuthAccessToken(token);
+                    return true;
+                }
+            }
+            catch {
+                // No valid broker grant — fall through to the legacy probe.
+            }
+        }
         const stored = await this._secretStorage?.get("capix.sessionToken");
         const token = stored || await this.getStoredToken();
         this._sessionToken = token;
@@ -224,7 +268,10 @@ class CapixClient {
         return res.json();
     }
     async streamAgentChat(input, signal, onEvent) {
-        const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/chat/completions`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
+        // Canonical streaming inference route — /api/v1/chat/completions is the
+        // non-streaming JSON compatibility surface and silently yields zero SSE
+        // events, so the chat panel must stream from the canonical route.
+        const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/inference/chat/completions`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
         if (!res.ok || !res.body)
             throw new CapixApiError(res.status, `inference_failed_${res.status}`);
         const reader = res.body.getReader();
@@ -241,6 +288,30 @@ class CapixClient {
             catch {
                 return;
             }
+            // Canonical Capix stream contract (@capix/contracts inference-stream).
+            if (parsed.type === "capix.route") {
+                await onEvent({ type: "route", receiptId: String(parsed.receiptId ?? ""), model: String(parsed.modelCapability ?? (input && input.model) ?? ""), region: String(parsed.region ?? "global"), privacy: parsed.privacyClass });
+                return;
+            }
+            if (parsed.type === "content.delta") {
+                await onEvent({ type: "delta", content: typeof parsed.content === "string" ? parsed.content : "", toolCalls: undefined });
+                return;
+            }
+            if (parsed.type === "tool.delta") {
+                await onEvent({ type: "delta", content: undefined, toolCalls: [{ id: parsed.toolCallId, function: parsed.function, index: parsed.index }] });
+                return;
+            }
+            if (parsed.type === "capix.usage") {
+                await onEvent({ type: "usage", inputTokens: Number(parsed.inputUnits ?? 0), outputTokens: Number(parsed.outputUnits ?? 0), costMinor: (0, moneyUtils_1.usageCostToMicroUsd)(parsed.provisionalCost), currency: "USD" });
+                return;
+            }
+            if (parsed.type === "capix.final") {
+                await onEvent({ type: "final", finishReason: String(parsed.finishReason ?? "stop"), receiptId: String(parsed.receiptId ?? "") });
+                return;
+            }
+            if (parsed.type === "capix.error")
+                throw new CapixApiError(Number(parsed.status ?? 500), String(parsed.capixCode ?? "inference_error"));
+            // OpenAI-compatible chunks (compatibility surface / older gateways).
             const choice = parsed.choices?.[0];
             if (choice?.delta?.content !== undefined || choice?.delta?.tool_calls !== undefined)
                 await onEvent({ type: "delta", content: choice.delta.content, toolCalls: choice.delta.tool_calls });
@@ -354,21 +425,24 @@ class CapixClient {
         ]);
         if (!result.ok)
             return result;
-        const sol = Number(result.balances?.SOL?.available || 0) / 1e9;
-        const usdc = Number(result.balances?.USDC?.available || 0) / 1e6;
+        const sol = (0, moneyUtils_1.minorToDisplay)(result.balances?.SOL?.available || "0", 9, 4);
+        const usdc = (0, moneyUtils_1.minorToDisplay)(result.balances?.USDC?.available || "0", 6, 2);
         const transactions = result.transactions || [];
-        const totalSpent = transactions.reduce((sum, entry) => {
+        const debitEntries = transactions.reduce((acc, entry) => {
             if (!entry || typeof entry !== "object")
-                return sum;
+                return acc;
             const row = entry;
             if ((row.postingType ?? row.posting_type) !== "debit" || row.asset !== "USDC")
-                return sum;
-            return sum + Number(row.amount || 0) / 10 ** Number(row.scale ?? 6);
-        }, 0);
+                return acc;
+            acc.push({ amount: String(row.amount || "0"), scale: Number(row.scale ?? 6) });
+            return acc;
+        }, []);
+        const spentSum = (0, moneyUtils_1.sumMinor)(debitEntries);
+        const totalSpent = (0, moneyUtils_1.minorToDisplay)(spentSum.amount.toString(), spentSum.scale, 2);
         const activeInstances = inventory.instances.filter((instance) => !["terminated", "deleted", "destroyed"].includes(instance.status)).length;
         return {
             ok: true,
-            balance: { usd: usdc, sol, usdc },
+            balance: { usd: Number.isFinite(Number(result.valuation?.usdTotal)) ? Number(result.valuation?.usdTotal).toFixed(2) : usdc, sol, usdc },
             transactions,
             updatedAt: new Date().toISOString(),
             activeInstances,

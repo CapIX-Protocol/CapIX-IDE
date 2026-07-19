@@ -48,6 +48,19 @@ export class CapixCloudAuthError extends CapixCloudError {
 	}
 }
 
+/**
+ * Customer-facing create-confirmation text. Provider names are internal
+ * routing detail and must never appear in customer-facing output — only the
+ * resource kind, region and exact cost are shown.
+ */
+export function deploymentCreateConfirmMessage(
+	quote: Pick<QuoteView, "resourceKind" | "region" | "costMinorPerHour" | "currency">,
+	formatMinor: (minor: string, currency: string) => string,
+): string {
+	const perHour = formatMinor(quote.costMinorPerHour, quote.currency);
+	return `Capix: create ${quote.resourceKind} in ${quote.region} at ${perHour}/hr?`;
+}
+
 export class CapixCloudBroker {
 	/** Invoke one typed broker operation through the IDE IPC bridge. */
 	async call<C extends keyof CapixCloudIpcContract>(
@@ -142,12 +155,11 @@ export class CapixCloudBroker {
 
 	/** Show exact cost/route before a billable create; the quote never authorizes a charge. */
 	private async confirmCost(quote: QuoteView): Promise<boolean> {
-		const perHour = this.formatMinor(quote.costMinorPerHour, quote.currency);
 		const eta = quote.estimatedReadySec
 			? `~${Math.ceil(quote.estimatedReadySec / 60)} min to ready`
 			: "readiness TBD";
 		const choice = await vscode.window.showWarningMessage(
-			`Capix: create ${quote.resourceKind} on ${quote.provider} (${quote.region}) at ${perHour}/hr?`,
+			deploymentCreateConfirmMessage(quote, (minor, ccy) => this.formatMinor(minor, ccy)),
 			{ modal: true, detail: `${eta}. This starts a durable hold and billable resource.` },
 			"Create",
 			"Cancel",

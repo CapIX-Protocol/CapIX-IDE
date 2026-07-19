@@ -183,8 +183,9 @@ export class TerminalManager {
    * Build SSH args with host-key pinning (TOFU on first connect, strict
    * afterwards). Returns null if the connection was aborted because the
    * host key changed — a user-facing warning is shown in that case.
+   * `extraArgs` (e.g. tunnel flags) is inserted before the host operand.
    */
-  private async resolveSshArgs(target: SshTarget, command?: string): Promise<string[] | null> {
+  private async resolveSshArgs(target: SshTarget, command?: string, extraArgs: string[] = []): Promise<string[] | null> {
     const user = target.user || "root";
     const hostKnown = await this.isHostKnown(target.host, target.port);
 
@@ -205,6 +206,7 @@ export class TerminalManager {
       "-o", "ConnectTimeout=10",
       "-o", "LogLevel=ERROR",
       ...(target.identityFile ? ["-i", target.identityFile, "-o", "IdentitiesOnly=yes"] : []),
+      ...extraArgs,
       "-p", String(target.port),
       `${user}@${target.host}`,
     ];
@@ -266,6 +268,40 @@ export class TerminalManager {
       iconPath: new vscode.ThemeIcon("terminal"),
     });
     terminal.show();
+  }
+
+  /**
+   * Open a local port-forward tunnel (`ssh -L localPort:localhost:remotePort -N`)
+   * into a deployed instance. Uses the same host-key pinning as interactive
+   * sessions. Returns the backing terminal so callers (the infra stack
+   * service) can tear the tunnel down later.
+   */
+  async openPortForward(target: SshTarget, localPort: number, remotePort: number): Promise<Terminal> {
+    let identityFile: string | undefined;
+    if (target.privateKey) {
+      identityFile = path.join(os.tmpdir(), `capix-ssh-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.pem`);
+      fs.writeFileSync(identityFile, target.privateKey.endsWith("\n") ? target.privateKey : `${target.privateKey}\n`, { mode: 0o600 });
+      this.pendingKeyFiles.add(identityFile);
+    }
+    const tunnelArgs = ["-N", "-L", `${localPort}:localhost:${remotePort}`];
+    const sshArgs = await this.resolveSshArgs({ ...target, identityFile }, undefined, tunnelArgs);
+    if (!sshArgs) {
+      if (identityFile) this.deleteKeyFile(identityFile);
+      throw new Error(`Port forward aborted: host key changed for ${target.host}`);
+    }
+
+    const terminal = window.createTerminal({
+      name: `Tunnel: ${target.label} :${localPort} → :${remotePort}`,
+      shellPath: "ssh",
+      shellArgs: sshArgs,
+      iconPath: new vscode.ThemeIcon("plug"),
+    });
+
+    terminal.show();
+    window.onDidCloseTerminal((t) => {
+      if (t === terminal && identityFile) this.deleteKeyFile(identityFile);
+    });
+    return terminal;
   }
 
   /** Close all managed terminals. */

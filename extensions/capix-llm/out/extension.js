@@ -46,15 +46,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
-const node_crypto_1 = require("node:crypto");
-const node_http_1 = require("node:http");
 const promises_1 = require("node:fs/promises");
 const apiClient_1 = require("./apiClient");
+const authBroker_1 = require("./authBroker");
 const treeViews_1 = require("./treeViews");
 const cloudPanels_1 = require("./cloudPanels");
 const profileView_1 = require("./profileView");
+const cloudDashboard_1 = require("./cloudDashboard");
+const capixCodePanel_1 = require("./capixCodePanel");
+const layoutPresets_1 = require("./layoutPresets");
+const activityBar_1 = require("./activityBar");
 const authRecovery_1 = require("./authRecovery");
-const oauthCallbackGuard_1 = require("./oauthCallbackGuard");
 const terminalManager_1 = require("./terminalManager");
 const autoConnect_1 = require("./autoConnect");
 const covenant_1 = require("./covenant");
@@ -63,7 +65,25 @@ const smartRouterManager_1 = require("./smartRouterManager");
 const logger_1 = require("./logger");
 const telemetry_1 = require("./telemetry");
 const agentCommandBridge_1 = require("./agentCommandBridge");
+const mcpAutoInstall_1 = require("./mcpAutoInstall");
+const runOnSelector_1 = require("./runOnSelector");
+const creationWizard_1 = require("./creationWizard");
+const resourceDetails_1 = require("./resourceDetails");
+const onboarding_1 = require("./onboarding");
+const modelSync_1 = require("./modelSync");
+const modelPicker_1 = require("./modelPicker");
+const intelligencePanel_1 = require("./intelligencePanel");
+const webControl_1 = require("./webControl");
+const webControlPanel_1 = require("./webControlPanel");
+const browserTools_1 = require("./browserTools");
+const infraStack_1 = require("./infraStack");
+const infraTools_1 = require("./infraTools");
+const infraPanel_1 = require("./infraPanel");
+const architectMode_1 = require("./architectMode");
+const moneyUtils_1 = require("./moneyUtils");
 let client;
+let authBroker;
+let mcpAutoInstaller;
 let deploysProvider;
 let catalogProvider;
 let hostedProvider;
@@ -72,11 +92,25 @@ let agentsProvider;
 let jobsProvider;
 let apiKeysProvider;
 let profileProvider;
+let cloudDashboardProvider;
+let capixCodeProvider;
 let terminalManager;
 let autoConnect;
 let covenant;
 let devTokens;
 let smartRouter;
+let runOnSelector;
+let creationWizard;
+let resourceDetailsProvider;
+let modelSync;
+let modelPicker;
+let onboarding;
+let intelligencePanel;
+let webControlManager;
+let infraService;
+let architectMode;
+let runOnStatusBarItem = null;
+let modelStatusBarItem = null;
 let refreshTimer = null;
 function activate(context) {
     (0, telemetry_1.initTelemetry)(context);
@@ -87,11 +121,46 @@ function activate(context) {
         store: (key, value) => Promise.resolve(context.secrets.store(key, value)),
         delete: (key) => Promise.resolve(context.secrets.delete(key)),
     });
+    // ── Shared auth broker: one identity across all Capix apps ─────────────
+    // All API calls authenticate through the shared @capix/auth-broker (PKCE,
+    // single-flight refresh, rotation reuse detection, SecretStorage-backed
+    // credential store). Legacy sessions are migrated once on activation.
+    authBroker = new authBroker_1.CapixAuthBrokerService(context, apiClient_1.CapixClient.PRODUCTION_BASE_URL);
+    client.setTokenProvider(authBroker);
+    context.subscriptions.push((() => {
+        let disposed = false;
+        void authBroker.migrateLegacySession({ get: (key) => Promise.resolve(context.secrets.get(key)) }).then(() => {
+            if (!disposed)
+                void client.checkConfigured();
+        });
+        return { dispose: () => { disposed = true; } };
+    })());
+    authBroker.onEvent((event) => {
+        if (event.type === "token_reuse_detected") {
+            logger_1.logger.error("Capix auth: refresh token reuse detected — session revoked");
+            void client.resetOAuthSession();
+        }
+        else if (event.type === "refresh_failed") {
+            logger_1.logger.warn("Capix auth: token refresh failed", { reason: event.reason });
+        }
+    });
+    // ── MCP Auto-Installer: zero-config MCP server registration ────────────
+    mcpAutoInstaller = new mcpAutoInstall_1.McpAutoInstaller(client, context);
     client.setOAuthAccessTokenHandler(async (accessToken) => {
         // The workbench stores this short-lived OAuth token using its encrypted
         // application storage and selects Capix routed inference (`auto`). Portal
         // API keys are deliberately not copied into the desktop application.
         await vscode.commands.executeCommand(accessToken ? "capix.chat.configure" : "capix.chat.clear", ...(accessToken ? [accessToken] : []));
+        // Zero-config MCP: ensure the Capix MCP server is registered (with the
+        // inherited token) on every credential publish, and stripped on sign-out.
+        // The handler is deduped upstream (publishOAuthAccessToken), so this only
+        // fires on genuine token changes — restart included.
+        if (accessToken) {
+            void mcpAutoInstaller.ensureInstalled();
+        }
+        else {
+            void mcpAutoInstaller.unregister();
+        }
     });
     // ── Tree views ────────────────────────────────────────────────────────
     deploysProvider = new treeViews_1.DeploysTreeProvider(client);
@@ -102,12 +171,48 @@ function activate(context) {
     jobsProvider = new cloudPanels_1.JobsTreeProvider(client);
     apiKeysProvider = new cloudPanels_1.ApiKeysTreeProvider(client);
     profileProvider = new profileView_1.ProfileViewProvider(client, context.extensionUri);
+    cloudDashboardProvider = new cloudDashboard_1.CloudDashboardProvider(client, context.extensionUri);
+    // ── Web control: shared manager + browser tools for the assistant ──────
+    webControlManager = new webControl_1.WebControlManager();
+    // ── Infra stack: live deployments, logs, SSH/tunnels, scaling ──────────
+    // The terminal manager is created before the chat provider so the infra
+    // tools (SSH, tunnels) and the panel can share it.
     terminalManager = new terminalManager_1.TerminalManager(context.globalStorageUri.fsPath, context.extensionPath);
+    infraService = new infraStack_1.InfraStackService(client, terminalManager);
+    architectMode = new architectMode_1.ArchitectMode(client, infraService);
+    context.subscriptions.push({ dispose: () => infraService.dispose() });
+    capixCodeProvider = new capixCodePanel_1.CapixCodePanelProvider(client, context.extensionUri, context.extensionPath, [...(0, browserTools_1.createBrowserTools)(webControlManager), ...(0, infraTools_1.createInfraTools)(client, infraService)]);
     autoConnect = new autoConnect_1.AutoConnectManager(client);
     covenant = new covenant_1.CovenantManager(context);
     devTokens = new devTokenManager_1.DevTokenManager(client);
     smartRouter = new smartRouterManager_1.SmartRouterManager(client);
+    runOnSelector = new runOnSelector_1.RunOnSelector(context);
+    creationWizard = new creationWizard_1.CreationWizard(client);
+    resourceDetailsProvider = new resourceDetails_1.ResourceDetailsProvider(client, context.extensionUri);
     context.subscriptions.push(new agentCommandBridge_1.AgentCommandBridge(client).register());
+    // ── Unified Intelligence panel ───────────────────────────────────────
+    // One webview view replaces all scattered intelligence views (memory tree,
+    // graph tree, skills runtime, covenants accordion, agents tree, plans tree,
+    // receipts tree). Registered as `capix.intelligence.panel`.
+    intelligencePanel = new intelligencePanel_1.IntelligencePanelProvider(client, context.extensionUri);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider("capix.intelligence.panel", intelligencePanel));
+    context.subscriptions.push(vscode.commands.registerCommand("capix.intelligence.openPanel", (tab) => intelligencePanel.show(tab ?? "overview")));
+    // ── Web Control panel ─────────────────────────────────────────────────
+    context.subscriptions.push(vscode.commands.registerCommand("capix.webControl.openPanel", () => webControlPanel_1.WebControlPanel.createOrShow(context.extensionUri, webControlManager)));
+    // ── Infra Stack panel + architect mode ────────────────────────────────
+    context.subscriptions.push(vscode.commands.registerCommand("capix.infra.openPanel", () => infraPanel_1.InfraPanel.createOrShow(context.extensionUri, infraService)));
+    context.subscriptions.push(vscode.commands.registerCommand("capix.infra.architectPlan", async () => {
+        const goal = await vscode.window.showInputBox({
+            prompt: "What are you building? (architect mode plans infra + cost)",
+            placeHolder: "e.g. a coding assistant backend for my team",
+        });
+        if (!goal)
+            return;
+        const plan = await architectMode.buildPlan(goal, { kind: "coding" });
+        const estimate = plan.estimate ? ` — est. ${plan.estimate.displayTotal}` : "";
+        void vscode.window.showInformationMessage(`Architect plan: ${plan.recommendation.rationale}${estimate}`);
+        infraPanel_1.InfraPanel.createOrShow(context.extensionUri, infraService);
+    }));
     // ── Dev Token: auto-mint on git commits ────────────────────────────────
     // Watch the VS Code SCM (git) state — when HEAD changes, a commit happened.
     let lastHead;
@@ -141,7 +246,21 @@ function activate(context) {
     const agentsView = vscode.window.createTreeView("capix.llm.agents", { treeDataProvider: agentsProvider });
     const jobsView = vscode.window.createTreeView("capix.llm.jobs", { treeDataProvider: jobsProvider });
     const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
-    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider));
+    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider), vscode.window.registerWebviewViewProvider("capix.cloud.overview", cloudDashboardProvider), vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider), vscode.window.registerWebviewViewProvider("capix.cloud.resource", resourceDetailsProvider));
+    // ── Run-On target: status bar + change handler ──────────────────────────
+    runOnStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
+    runOnStatusBarItem.text = (0, runOnSelector_1.runOnLabel)(runOnSelector.getCurrentTarget());
+    runOnStatusBarItem.tooltip = "Capix — Choose where this workspace runs";
+    runOnStatusBarItem.command = "capix.runOn";
+    runOnStatusBarItem.show();
+    context.subscriptions.push(runOnStatusBarItem);
+    runOnSelector.onTargetChanged((config) => {
+        if (runOnStatusBarItem) {
+            runOnStatusBarItem.text = (0, runOnSelector_1.runOnLabel)(config);
+            const sub = config.capixCloudTarget?.type ?? config.target;
+            runOnStatusBarItem.tooltip = `Capix — Run target: ${sub}`;
+        }
+    });
     // ── Auto-refresh ───────────────────────────────────────────────────────
     setupAutoRefresh(context);
     // ── Auto-connect: check for ready deploys on startup ────────────────────
@@ -155,8 +274,48 @@ function activate(context) {
     context.subscriptions.push(statusBarItem);
     // Update status bar text when connection state changes
     updateStatusBar(statusBarItem);
+    // ── Model sync + picker + status bar ────────────────────────────────────
+    modelSync = new modelSync_1.ModelSync(client);
+    modelPicker = new modelPicker_1.ModelPicker(modelSync);
+    onboarding = new onboarding_1.OnboardingFlow(client, context.extensionUri, {
+        sendChatMessage: (text) => capixCodeProvider.sendTestMessage(text),
+        focusCloud: () => {
+            void vscode.commands
+                .executeCommand("capix.cloud.overview.focus")
+                .then(undefined, () => vscode.commands.executeCommand("workbench.view.extension.capix-llm"));
+        },
+    });
+    modelStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 51);
+    modelStatusBarItem.command = "capix.selectModel";
+    updateModelStatusBar();
+    modelStatusBarItem.show();
+    modelSync.startAutoRefresh();
+    void modelSync.refresh().then(() => updateModelStatusBar());
+    context.subscriptions.push(modelStatusBarItem, modelSync.onModelsChanged(() => updateModelStatusBar()));
     // Initial load
     refreshAll();
+    // Zero-config MCP: if the user is already signed in (returning session),
+    // ensure the MCP server is registered without prompting. Also fired via
+    // the OAuth token-publish handler on the first checkConfigured run.
+    void mcpAutoInstaller.ensureInstalled();
+    // ── Restore layout + destination ────────────────────────────────────────
+    void (async () => {
+        const preset = await (0, layoutPresets_1.restorePersistedLayout)(context);
+        await (0, layoutPresets_1.applyLayout)(preset, context);
+        await (0, activityBar_1.switchDestination)((0, activityBar_1.defaultDestination)());
+    })();
+    // ── First-run onboarding ────────────────────────────────────────────────
+    void (async () => {
+        if (!context.globalState.get("capix.onboarded")) {
+            await context.globalState.update("capix.onboarded", true);
+            try {
+                await onboarding.start(context);
+            }
+            catch (err) {
+                logger_1.logger.error("Onboarding first-run failed", { error: String(err) });
+            }
+        }
+    })();
     // ── Commands ──────────────────────────────────────────────────────────
     context.subscriptions.push(
     // LLM commands
@@ -176,7 +335,12 @@ function activate(context) {
     // Cloud panels
     vscode.commands.registerCommand("capix.deployAgent", () => cmdDeployAgent()), vscode.commands.registerCommand("capix.triggerJob", () => cmdTriggerJob()), vscode.commands.registerCommand("capix.createApiKey", () => cmdCreateApiKey()), 
     // Terminal
-    vscode.commands.registerCommand("capix.openTerminal", (item) => cmdOpenTerminal(item)), vscode.commands.registerCommand("capix.downloadSshKey", (item) => cmdDownloadSshKey(item)),
+    vscode.commands.registerCommand("capix.openTerminal", (item) => cmdOpenTerminal(item)), vscode.commands.registerCommand("capix.downloadSshKey", (item) => cmdDownloadSshKey(item)), 
+    // MCP: status-bar health check
+    vscode.commands.registerCommand("capix.mcp.health", async () => {
+        const healthy = await mcpAutoInstaller.isHealthy();
+        vscode.window.showInformationMessage(healthy ? "Capix MCP is connected and configured." : "Capix MCP is not configured. Sign in to enable.");
+    }), 
     // Covenant
     vscode.commands.registerCommand("capix.covenantEdit", () => covenant.createSpiritFile()), vscode.commands.registerCommand("capix.covenantRemember", () => cmdCovenantRemember()), vscode.commands.registerCommand("capix.covenantClear", () => {
         covenant.clearMemory();
@@ -185,7 +349,21 @@ function activate(context) {
     // Launch Capix Code (the CLI coding assistant) in a terminal
     vscode.commands.registerCommand("capix.launchCapixCode", () => cmdLaunchCapixCode()), 
     // Smart Router: routing mode, private LLM deploy/destroy, memory
-    vscode.commands.registerCommand("capix.setRouteMode", () => cmdSetRouteMode()), vscode.commands.registerCommand("capix.deployPrivateLlm", () => cmdDeployPrivateLlm()), vscode.commands.registerCommand("capix.destroyPrivateLlm", () => cmdDestroyPrivateLlm()), vscode.commands.registerCommand("capix.routerMemory", () => cmdRouterMemory()), vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()), vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()), vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()));
+    vscode.commands.registerCommand("capix.setRouteMode", () => cmdSetRouteMode()), vscode.commands.registerCommand("capix.deployPrivateLlm", () => cmdDeployPrivateLlm()), vscode.commands.registerCommand("capix.destroyPrivateLlm", () => cmdDestroyPrivateLlm()), vscode.commands.registerCommand("capix.routerMemory", () => cmdRouterMemory()), vscode.commands.registerCommand("capix.routerReset", () => smartRouter.resetMemory()), vscode.commands.registerCommand("capix.routerBlockModel", () => cmdRouterBlockModel()), vscode.commands.registerCommand("capix.routerFavorModel", () => cmdRouterFavorModel()), 
+    // Layout + information architecture
+    vscode.commands.registerCommand("capix.setLayout", () => (0, layoutPresets_1.pickAndApplyLayout)(context)), 
+    // Native creation wizards — one deterministic flow per workload kind,
+    // with a live quote and explicit confirmation before any spend.
+    vscode.commands.registerCommand("capix.cloud.deploy", () => creationWizard.start()), vscode.commands.registerCommand("capix.cloud.create", (kind) => creationWizard.start(kind)), vscode.commands.registerCommand("capix.cloud.create.vm", () => creationWizard.start("cpu_vm")), vscode.commands.registerCommand("capix.cloud.create.gpu", () => creationWizard.start("dedicated_gpu")), vscode.commands.registerCommand("capix.cloud.create.model", () => creationWizard.start("private_model")), vscode.commands.registerCommand("capix.cloud.create.container", () => creationWizard.start("container_service")), vscode.commands.registerCommand("capix.cloud.create.website", () => creationWizard.start("website")), vscode.commands.registerCommand("capix.cloud.create.job", () => creationWizard.start("serverless_job")), vscode.commands.registerCommand("capix.cloud.resource.open", (deploymentId) => resourceDetailsProvider.openCentre(deploymentId)), vscode.commands.registerCommand("capix.runOn", () => runOnSelector.show()), vscode.commands.registerCommand("capix.code.newSession", () => capixCodeProvider.newSession()), vscode.commands.registerCommand("capix.code.focus", () => focusCapixCode()), vscode.commands.registerCommand("capix.code.acceptAll", () => capixCodeProvider.acceptAll()), vscode.commands.registerCommand("capix.code.revertAll", () => capixCodeProvider.revertAll()), vscode.commands.registerCommand("capix.code.checkpoint", () => capixCodeProvider.checkpoint()), vscode.commands.registerCommand("capix.code.cancel", () => capixCodeProvider.cancelTurn()), vscode.commands.registerCommand("capix.setDestination", () => (0, activityBar_1.pickDestination)()), 
+    // Onboarding + model picker
+    vscode.commands.registerCommand("capix.onboarding", () => onboarding.start(context)), vscode.commands.registerCommand("capix.selectModel", async () => {
+        const picked = await modelPicker.show();
+        if (picked) {
+            const ref = picked.modelRef ?? picked.id;
+            capixCodeProvider.setModel(ref);
+            updateModelStatusBar();
+        }
+    }));
 }
 async function cmdLaunchCentre() {
     const action = await vscode.window.showQuickPick([
@@ -200,9 +378,17 @@ async function cmdLaunchCentre() {
     if (action)
         await vscode.commands.executeCommand(action.command);
 }
+// Expand / focus the Capix Code auxiliary panel.
+function focusCapixCode() {
+    void vscode.commands.executeCommand("workbench.view.extension.capix-code");
+    void vscode.commands.executeCommand("setContext", "capix.code.focus", true);
+    capixCodeProvider.notifyDensity(false, true);
+}
 function deactivate() {
     refreshTimer?.dispose();
+    modelSync?.stopAutoRefresh();
     terminalManager?.disposeAll();
+    mcpAutoInstaller?.dispose();
 }
 async function cmdDeployVps() {
     if (!checkConfigured())
@@ -262,6 +448,16 @@ async function updateStatusBar(item) {
     }
 }
 let statusBarItem = null;
+// Update the model status bar item with the current default model name.
+function updateModelStatusBar() {
+    if (!modelStatusBarItem)
+        return;
+    const ref = modelPicker.getCurrentDefault();
+    const name = modelSync.resolveName(ref);
+    modelStatusBarItem.text = `$(hub) ${name}`;
+    modelStatusBarItem.tooltip = `Capix — Model: ${name} (click to change)`;
+    modelStatusBarItem.show();
+}
 // ── Helpers ───────────────────────────────────────────────────────────────
 async function refreshAll() {
     await client.checkConfigured();
@@ -269,6 +465,7 @@ async function refreshAll() {
         deploysProvider.load(), catalogProvider.load(), hostedProvider.load(),
         instancesProvider.load(), agentsProvider.load(), jobsProvider.load(),
         apiKeysProvider.load(), profileProvider.refresh(),
+        cloudDashboardProvider.refresh(),
     ]);
     if (statusBarItem)
         await updateStatusBar(statusBarItem);
@@ -288,6 +485,7 @@ function setupAutoRefresh(context) {
             agentsProvider.load();
             jobsProvider.load();
             profileProvider.refresh();
+            cloudDashboardProvider.refresh();
         }, interval * 1000);
         refreshTimer = new vscode.Disposable(() => clearInterval(handle));
     };
@@ -353,7 +551,7 @@ async function cmdDeployModel(model) {
         vscode.window.showErrorMessage(`No live GPUs fit ${model.label} right now. Try another region or check back shortly.`);
         return;
     }
-    const offerPick = await vscode.window.showQuickPick(offersRes.offers.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${o.roundedPricePerHr.toFixed(2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location} · ${(o.reliability * 100).toFixed(0)}% reliability`, offer: o })), { placeHolder: "Select a GPU offer" });
+    const offerPick = await vscode.window.showQuickPick(offersRes.offers.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${(0, moneyUtils_1.microToDisplay)((0, moneyUtils_1.dollarsToMicro)(o.roundedPricePerHr), 2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location} · ${(o.reliability * 100).toFixed(0)}% reliability`, offer: o })), { placeHolder: "Select a GPU offer" });
     if (!offerPick)
         return;
     // Pick duration
@@ -365,7 +563,7 @@ async function cmdDeployModel(model) {
     ], { placeHolder: "Select duration" });
     if (!durPick)
         return;
-    const cost = offerPick.offer.roundedPricePerHr * durPick.value;
+    const costMicro = (0, moneyUtils_1.dollarsToMicro)(offerPick.offer.roundedPricePerHr) * durPick.value;
     // HF token for gated models
     let hfToken;
     if (model.gated) {
@@ -379,7 +577,7 @@ async function cmdDeployModel(model) {
             return;
     }
     // Confirm + deploy
-    const confirm = await vscode.window.showWarningMessage(`Deploy ${model.label} on ${offerPick.label} in ${offerPick.offer.location} for ${durPick.label}?\n\nCost: $${cost.toFixed(2)} (billed from your wallet balance)`, { modal: true }, "Deploy");
+    const confirm = await vscode.window.showWarningMessage(`Deploy ${model.label} on ${offerPick.label} in ${offerPick.offer.location} for ${durPick.label}?\n\nCost: $${(0, moneyUtils_1.microToDisplay)(costMicro, 2)} (billed from your wallet balance)`, { modal: true }, "Deploy");
     if (confirm !== "Deploy")
         return;
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Deploying ${model.label}…`, cancellable: false }, async (progress) => {
@@ -451,7 +649,7 @@ async function cmdDeployCustomModel() {
         vscode.window.showErrorMessage(`No GPUs with ≥${minVramGb}GB VRAM available right now.`);
         return;
     }
-    const offerPick = await vscode.window.showQuickPick(filtered.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${o.roundedPricePerHr.toFixed(2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location}`, offer: o })), { placeHolder: "Select a GPU offer" });
+    const offerPick = await vscode.window.showQuickPick(filtered.map((o) => ({ label: `${o.numGpus > 1 ? `${o.numGpus}× ` : ""}${o.gpu}`, description: `$${(0, moneyUtils_1.microToDisplay)((0, moneyUtils_1.dollarsToMicro)(o.roundedPricePerHr), 2)}/hr`, detail: `${o.totalVramGb}GB VRAM · ${o.location}`, offer: o })), { placeHolder: "Select a GPU offer" });
     if (!offerPick)
         return;
     // Duration
@@ -465,8 +663,8 @@ async function cmdDeployCustomModel() {
         if (!hfToken)
             return;
     }
-    const cost = offerPick.offer.roundedPricePerHr * durPick.value;
-    const confirm = await vscode.window.showWarningMessage(`Deploy custom model from ${link}?\n\nGPU: ${offerPick.label} · Duration: ${durPick.label} · Cost: $${cost.toFixed(2)}`, { modal: true }, "Deploy");
+    const costMicro = (0, moneyUtils_1.dollarsToMicro)(offerPick.offer.roundedPricePerHr) * durPick.value;
+    const confirm = await vscode.window.showWarningMessage(`Deploy custom model from ${link}?\n\nGPU: ${offerPick.label} · Duration: ${durPick.label} · Cost: $${(0, moneyUtils_1.microToDisplay)(costMicro, 2)}`, { modal: true }, "Deploy");
     if (confirm !== "Deploy")
         return;
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Deploying custom model…" }, async () => {
@@ -871,74 +1069,35 @@ async function cmdCovenantRemember() {
     vscode.window.showInformationMessage("✓ Remembered. This will be included in future chat context.");
     devTokens.onDecision();
 }
-// Authentication is owned by the native main-process PKCE broker. The legacy
-// extension must never accept bearer credentials from a query string,
-// clipboard, input box or workspace setting.
+// Authentication is owned by the shared @capix/auth-broker (one identity for
+// every Capix client). The extension never accepts bearer credentials from a
+// query string, clipboard, input box or workspace setting, and never runs its
+// own PKCE/token-exchange plumbing.
 async function cmdConnectWallet() {
-    const verifier = (0, node_crypto_1.randomBytes)(48).toString("base64url");
-    const state = (0, node_crypto_1.randomBytes)(32).toString("base64url");
-    const challenge = (0, node_crypto_1.createHash)("sha256").update(verifier).digest("base64url");
-    const callbackGuard = new oauthCallbackGuard_1.OAuthCallbackGuard(state);
-    let timeout;
-    const server = (0, node_http_1.createServer)(async (request, response) => {
-        const decision = callbackGuard.inspect(request.url || "/");
-        if (decision.kind === "ignore") {
-            response.writeHead(204, { "cache-control": "no-store" });
-            response.end();
-            return;
-        }
-        if (decision.kind === "invalid") {
-            response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
-            response.end(decision.message);
-            return;
-        }
-        if (decision.kind === "duplicate") {
-            response.writeHead(409, { "content-type": "text/plain", "cache-control": "no-store" });
-            response.end("This Capix sign-in callback is already being processed.");
-            return;
-        }
-        try {
-            const redirectUri = `http://127.0.0.1:${server.address().port}/oauth/callback`;
-            const tokenResponse = await fetch("https://www.capix.network/oauth/token", {
-                method: "POST",
-                headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-                body: new URLSearchParams({ grant_type: "authorization_code", code: decision.code, code_verifier: verifier, redirect_uri: redirectUri, client_id: "capix-ide" }),
-            });
-            const tokens = await tokenResponse.json();
-            if (!tokenResponse.ok || !tokens.access_token)
-                throw new Error(tokens.error || `Token exchange failed (${tokenResponse.status})`);
-            await client.saveOAuthTokens(tokens.access_token, tokens.refresh_token);
-            callbackGuard.exchangeSucceeded();
-            response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
-            response.end("Capix sign-in complete. Return to CapixIDE.");
-            if (timeout)
-                clearTimeout(timeout);
-            server.close();
-            vscode.window.showInformationMessage("Capix sign-in complete.");
-            await refreshAll();
-            await vscode.commands.executeCommand("capix.agent.refreshAuth");
-        }
-        catch (error) {
-            callbackGuard.exchangeFailed();
-            response.writeHead(400, { "content-type": "text/plain", "cache-control": "no-store" });
-            response.end("Capix sign-in failed. Return to CapixIDE.");
-            vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    });
-    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", () => resolve()); });
-    const address = server.address();
-    if (!address || typeof address === "string") {
-        server.close();
-        throw new Error("Unable to create secure sign-in callback");
+    try {
+        await authBroker.signIn();
+        // Publish the fresh access token to the chat surface + MCP installer via
+        // the canonical configured check.
+        await client.checkConfigured();
+        vscode.window.showInformationMessage("Capix sign-in complete.");
+        await refreshAll();
+        await vscode.commands.executeCommand("capix.agent.refreshAuth");
+        // Zero-config MCP: register the Capix MCP server now that auth succeeded.
+        // (Also fired via the OAuth token-publish handler — coalesced + idempotent.)
+        await mcpAutoInstaller.ensureInstalled();
     }
-    timeout = setTimeout(() => server.close(), 120_000);
-    const redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`;
-    const authorize = new URL("https://www.capix.network/oauth/authorize");
-    Object.entries({ response_type: "code", client_id: "capix-ide", redirect_uri: redirectUri, scope: "openid account catalog", code_challenge: challenge, code_challenge_method: "S256", state, nonce: (0, node_crypto_1.randomBytes)(24).toString("base64url") }).forEach(([key, value]) => authorize.searchParams.set(key, value));
-    await vscode.env.openExternal(vscode.Uri.parse(authorize.toString()));
+    catch (error) {
+        vscode.window.showErrorMessage(`Capix sign-in failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 async function cmdResetSessionAndSignIn() {
+    await authBroker.signOut().catch((error) => {
+        logger_1.logger.warn("Capix broker sign-out failed", { error: String(error) });
+    });
     await (0, authRecovery_1.resetSessionAndSignIn)(client, async () => {
+        // Strip the MCP server entry so no stale credential lingers after the
+        // session is cleared. (Also fired via the OAuth token-publish handler.)
+        await mcpAutoInstaller.unregister();
         try {
             await refreshAll();
         }

@@ -18,6 +18,35 @@ export type {
 	CapixChatService,
 } from "./chatService.js";
 
+// Resizable right-side assistant (secondary sidebar): framework-free view
+// model + DOM renderer + the session-history IPC contract.
+export {
+	CapixAssistantChannels,
+	type CapixAssistantChannelName,
+	type CapixAssistantIpcContract,
+} from "./assistant/channels.js";
+export {
+	CapixAssistantController,
+	CAPIX_ASSISTANT_MODES,
+	CAPIX_ASSISTANT_DEFAULT_WIDTH,
+	CAPIX_ASSISTANT_MIN_WIDTH,
+	CAPIX_ASSISTANT_MAX_WIDTH,
+	type CapixAssistantMode,
+	type CapixAssistantStatus,
+	type CapixAssistantError,
+	type CapixAssistantBridge,
+	type CapixAssistantStorage,
+	type CapixAssistantSnapshot,
+	type CapixAssistantSessionSummary,
+	type CapixContextChip,
+	type CapixTimelineEntry,
+} from "./assistant/assistantState.js";
+export {
+	mountCapixAssistant,
+	type CapixAssistantViewHandle,
+	type CapixAssistantViewOptions,
+} from "./assistant/assistantView.js";
+
 /**
  * Channel names for the main↔renderer chat bridge. Streaming uses a single multiplexed
  * channel that fans out `ChatStreamEvent`s; cancel and listModels are request/response.

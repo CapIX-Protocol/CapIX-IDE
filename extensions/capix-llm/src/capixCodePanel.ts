@@ -1,10 +1,12 @@
 /**
  * Capix Code — the native right auxiliary-sidebar coding experience.
  *
- * This panel talks to the LOCAL Capix Code engine (the `capix-code` process,
- * managed by `CapixCodeEngine`) instead of the raw `/api/v1/chat/completions`
- * SSE endpoint. That means full agentic capabilities in the IDE: tools, file
- * editing, agent loops, plans, approval gates, checkpoints, and diffs.
+ * This panel runs on the SHARED Capix agent runtime (`@capix/agent-runtime`)
+ * via `AgentRuntimeEngine` — the same runtime, durable session store and
+ * permission model as the Capix Code CLI/TUI — instead of spawning an
+ * external binary. That means full agentic capabilities in the IDE: tools,
+ * file editing, agent loops, approval gates, checkpoints, and diffs, with
+ * sessions shared across clients.
  *
  * Rendered events:
  *  • text            → markdown streaming
@@ -26,8 +28,9 @@
 import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import { CapixClient } from "./apiClient";
-import { CapixCodeEngine, type EngineEvent, type EngineMode } from "./capixCodeEngine";
+import { AgentRuntimeEngine, type EngineEvent, type EngineMode } from "./agentRuntimeEngine";
 import { logger } from "./logger";
+import type { ToolDefinition } from "./shared/agent-runtime/index";
 
 type ComposerMode = EngineMode;
 type ProviderPreference = "auto" | "usepod" | "openrouter" | "surplus";
@@ -66,7 +69,7 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   private attached: AttachedContext | null = null;
   private engineStarted = false;
 
-  private readonly engine: CapixCodeEngine;
+  private readonly engine: AgentRuntimeEngine;
 
   /** Debounce handle for refreshing the diff panel after file_changed events. */
   private diffRefreshTimer: NodeJS.Timeout | null = null;
@@ -74,9 +77,13 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   constructor(
     private client: CapixClient,
     private extensionUri: vscode.Uri,
-    extensionPath: string,
+    // Kept for signature compatibility with activation; the shared runtime
+    // needs no bundled binary path.
+    _extensionPath: string,
+    /** Extra host tools (e.g. web-control browser tools) registered on the runtime. */
+    extraTools: ToolDefinition[] = [],
   ) {
-    this.engine = new CapixCodeEngine({ extensionPath });
+    this.engine = new AgentRuntimeEngine({ client, extraTools });
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -211,9 +218,9 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Ensure the capix-code engine is running for this workspace. The IDE sets
-   * CAPIX_API_KEY / CAPIX_BASE_URL in the host environment (via the auth
-   * broker) before starting the child; the child inherits them.
+   * Ensure the shared agent runtime has a session for this workspace.
+   * Inference auth rides on the broker-backed CapixClient — no credentials
+   * are placed into any child-process environment.
    */
   private async ensureEngine(): Promise<void> {
     if (this.engineStarted) return;
@@ -225,25 +232,6 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
       });
       return;
     }
-
-    const config = vscode.workspace.getConfiguration("capix");
-    const baseUrl = config.get<string>("ai.baseUrl") || `${this.client.getBaseUrl()}/api/v1`;
-
-    let apiKey = (await this.client.getSecret("capix.ai.apiKey")) || "";
-    if (!apiKey) {
-      const token = await this.client.getStoredToken();
-      if (token) apiKey = token;
-    }
-    if (!apiKey) {
-      this.view?.webview.postMessage({
-        type: "error",
-        message: "Capix Code: no API key configured. Connect your wallet or deploy an LLM first.",
-      });
-      return;
-    }
-
-    process.env.CAPIX_BASE_URL = baseUrl;
-    process.env.CAPIX_API_KEY = apiKey;
 
     const root = this.workspaceRoot();
     if (!root) {
@@ -259,7 +247,7 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
       this.engineStarted = true;
       this.pushState();
     } catch (err) {
-      this.reportError("Could not start the Capix Code engine", err);
+      this.reportError("Could not start the Capix agent runtime", err);
     }
   }
 
@@ -513,10 +501,10 @@ ${csp}
     <label class="route-control" title="Preferred route; Capix automatically falls back">
       <span>Route</span>
       <select id="provider-select" aria-label="Preferred inference provider">
-        <option value="auto">OpenRouter + UsePod mix</option>
-        <option value="usepod">UsePod preferred</option>
-        <option value="openrouter">OpenRouter preferred</option>
-        <option value="surplus" disabled>Surplus paused</option>
+        <option value="auto">Balanced (automatic)</option>
+        <option value="usepod">Speed preferred</option>
+        <option value="openrouter">Cost preferred</option>
+        <option value="surplus" disabled>Market paused</option>
       </select>
     </label>
   </div>

@@ -185,7 +185,7 @@ async function pickDeployment(provider: DeploymentsTreeProvider): Promise<Deploy
 	const items = provider.all.map((d) => ({
 		label: d.name,
 		description: d.resourceKind,
-		detail: `${d.state} - ${d.provider ?? "?"}/${d.region ?? "?"}`,
+		detail: `${d.state} - ${d.region ?? "Capix network"}`,
 		deployment: d,
 	}));
 	const choice = await vscode.window.showQuickPick(items, { placeHolder: "Select deployment" });
@@ -246,7 +246,6 @@ function renderReceipt(r: ReceiptView): string {
 <tr><th>Model</th><td>${r.model ?? "-"}</td></tr>
 <tr><th>Region</th><td>${r.region ?? "-"}</td></tr>
 <tr><th>Privacy</th><td>${r.privacy ?? "-"}</td></tr>
-<tr><th>Provider</th><td>${r.provider ?? "-"}</td></tr>
 <tr><th>Created</th><td>${new Date(r.createdAt).toISOString()}</td></tr>
 </table></body></html>`;
 }
@@ -401,7 +400,7 @@ class DeploymentNode extends vscode.TreeItem {
 		super(d.name, vscode.TreeItemCollapsibleState.None);
 		this.deployment = d;
 		this.id = d.id;
-		this.description = `${d.state} - ${d.provider ?? "?"}/${d.region ?? "?"}`;
+		this.description = `${d.state} - ${d.region ?? "Capix network"}`;
 		this.tooltip = `${d.resourceKind} ${d.name}\nstate: ${d.state}\ncost: ${d.costMinorPerHour ?? "?"}/hr`;
 		this.iconPath = new vscode.ThemeIcon(stateIcon(d.state));
 		this.contextValue = d.state === "READY" ? "capix-deploy-ready" : "capix-deploy-active";

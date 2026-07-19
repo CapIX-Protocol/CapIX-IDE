@@ -31,7 +31,11 @@ export class CapixNativePkceAuth {
 	private pending?: PendingLogin;
 	private accessToken?: { value: string; expiresAt: number };
 	private projectId?: string;
+	private accountId?: string;
+	private refreshPromise?: Promise<void>;
 	private readonly service = "network.capix.ide";
+	/** Refresh proactively inside this expiry skew so calls never race the boundary. */
+	private static readonly REFRESH_SKEW_MS = 60_000;
 
 	constructor(private readonly config: NativeAuthConfig, private readonly credentials: SecureCredentialStore, private readonly browser: SystemBrowser, private readonly fetchImpl: typeof fetch = fetch) {
 		for (const path of [config.authorizePath, config.tokenPath, config.revokePath]) if (!path.startsWith("/")) throw new Error("Auth endpoint paths must be absolute");
@@ -68,24 +72,75 @@ export class CapixNativePkceAuth {
 		const expiresAt = Date.now() + Math.max(0, payload.expires_in ?? 300) * 1000;
 		this.accessToken = { value: payload.access_token, expiresAt };
 		this.projectId = payload.project_id;
+		this.accountId = payload.account_id;
 		if (payload.refresh_token) await this.credentials.set(this.service, "refresh-token", payload.refresh_token);
 		this.cancelPending();
 		return { status: "authenticated", expiresAt, ...(payload.account_id ? { accountId: payload.account_id } : {}), ...(payload.project_id ? { projectId: payload.project_id } : {}) };
 	}
 
 	async getAccessToken(): Promise<{ token: string; expiresAt: number }> {
+		if (!this.accessToken || this.accessToken.expiresAt <= Date.now() + CapixNativePkceAuth.REFRESH_SKEW_MS) await this.refresh();
 		if (!this.accessToken || this.accessToken.expiresAt <= Date.now()) throw new Error("Capix authentication required");
 		return { token: this.accessToken.value, expiresAt: this.accessToken.expiresAt };
 	}
 	getProjectId(): string | undefined { return this.projectId; }
 
+	/**
+	 * Exchange the stored refresh token for a fresh access token. Without this
+	 * the IDE was permanently signed out once the short-lived access token
+	 * expired, even though a valid refresh token sat in the OS credential store.
+	 * Single-flight: concurrent callers share one in-flight grant. Rotating
+	 * refresh tokens are persisted atomically with the new access token; a
+	 * rejected (rotated-out / revoked) grant clears the local session.
+	 */
+	private refresh(): Promise<void> {
+		if (!this.refreshPromise) {
+			this.refreshPromise = this.performRefresh().finally(() => { this.refreshPromise = undefined; });
+		}
+		return this.refreshPromise;
+	}
+
+	private async performRefresh(): Promise<void> {
+		const refreshToken = await this.credentials.get(this.service, "refresh-token");
+		if (!refreshToken) { this.accessToken = undefined; return; }
+		const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: this.config.clientId });
+		let response: Awaited<ReturnType<typeof fetch>>;
+		try {
+			response = await this.fetchImpl(new URL(this.config.tokenPath, this.config.baseUrl), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" }, body });
+		} catch {
+			// Network failure: keep the stored grant and the expired token snapshot
+			// so the next call retries instead of forcing a new login.
+			return;
+		}
+		const payload = await response.json().catch(() => ({})) as Partial<TokenPayload> & { error?: string };
+		if (!response.ok || !payload.access_token) {
+			// The grant is definitively rejected — drop every local credential so
+			// the next getAccessToken surfaces a signed-out state immediately.
+			if (response.status === 400 || response.status === 401) {
+				this.accessToken = undefined;
+				this.projectId = undefined;
+				this.accountId = undefined;
+				await this.credentials.delete(this.service, "refresh-token");
+			}
+			return;
+		}
+		this.accessToken = { value: payload.access_token, expiresAt: Date.now() + Math.max(0, payload.expires_in ?? 300) * 1000 };
+		if (payload.project_id) this.projectId = payload.project_id;
+		if (payload.account_id) this.accountId = payload.account_id;
+		// Rotation: the server may issue a new refresh token on every grant.
+		await this.credentials.set(this.service, "refresh-token", payload.refresh_token ?? refreshToken);
+	}
+
 	async logout(): Promise<void> {
 		const refreshToken = await this.credentials.get(this.service, "refresh-token");
-		this.accessToken = undefined; this.projectId = undefined; this.cancelPending();
+		this.accessToken = undefined; this.projectId = undefined; this.accountId = undefined; this.cancelPending();
 		if (refreshToken) {
 			try { await this.fetchImpl(new URL(this.config.revokePath, this.config.baseUrl), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token: refreshToken, client_id: this.config.clientId }) }); } finally { await this.credentials.delete(this.service, "refresh-token"); }
 		}
 	}
+
+	/** The authenticated account id, if known. */
+	getAccountId(): string | undefined { return this.accountId; }
 
 	private async acceptLoopback(rawUrl: string | undefined, response: import("node:http").ServerResponse): Promise<void> {
 		const pending = this.pending; if (!pending || !rawUrl) throw new Error("No pending login");
@@ -94,6 +149,8 @@ export class CapixNativePkceAuth {
 			response.writeHead(204, { "content-type": "text/plain" }); response.end(); return;
 		}
 		const code = url.searchParams.get("code"); const state = url.searchParams.get("state");
+		const providerError = url.searchParams.get("error");
+		if (providerError) throw new Error(`Sign-in was not completed: ${providerError}`);
 		if (!code || !state) throw new Error("Missing authorization callback parameters");
 		await this.completeLogin(code, state);
 		response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }); response.end("Capix sign-in complete. You can close this window.");

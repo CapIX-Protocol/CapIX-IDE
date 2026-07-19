@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { RendererToMainMessage } from "../vs/workbench/contrib/capix-auth/ipc.js";
 import type { CapixMainBroker } from "./capix-broker.js";
 import { CapixChatChannels } from "../vs/workbench/contrib/capix-ai/index.js";
+import { CapixAssistantChannels } from "../vs/workbench/contrib/capix-ai/assistant/channels.js";
 
-const CapixAgentChannels = {
-	listSessions: "capix:agent:listSessions",
-	resumeSession: "capix:agent:resumeSession",
-} as const;
+// The assistant session-history channels are owned by the capix-ai contract
+// (src/vs/workbench/contrib/capix-ai/assistant/channels.ts); alias them here
+// so the registration code reads naturally.
+const CapixAgentChannels = CapixAssistantChannels;
 
 interface NativeAgentMessage { role: "user" | "assistant" | "system" | "tool"; content: string; createdAt: number; receiptId?: string }
 interface NativeAgentSession {
@@ -32,6 +33,23 @@ function nonEmpty(value: unknown): value is string {
 function hasTerminalStreamType(value: object): value is { type: "final" | "error" } {
 	if (!("type" in value)) return false;
 	return value.type === "final" || value.type === "error";
+}
+
+/**
+ * Normalize a Capix usage cost (`{ amount, asset, scale }` integer minor
+ * units, e.g. USD-credit at scale 6) into the micro-USD scale (4) the
+ * workbench cost surfaces render. Money stays integer-only end to end.
+ */
+function usageCostToMicroUsd(cost: unknown): string {
+	if (!cost || typeof cost !== "object") return "0";
+	const { amount, scale } = cost as { amount?: unknown; scale?: unknown };
+	const digits = typeof amount === "string" || typeof amount === "number" ? String(amount) : "";
+	if (!/^\d+$/.test(digits)) return "0";
+	const fromScale = typeof scale === "number" && Number.isInteger(scale) && scale >= 0 ? scale : 6;
+	const value = BigInt(digits);
+	if (fromScale === 4) return value.toString();
+	if (fromScale > 4) return (value / 10n ** BigInt(fromScale - 4)).toString();
+	return (value * 10n ** BigInt(4 - fromScale)).toString();
 }
 
 export function parseRendererMessage(value: unknown): RendererToMainMessage {
@@ -75,11 +93,28 @@ export function registerCapixIpc(ipcMain: ElectronIpcMainLike, broker: CapixMain
 	const normalizeStreamEvent = (handleId: string, raw: unknown): Record<string, unknown> => {
 		const session = sessions.get(streamSessions.get(handleId) ?? "");
 		const event = raw && typeof raw === "object" ? raw as Record<string, any> : {};
-		if (event.type === "error") {
+		if (event.type === "error" || event.type === "capix.error") {
 			const problem = event.error && typeof event.error === "object" ? event.error : event;
-			return { type: "error", capixCode: String(problem.capixCode ?? problem.status ?? "inference_error"), message: String(problem.detail ?? problem.message ?? "Inference failed"), supportId: problem.supportId };
+			return { type: "error", capixCode: String(problem.capixCode ?? problem.status ?? "inference_error"), message: String(problem.message ?? problem.detail ?? "Inference failed"), supportId: problem.supportId };
 		}
 		if (event.type === "route" || event.type === "usage") return event;
+		// Canonical Capix stream contract (@capix/contracts inference-stream):
+		// capix.route / content.delta / tool.delta / capix.usage / capix.final.
+		if (event.type === "capix.route") {
+			return { type: "route", receiptId: String(event.receiptId ?? ""), model: String(event.modelCapability ?? ""), region: String(event.region ?? "global"), privacy: event.privacyClass };
+		}
+		if (event.type === "content.delta") {
+			return { type: "delta", content: typeof event.content === "string" ? event.content : "", toolCalls: undefined };
+		}
+		if (event.type === "tool.delta") {
+			return { type: "delta", content: undefined, toolCalls: [{ id: event.toolCallId, function: event.function, index: event.index }] };
+		}
+		if (event.type === "capix.usage") {
+			return { type: "usage", inputTokens: Number(event.inputUnits ?? 0), outputTokens: Number(event.outputUnits ?? 0), costMinor: usageCostToMicroUsd(event.provisionalCost), currency: "USD" };
+		}
+		if (event.type === "capix.final") {
+			return { type: "final", finishReason: String(event.finishReason ?? "stop"), receiptId: String(event.receiptId ?? session?.receiptId ?? "") };
+		}
 		const choice = Array.isArray(event.choices) ? event.choices[0] : undefined;
 		const delta = choice?.delta;
 		if (delta?.content !== undefined || delta?.tool_calls !== undefined) {
