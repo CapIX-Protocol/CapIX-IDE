@@ -105,6 +105,11 @@
     },
     "commands": [
       {
+        "command": "capix.edits.preview",
+        "title": "Capix: Preview Pending Edits",
+        "icon": "$(diff)"
+      },
+      {
         "command": "capix.launchCentre",
         "title": "Capix: Open Launch Centre",
         "icon": "$(rocket)"
@@ -401,6 +406,36 @@
         "command": "capix.selectModel",
         "title": "Capix: Select Model…",
         "icon": "$(hub)"
+      },
+      {
+        "command": "capix.inlineCompletion.toggle",
+        "title": "Capix: Toggle Inline Code Completion",
+        "icon": "$(symbol-snippet)"
+      },
+      {
+        "command": "capix.inlineCompletion.accept",
+        "title": "Capix: Accept Inline Suggestion"
+      },
+      {
+        "command": "capix.inlineCompletion.reject",
+        "title": "Capix: Dismiss Inline Suggestion"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "capix.inlineCompletion.accept",
+        "key": "tab",
+        "when": "inlineSuggestionVisible && capix.inlineCompletion.enabled && !editorTabMovesFocus"
+      },
+      {
+        "command": "capix.inlineCompletion.reject",
+        "key": "escape",
+        "when": "inlineSuggestionVisible && capix.inlineCompletion.enabled"
+      },
+      {
+        "command": "capix.inlineCompletion.toggle",
+        "key": "ctrl+alt+space",
+        "mac": "cmd+alt+space"
       }
     ],
     "menus": {
@@ -572,6 +607,16 @@
           "type": "boolean",
           "default": false,
           "description": "Enable opt-in crash reporting"
+        },
+        "capix.inlineCompletion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Capix inline code completion (Copilot-style ghost text). Accept with Tab, dismiss with Escape."
+        },
+        "capix.inlineCompletion.debounceMs": {
+          "type": "number",
+          "default": 300,
+          "description": "How long to wait after the last keystroke before requesting an inline completion (milliseconds)."
         }
       }
     }

@@ -38,6 +38,7 @@ import { OnboardingFlow } from "./onboarding";
 import { ModelSync } from "./modelSync";
 import { ModelPicker } from "./modelPicker";
 import { IntelligencePanelProvider } from "./intelligencePanel";
+import { EditPreviewPanel, type PreviewChange } from "./editPreviewPanel";
 import { WebControlManager } from "./webControl";
 import { WebControlPanel } from "./webControlPanel";
 import { createBrowserTools } from "./browserTools";
@@ -45,6 +46,7 @@ import { InfraStackService } from "./infraStack";
 import { createInfraTools } from "./infraTools";
 import { InfraPanel } from "./infraPanel";
 import { ArchitectMode } from "./architectMode";
+import { registerInlineCompletions } from "./inlineCompletionProvider";
 import { createFullToolSet } from "./full-tool-set";
 import { dollarsToMicro, microToDisplay } from "./moneyUtils";
 
@@ -73,6 +75,7 @@ let modelSync: ModelSync;
 let modelPicker: ModelPicker;
 let onboarding: OnboardingFlow;
 let intelligencePanel: IntelligencePanelProvider;
+let editPreviewPanel: EditPreviewPanel;
 let webControlManager: WebControlManager;
 let infraService: InfraStackService;
 let architectMode: ArchitectMode;
@@ -162,6 +165,11 @@ export function activate(context: vscode.ExtensionContext) {
   covenant = new CovenantManager(context);
   devTokens = new DevTokenManager(client);
   smartRouter = new SmartRouterManager(client);
+  // ── Inline code completion (Copilot-style ghost text) ─────────────────
+  // Debounced, cached, multi-line suggestions through the same completion
+  // engine and canonical smart-router route as the Capix Code CLI. Tab
+  // accepts, Escape rejects (keybindings contributed in package.json).
+  registerInlineCompletions(context, client);
   runOnSelector = new RunOnSelector(context);
   creationWizard = new CreationWizard(client);
   resourceDetailsProvider = new ResourceDetailsProvider(client, context.extensionUri);
@@ -185,6 +193,17 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("capix.webControl.openPanel", () =>
       WebControlPanel.createOrShow(context.extensionUri, webControlManager),
+    ),
+  );
+
+  // ── Atomic edit preview: native diff review for multi-file edits ──────
+  // The agent runtime invokes `capix.edits.preview` with the pending
+  // PreviewChange[] for a turn; each change is reviewed in a native diff
+  // editor and accepted edits are applied atomically (rollback on failure).
+  editPreviewPanel = new EditPreviewPanel(context);
+  context.subscriptions.push(
+    vscode.commands.registerCommand("capix.edits.preview", (changes?: PreviewChange[]) =>
+      editPreviewPanel.preview(Array.isArray(changes) ? changes : []),
     ),
   );
 
