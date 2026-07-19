@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="v2.2.4"
+VERSION="v2.3.0"
 NAME="CapixIDE"
 ARCH=$(uname -m)
 case "$ARCH" in
