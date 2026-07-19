@@ -28,6 +28,11 @@ export interface SpecialistAgent {
   /** The mode the specialist's child session runs in. */
   mode: AgentMode;
   icon: string;
+  /** The model this specialist uses. Different specialists use different models
+   * optimized for their task. Format: "capix/auto" (smart routing), "capix/auto-fast"
+   * (cheapest), "capix/auto-balanced" (default), "capix/auto-best" (highest quality),
+   * or a specific model id like "capix/llama-3.3-70b". */
+  model: string;
 }
 
 export const SPECIALIST_AGENTS: Record<string, SpecialistAgent> = {
@@ -49,6 +54,7 @@ export const SPECIALIST_AGENTS: Record<string, SpecialistAgent> = {
     fileScope: 'read-only',
     mode: 'ask',
     icon: '🔍',
+    model: 'capix/auto-fast',  // Fast, cheap model for codebase exploration
   },
   implement: {
     role: 'implement',
@@ -70,6 +76,7 @@ export const SPECIALIST_AGENTS: Record<string, SpecialistAgent> = {
     fileScope: 'read-write-execute',
     mode: 'build',
     icon: '⚡',
+    model: 'capix/auto-best',  // Strong coding model for implementation
   },
   test: {
     role: 'test',
@@ -84,6 +91,7 @@ export const SPECIALIST_AGENTS: Record<string, SpecialistAgent> = {
     fileScope: 'read-write-execute',
     mode: 'build',
     icon: '🧪',
+    model: 'capix/auto-balanced',  // Balanced model for test generation
   },
   review: {
     role: 'review',
@@ -103,6 +111,7 @@ export const SPECIALIST_AGENTS: Record<string, SpecialistAgent> = {
     fileScope: 'read-only',
     mode: 'review',
     icon: '👀',
+    model: 'capix/auto-best',  // Strong reasoning model for code review
   },
   security: {
     role: 'security',
@@ -117,6 +126,7 @@ export const SPECIALIST_AGENTS: Record<string, SpecialistAgent> = {
     fileScope: 'read-only',
     mode: 'review',
     icon: '🛡️',
+    model: 'capix/auto-best',  // Strong reasoning model for security analysis
   },
   deploy: {
     role: 'deploy',
@@ -140,6 +150,7 @@ export const SPECIALIST_AGENTS: Record<string, SpecialistAgent> = {
     fileScope: 'read-write-execute',
     mode: 'build',
     icon: '🚀',
+    model: 'capix/auto-balanced',  // Balanced model for deployment tasks
   },
 };
 
