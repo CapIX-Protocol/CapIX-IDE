@@ -169,6 +169,15 @@ else
   echo "ERROR: local terminal PTY startup patch no longer applies"
   exit 1
 fi
+if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0009-capix-transfer-data-paths.patch" >/dev/null 2>&1; then
+  echo "  done: editor-transfer data paths already Capix-scoped"
+elif git -C "$VSCODE" apply --check "$DIR/patches/0009-capix-transfer-data-paths.patch"; then
+  git -C "$VSCODE" apply "$DIR/patches/0009-capix-transfer-data-paths.patch"
+  echo "  done: editor-transfer data paths target CapixIDE/.capix-ide"
+else
+  echo "ERROR: editor-transfer data-paths patch no longer applies"
+  exit 1
+fi
 for module in capix-auth capix-ai capix-remote capix-onboarding; do
   source_dir="$DIR/src/vs/workbench/contrib/$module"
   if [ ! -d "$source_dir" ]; then
