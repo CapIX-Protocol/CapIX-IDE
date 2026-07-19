@@ -66,7 +66,7 @@ if [ -d "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules" ]; then
   if [ ! -e "$MCP_BIN" ]; then
     mkdir -p "$MCP_BIN_DIR"
     # Create relative symlink from .bin/ to ../capix-mcp/dist/index.js
-    ln -sf "../capix-mcp/dist/index.js" "$MCP_BIN"
+    ln -sf "../../index.js" "$MCP_BIN"
     echo "  done: created .bin/capix-mcp relative symlink"
   fi
 fi
