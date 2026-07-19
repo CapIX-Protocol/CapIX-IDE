@@ -61,13 +61,13 @@ if [ -d "$CODE_CUSTOMER_DIR" ]; then
   # Ensure MCP .bin symlink exists (VS Code build system checks for it)
 if [ -d "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules" ]; then
   mkdir -p "$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/.bin"
-  MCP_BIN="$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/.bin/capix-mcp"
-  MCP_REAL="$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/capix-mcp/dist/index.js"
-  if [ ! -f "$MCP_BIN" ] && [ -f "$MCP_REAL" ]; then
-    mkdir -p "$(dirname "$MCP_BIN")"
-    ln -sf "$MCP_REAL" "$MCP_BIN"
-    chmod +x "$MCP_REAL"
-    echo "  done: created .bin/capix-mcp symlink"
+  MCP_BIN_DIR="$DIR/extensions/capix-llm/tools/capix-code/mcp/node_modules/.bin"
+  MCP_BIN="$MCP_BIN_DIR/capix-mcp"
+  if [ ! -e "$MCP_BIN" ]; then
+    mkdir -p "$MCP_BIN_DIR"
+    # Create relative symlink from .bin/ to ../capix-mcp/dist/index.js
+    ln -sf "../capix-mcp/dist/index.js" "$MCP_BIN"
+    echo "  done: created .bin/capix-mcp relative symlink"
   fi
 fi
 
