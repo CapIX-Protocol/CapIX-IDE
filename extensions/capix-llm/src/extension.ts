@@ -18,6 +18,10 @@ import { InstancesTreeProvider, AgentsTreeProvider, JobsTreeProvider, ApiKeysTre
 import { ProfileViewProvider } from "./profileView";
 import { CloudDashboardProvider } from "./cloudDashboard";
 import { CapixCodePanelProvider } from "./capixCodePanel";
+import { CapixOrchestrationViewProvider } from "./orchestrationView";
+import { CapixAgentTimelineViewProvider } from "./agentTimelinePanel";
+import { CapixAgentDebuggerViewProvider } from "./agentDebuggerPanel";
+import { OrchestrationEngine } from "./shared/agent-runtime/orchestration";
 import { applyLayout, pickAndApplyLayout, restorePersistedLayout } from "./layoutPresets";
 import { defaultDestination, pickDestination, switchDestination } from "./activityBar";
 import { resetSessionAndSignIn } from "./authRecovery";
@@ -257,6 +261,11 @@ export function activate(context: vscode.ExtensionContext) {
   const jobsView = vscode.window.createTreeView("capix.llm.jobs", { treeDataProvider: jobsProvider });
   const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
 
+  const orchestrationEngine = new OrchestrationEngine({ maxParallel: 3 });
+  const orchestrationProvider = new CapixOrchestrationViewProvider(orchestrationEngine, context.extensionUri);
+  const agentTimelineProvider = new CapixAgentTimelineViewProvider(context.extensionUri);
+  const agentDebuggerProvider = new CapixAgentDebuggerViewProvider(context.extensionUri);
+
   context.subscriptions.push(
     vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()),
     deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView,
@@ -264,6 +273,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider("capix.cloud.overview", cloudDashboardProvider),
     vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider),
     vscode.window.registerWebviewViewProvider("capix.cloud.resource", resourceDetailsProvider),
+    vscode.window.registerWebviewViewProvider("capix.orchestration.view", orchestrationProvider),
+    vscode.window.registerWebviewViewProvider("capix.agentTimeline.view", agentTimelineProvider),
+    vscode.window.registerWebviewViewProvider("capix.agentDebugger.view", agentDebuggerProvider),
   );
 
   // ── Run-On target: status bar + change handler ──────────────────────────

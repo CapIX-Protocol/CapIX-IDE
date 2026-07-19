@@ -1,7 +1,7 @@
 {
   "name": "capix-llm",
   "displayName": "Capix LLM",
-  "description": "Deploy and manage LLM endpoints on the Capix GPU network — right from the IDE.",
+  "description": "Deploy and manage LLM endpoints on the Capix GPU network \u2014 right from the IDE.",
   "version": "1.0.0",
   "publisher": "capix",
   "license": "Apache-2.0",
@@ -100,6 +100,18 @@
           "id": "capix.code.chat",
           "name": "Capix Code",
           "type": "webview"
+        },
+        {
+          "id": "capix.orchestration.view",
+          "name": "Orchestration"
+        },
+        {
+          "id": "capix.agentTimeline.view",
+          "name": "Agent Timeline"
+        },
+        {
+          "id": "capix.agentDebugger.view",
+          "name": "Agent Debugger"
         }
       ]
     },
@@ -116,12 +128,12 @@
       },
       {
         "command": "capix.deployModel",
-        "title": "Capix: Deploy LLM…",
+        "title": "Capix: Deploy LLM\u2026",
         "icon": "$(rocket)"
       },
       {
         "command": "capix.deployCustomModel",
-        "title": "Capix: Deploy Custom Model (Hugging Face link)…",
+        "title": "Capix: Deploy Custom Model (Hugging Face link)\u2026",
         "icon": "$(add)"
       },
       {
@@ -184,7 +196,7 @@
       },
       {
         "command": "capix.infra.architectPlan",
-        "title": "Capix: Architect Mode — Plan Infra…",
+        "title": "Capix: Architect Mode \u2014 Plan Infra\u2026",
         "icon": "$(symbol-misc)"
       },
       {
@@ -197,12 +209,12 @@
       },
       {
         "command": "capix.execOnInstance",
-        "title": "Capix: Run Command on GPU Instance…",
+        "title": "Capix: Run Command on GPU Instance\u2026",
         "icon": "$(terminal)"
       },
       {
         "command": "capix.topUp",
-        "title": "Capix: Top Up Wallet Balance…",
+        "title": "Capix: Top Up Wallet Balance\u2026",
         "icon": "$(credit-card)"
       },
       {
@@ -227,7 +239,7 @@
       },
       {
         "command": "capix.downloadSshKey",
-        "title": "Capix: Download SSH Key…",
+        "title": "Capix: Download SSH Key\u2026",
         "icon": "$(key)"
       },
       {
@@ -252,17 +264,17 @@
       },
       {
         "command": "capix.deployAgent",
-        "title": "Capix: Deploy Agent (GitHub repo)…",
+        "title": "Capix: Deploy Agent (GitHub repo)\u2026",
         "icon": "$(github)"
       },
       {
         "command": "capix.triggerJob",
-        "title": "Capix: Trigger Serverless Job…",
+        "title": "Capix: Trigger Serverless Job\u2026",
         "icon": "$(play)"
       },
       {
         "command": "capix.createApiKey",
-        "title": "Capix: Create API Key…",
+        "title": "Capix: Create API Key\u2026",
         "icon": "$(add)"
       },
       {
@@ -272,7 +284,7 @@
       },
       {
         "command": "capix.covenantRemember",
-        "title": "Capix: Remember (Save to Memory)…"
+        "title": "Capix: Remember (Save to Memory)\u2026"
       },
       {
         "command": "capix.covenantClear",
@@ -285,11 +297,11 @@
       },
       {
         "command": "capix.setRouteMode",
-        "title": "Capix: Set Routing Mode (Auto / Private / Loop)…"
+        "title": "Capix: Set Routing Mode (Auto / Private / Loop)\u2026"
       },
       {
         "command": "capix.deployPrivateLlm",
-        "title": "Capix: Deploy Private LLM (Uncensored)…",
+        "title": "Capix: Deploy Private LLM (Uncensored)\u2026",
         "icon": "$(shield)"
       },
       {
@@ -307,50 +319,50 @@
       },
       {
         "command": "capix.routerBlockModel",
-        "title": "Capix: Block Model (Never Suggest)…"
+        "title": "Capix: Block Model (Never Suggest)\u2026"
       },
       {
         "command": "capix.routerFavorModel",
-        "title": "Capix: Favor Model (Always Prefer)…"
+        "title": "Capix: Favor Model (Always Prefer)\u2026"
       },
       {
         "command": "capix.setLayout",
-        "title": "Capix: Switch Layout…",
+        "title": "Capix: Switch Layout\u2026",
         "icon": "$(layout)"
       },
       {
         "command": "capix.cloud.deploy",
-        "title": "Capix: New Cloud Resource…",
+        "title": "Capix: New Cloud Resource\u2026",
         "icon": "$(add)"
       },
       {
         "command": "capix.cloud.create.vm",
-        "title": "Capix: New Virtual Machine…",
+        "title": "Capix: New Virtual Machine\u2026",
         "icon": "$(vm)"
       },
       {
         "command": "capix.cloud.create.gpu",
-        "title": "Capix: New Dedicated GPU…",
+        "title": "Capix: New Dedicated GPU\u2026",
         "icon": "$(symbol-misc)"
       },
       {
         "command": "capix.cloud.create.model",
-        "title": "Capix: New Private Model…",
+        "title": "Capix: New Private Model\u2026",
         "icon": "$(shield)"
       },
       {
         "command": "capix.cloud.create.container",
-        "title": "Capix: New Container Service…",
+        "title": "Capix: New Container Service\u2026",
         "icon": "$(package)"
       },
       {
         "command": "capix.cloud.create.website",
-        "title": "Capix: New Website…",
+        "title": "Capix: New Website\u2026",
         "icon": "$(globe)"
       },
       {
         "command": "capix.cloud.create.job",
-        "title": "Capix: New Serverless Job…",
+        "title": "Capix: New Serverless Job\u2026",
         "icon": "$(zap)"
       },
       {
@@ -360,7 +372,7 @@
       },
       {
         "command": "capix.runOn",
-        "title": "Capix: Run on…",
+        "title": "Capix: Run on\u2026",
         "icon": "$(device-desktop)"
       },
       {
@@ -395,7 +407,7 @@
       },
       {
         "command": "capix.setDestination",
-        "title": "Capix: Switch Destination…"
+        "title": "Capix: Switch Destination\u2026"
       },
       {
         "command": "capix.onboarding",
@@ -404,7 +416,7 @@
       },
       {
         "command": "capix.selectModel",
-        "title": "Capix: Select Model…",
+        "title": "Capix: Select Model\u2026",
         "icon": "$(hub)"
       },
       {
