@@ -18,6 +18,7 @@
 
 import * as vscode from "vscode";
 import { logger } from "./logger";
+import { RouteStatusBar } from "./routeStats";
 
 export type RunOnTarget = "local" | "capix-cloud" | "remote-machine";
 
@@ -108,6 +109,9 @@ export class RunOnSelector {
   private readonly handlers = new Set<(config: RunOnConfig) => void>();
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    // Route cost/latency meter next to the run-target command (capix.runOn).
+    // Self-registers into context.subscriptions.
+    new RouteStatusBar(context);
     void this.load();
   }
 
@@ -138,122 +142,126 @@ export class RunOnSelector {
 
     // Step 2 — progressively disclose Capix Cloud sub-options.
     if (targetPick.target === "capix-cloud") {
-      const sub = await vscode.window.showQuickPick(CLOUD_SUB_ITEMS, {
-        placeHolder: "Capix Cloud — choose a resource type",
+      const subPick = await vscode.window.showQuickPick(CLOUD_SUB_ITEMS, {
+        placeHolder: "Capix Cloud: choose the compute profile",
         matchOnDescription: true,
-        matchOnDetail: true,
         ignoreFocusOut: true,
       });
-      if (!sub) return undefined;
-      config.capixCloudTarget = { type: sub.cloudType };
+      if (!subPick) return undefined;
+      config.capixCloudTarget = { type: subPick.cloudType };
 
-      if (sub.cloudType === "existing-instance") {
+      if (subPick.cloudType === "existing-instance") {
         const instanceId = await vscode.window.showInputBox({
-          prompt: "Deployment ID to reuse (e.g. dep_…)",
-          placeHolder: "dep_",
+          prompt: "Existing instance ID (from Capix Cloud → Instances)",
+          placeHolder: "inst_…",
           ignoreFocusOut: true,
-          validateInput: (v) => (v.trim().length > 0 ? null : "Enter a deployment ID"),
         });
-        if (instanceId) config.capixCloudTarget.instanceId = instanceId.trim();
+        if (!instanceId) return undefined;
+        config.capixCloudTarget.instanceId = instanceId.trim();
       }
-
-      if (sub.cloudType === "new-private-model") {
+      if (subPick.cloudType === "new-private-model") {
         const modelId = await vscode.window.showInputBox({
-          prompt: "Model ID (optional)",
-          placeHolder: "e.g. qwen2.5-32b",
+          prompt: "Private model ID or Hugging Face link",
+          placeHolder: "meta-llama/Llama-3.1-8B-Instruct",
           ignoreFocusOut: true,
         });
-        if (modelId) config.capixCloudTarget.modelId = modelId.trim();
+        if (!modelId) return undefined;
+        config.capixCloudTarget.modelId = modelId.trim();
       }
     }
 
-    // Step 3 — optional context (project / branch / region / budget).
-    const contextPick = await vscode.window.showQuickPick<ContextPickItem>(
-      [
-        { label: "$(settings) Configure context…", value: "configure" },
-        { label: "$(check) Use defaults", value: "skip" },
-      ],
-      { placeHolder: "Adjust project, branch, region or budget?", ignoreFocusOut: true },
-    );
-    if (!contextPick) return undefined;
-
-    if (contextPick.value === "configure") {
-      config.branch =
-        (await vscode.window.showInputBox({
-          prompt: "Git branch (optional)",
-          placeHolder: "main",
-          ignoreFocusOut: true,
-        })) || undefined;
-
-      config.environment =
-        (await vscode.window.showQuickPick(
-          ["development", "staging", "production"].map((e) => ({ label: e })),
-          { placeHolder: "Environment", ignoreFocusOut: true },
-        ))?.label || undefined;
-
-      config.regionPreference =
-        (await vscode.window.showQuickPick(
-          [
-            { label: "Automatic (best available)", value: "global" },
-            { label: "Europe", value: "eu" },
-            { label: "North America", value: "us" },
-            { label: "Asia-Pacific", value: "asia" },
-          ],
-          { placeHolder: "Region preference", ignoreFocusOut: true },
-        ))?.value || undefined;
+    if (targetPick.target === "remote-machine") {
+      const host = await vscode.window.showInputBox({
+        prompt: "Remote host (user@host[:port])",
+        placeHolder: "dev@192.168.1.20",
+        ignoreFocusOut: true,
+      });
+      if (!host) return undefined;
+      config.environment = host.trim();
     }
 
-    // Attach workspace-derived context.
-    const ws = vscode.workspace.workspaceFolders?.[0];
-    if (ws) config.project = ws.name;
-    if (config.branch) config.repository = ws?.name;
+    // Step 3 — optionally bind the workspace context.
+    const workspaceName = vscode.workspace.workspaceFolders?.[0]?.name;
+    if (workspaceName) {
+      const contextPick = await vscode.window.showQuickPick<ContextPickItem>(
+        [
+          {
+            label: "$(folder) Use current workspace",
+            description: workspaceName,
+            value: "configure",
+          },
+          {
+            label: "$(circle-slash) Skip for now",
+            description: "Run without binding a project context",
+            value: "skip",
+          },
+        ],
+        { placeHolder: "Bind this run target to the current workspace?", ignoreFocusOut: true },
+      );
+      if (!contextPick) return undefined;
+      if (contextPick.value === "configure") {
+        config.project = workspaceName;
+      }
+    }
 
-    config.runtimeStatus = "ready";
-    this.persistAndEmit(config);
+    await this.set(config);
     return config;
   }
 
-  /** The current Run-On context for display (status bar, composer header). */
-  getCurrentTarget(): RunOnConfig | null {
+  /** Current configuration (may be `null` until the user picks one). */
+  current(): RunOnConfig | null {
     return this.config;
   }
 
-  /** Register a handler invoked whenever the target changes. */
-  onTargetChanged(handler: (config: RunOnConfig) => void): void {
+  /** Subscribe to configuration changes (status bar, composer, wizard). */
+  onDidChange(handler: (config: RunOnConfig) => void): vscode.Disposable {
     this.handlers.add(handler);
+    return new vscode.Disposable(() => this.handlers.delete(handler));
   }
 
-  private persistAndEmit(config: RunOnConfig): void {
+  /** Persist + broadcast a new configuration. */
+  async set(config: RunOnConfig): Promise<void> {
     this.config = config;
-    void this.context.workspaceState.update(STATE_KEY, JSON.stringify(config));
+    try {
+      await this.context.workspaceState.update(STATE_KEY, JSON.stringify(config));
+    } catch (err) {
+      logger.warn("RunOnSelector.set failed", { error: String(err) });
+    }
     for (const handler of this.handlers) {
       try {
         handler(config);
       } catch (err) {
-        logger.warn("RunOnSelector handler threw", { error: String(err) });
+        logger.warn("RunOnSelector handler failed", { error: String(err) });
       }
     }
   }
-}
 
-/** Render a short, human-readable label for a Run-On target (status bar). */
-export function runOnLabel(config: RunOnConfig | null): string {
-  if (!config) return "$(question) Run on: —";
-  switch (config.target) {
-    case "local":
-      return "$(device-desktop) Run on: This Computer";
-    case "remote-machine":
-      return "$(remote) Run on: Remote Machine";
-    case "capix-cloud": {
-      const sub = config.capixCloudTarget?.type ?? "automatic";
-      const map: Record<CapixCloudTarget["type"], string> = {
-        "existing-instance": "$(server) Run on: Capix Cloud · Existing",
-        "new-compute": "$(vm) Run on: Capix Cloud · Compute",
-        "new-gpu": "$(symbol-misc) Run on: Capix Cloud · GPU",
-        "new-private-model": "$(shield) Run on: Capix Cloud · Private",
-        automatic: "$(sparkle) Run on: Capix Cloud · Auto",
-      };
-      return map[sub];
+  /** Human-readable one-liner for status surfaces. */
+  describe(): string {
+    if (!this.config) return "Choose run target";
+    const c = this.config;
+    switch (c.target) {
+      case "local":
+        return "This Computer";
+      case "remote-machine":
+        return c.environment ? `Remote · ${c.environment}` : "Remote Machine";
+      case "capix-cloud": {
+        const sub = c.capixCloudTarget?.type;
+        if (sub === "existing-instance" && c.capixCloudTarget?.instanceId) {
+          return `Capix Cloud · ${c.capixCloudTarget.instanceId}`;
+        }
+        if (sub === "new-private-model" && c.capixCloudTarget?.modelId) {
+          return `Capix Cloud · ${c.capixCloudTarget.modelId}`;
+        }
+        const labels: Record<NonNullable<CapixCloudTarget["type"]>, string> = {
+          "existing-instance": "Existing Instance",
+          "new-compute": "New Compute",
+          "new-gpu": "New GPU",
+          "new-private-model": "New Private Model",
+          automatic: "Automatic",
+        };
+        return `Capix Cloud · ${sub ? labels[sub] : "Unconfigured"}`;
+      }
     }
   }
 }
