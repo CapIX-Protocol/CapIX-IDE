@@ -27,6 +27,7 @@ import { CapixApiError, CapixClient } from './apiClient';
 import { logger } from './logger';
 import { dollarsToMicro, microToDisplay } from './moneyUtils';
 import type { CatalogModel, HostedEndpoint, LlmDeploy } from './types';
+import { icon } from "./webviewIcons";
 
 // ── Tab state model ─────────────────────────────────────────────────────────
 
@@ -344,7 +345,7 @@ export class CloudHubProvider implements vscode.WebviewViewProvider {
             : err instanceof CapixApiError && err.status
               ? `${label} could not be loaded (HTTP ${err.status}).`
               : `${label} could not be loaded. Check your connection and retry.`;
-        logger.error(`CloudHub.${tab} load failed`, { error: String(err) });
+        logger.warn(`CloudHub.${tab} load failed`, { error: String(err) });
         this.errors[tab] = reason;
         return null;
       };
@@ -604,9 +605,9 @@ ${csp}
               </div>
               <div class="res-actions">
                 <span class="res-rate">${esc(microToDisplay(dollarsToMicro(i.costUsdPerHour), 2))}/hr</span>
-                <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open">$(link)</button>
-                ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">$(debug-stop)</button>` : ''}
-                <button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">$(trash)</button>
+                <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open">${icon("link")}</button>
+                ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">${icon("debug-stop")}</button>` : ''}
+                <button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">${icon("trash")}</button>
               </div>
             </div>`
           )
@@ -640,7 +641,7 @@ ${csp}
         <div class="stat"><div class="stat-value">$${esc(a?.totalSpent ?? '0.00')}</div><div class="stat-label">Total spent</div></div>
       </section>
       <section class="card">
-        <div class="section-head"><h2>Active Resources</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+        <div class="section-head"><h2>Active Resources</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
         ${instanceRows}
       </section>
       <section class="card">
@@ -665,19 +666,19 @@ ${csp}
         const actions = live
           ? [
               d.ready && d.endpoint
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyEndpoint" data-id="${esc(d.instanceRecordId)}" title="Copy endpoint">$(link)</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyEndpoint" data-id="${esc(d.instanceRecordId)}" title="Copy endpoint">${icon("link")}</button>`
                 : '',
               d.ready
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyApiKey" data-id="${esc(d.instanceRecordId)}" title="Copy API key">$(key)</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyApiKey" data-id="${esc(d.instanceRecordId)}" title="Copy API key">${icon("key")}</button>`
                 : '',
-              `<button class="icon-btn" data-action="deployAction" data-tab="logs" data-id="${esc(d.instanceRecordId)}" title="View logs">$(output)</button>`,
+              `<button class="icon-btn" data-action="deployAction" data-tab="logs" data-id="${esc(d.instanceRecordId)}" title="View logs">${icon("output")}</button>`,
               d.state === 'running' || d.state === 'provisioning'
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="stop" data-id="${esc(d.instanceRecordId)}" title="Stop">$(debug-stop)</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="stop" data-id="${esc(d.instanceRecordId)}" title="Stop">${icon("debug-stop")}</button>`
                 : '',
               d.state === 'stopped'
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="start" data-id="${esc(d.instanceRecordId)}" title="Start">$(debug-start)</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="start" data-id="${esc(d.instanceRecordId)}" title="Start">${icon("debug-start")}</button>`
                 : '',
-              `<button class="icon-btn danger" data-action="deployAction" data-tab="destroy" data-id="${esc(d.instanceRecordId)}" title="Destroy">$(trash)</button>`,
+              `<button class="icon-btn danger" data-action="deployAction" data-tab="destroy" data-id="${esc(d.instanceRecordId)}" title="Destroy">${icon("trash")}</button>`,
             ].join('')
           : '';
         const meta =
@@ -697,7 +698,7 @@ ${csp}
       })
       .join('');
     return `<section class="card">
-      <div class="section-head"><h2>Deployments</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+      <div class="section-head"><h2>Deployments</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
       ${rows}
     </section>`;
   }
@@ -716,15 +717,15 @@ ${csp}
           </div>
           <div class="res-actions">
             <span class="res-rate">${esc(microToDisplay(dollarsToMicro(i.costUsdPerHour), 2))}/hr</span>
-            <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open detail">$(link)</button>
-            ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">$(debug-stop)</button>` : ''}
-            ${i.badge !== 'destroyed' ? `<button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">$(trash)</button>` : ''}
+            <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open detail">${icon("link")}</button>
+            ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">${icon("debug-stop")}</button>` : ''}
+            ${i.badge !== 'destroyed' ? `<button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">${icon("trash")}</button>` : ''}
           </div>
         </div>`
       )
       .join('');
     return `<section class="card">
-      <div class="section-head"><h2>Instances</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+      <div class="section-head"><h2>Instances</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
       ${rows}
     </section>`;
   }
@@ -745,7 +746,7 @@ ${csp}
           .join('')
       : `<div class="state subtle">No serverless jobs yet — trigger one to see it here with live status.</div>`;
     return `<section class="card">
-      <div class="section-head"><h2>Serverless Jobs</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+      <div class="section-head"><h2>Serverless Jobs</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
       ${rows}
       <button class="btn btn-secondary btn-block" data-action="triggerJob">Trigger a job…</button>
     </section>`;
@@ -764,14 +765,14 @@ ${csp}
               </div>
               <div class="res-actions">
                 <span class="res-id">${esc(String(k.totalRequests))} reqs</span>
-                <button class="icon-btn danger" data-action="revokeApiKey" data-id="${esc(k.id)}" title="Revoke">$(trash)</button>
+                <button class="icon-btn danger" data-action="revokeApiKey" data-id="${esc(k.id)}" title="Revoke">${icon("trash")}</button>
               </div>
             </div>`
           )
           .join('')
       : `<div class="state subtle">The IDE signs in with your OAuth session — no API key required. Create one only for external gateway access.</div>`;
     return `<section class="card">
-      <div class="section-head"><h2>API Keys</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+      <div class="section-head"><h2>API Keys</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
       ${rows}
       <button class="btn btn-secondary btn-block" data-action="createApiKey">+ Create API key…</button>
     </section>`;
@@ -807,7 +808,7 @@ ${csp}
          ${communityRows ? `<div class="section-head"><h2>Community models</h2></div>${communityRows}` : ''}`
         : `<div class="state subtle">Model catalog is empty.</div>`;
     return `<section class="card">
-        <div class="section-head"><h2>Ready Now (Hosted)</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+        <div class="section-head"><h2>Ready Now (Hosted)</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
         ${hostedRows}
       </section>
       <section class="card">${catalogRows}</section>`;
@@ -828,7 +829,7 @@ ${csp}
       : `<div class="state subtle">No ledger activity yet.</div>`;
     return `
       <section class="card">
-        <div class="section-head"><h2>Wallet</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+        <div class="section-head"><h2>Wallet</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
         <div class="account-balance">$${esc(a.balanceUsd)}</div>
         <div class="account-sub">${esc(a.balanceSol)} SOL · ${esc(a.balanceUsdc)} USDC</div>
         <div class="btn-row">
