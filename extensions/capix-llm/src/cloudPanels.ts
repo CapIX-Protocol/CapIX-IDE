@@ -1,17 +1,32 @@
+/**
+ * Cloud Panels — data provider for Capix cloud compute instances.
+ *
+ * The sidebar tree views that used to render this data (instances, agents,
+ * jobs, API keys) were consolidated into the tabbed `capix.cloud.hub`
+ * webview. The InstancesTreeProvider stays as a data store: commands
+ * (SSH terminal, SSH key download) read its `instances` snapshot.
+ *
+ * The agents / jobs / api-keys providers were removed — their routes are
+ * intentionally unused (agent deployment is disabled for launch; the IDE
+ * authenticates with OAuth, not portal API keys) and the cloud hub renders
+ * jobs / API keys directly from CapixClient.
+ */
+
 import * as vscode from 'vscode';
 import { CapixClient } from './apiClient';
 import { logger } from './logger';
 import { dollarsToMicro, microToDisplay } from './moneyUtils';
 
-// ── Types ──────────────────────────────────────────────────────────────────
-export interface CloudInstance {
+// ── Shared types for cloud resources ───────────────────────────────────────
+interface CloudInstance {
   id: string;
   tier: string;
   status: string;
-  costUsdPerHour: number;
   startedAt: string;
+  costUsdPerHour: number;
   nodes: Array<{
-    id: string;
+    nodeId: string;
+    location: string;
     sshHost: string | null;
     sshPort: number | null;
     gpu: string | null;
@@ -58,12 +73,10 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
 
   async getChildren(): Promise<CloudItem[]> {
     if (!(await this.client.checkConfigured())) {
-      return [
-        CloudItem.info('Connect wallet to view instances'),
-      ];
+      return [CloudItem.info('Connect wallet to view instances')];
     }
     if (this.instances.length === 0) {
-      return [CloudItem.info('No instances yet — deploy one below')];
+      return [CloudItem.info('No instances — deploy from the Console')];
     }
     return this.instances.map((inst) => {
       const item = new CloudItem(
