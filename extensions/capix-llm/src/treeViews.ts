@@ -128,7 +128,7 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
       const status = (err as { status?: number }).status;
       if (status === 401) logger.info('Deploys are waiting for a refreshed Capix session');
       else if (status === 503) logger.info('Deploys are temporarily unavailable');
-      else logger.error('DeploysTreeProvider.load failed', { error: String(err) });
+      else logger.warn('DeploysTreeProvider.load failed', { error: String(err) });
       this.deploys = [];
       this.refresh();
     }
@@ -164,14 +164,14 @@ export class DeploysTreeProvider implements vscode.TreeDataProvider<DeployItem> 
     return this.deploys.map((d) => {
       const icon =
         d.state === 'running'
-          ? '$(check)'
+          ? 'check'
           : d.state === 'loading'
-            ? '$(loading~spin)'
+            ? 'loading'
             : d.state === 'stopped'
-              ? '$(debug-stop)'
+              ? 'debug-stop'
               : d.state === 'destroyed'
-                ? '$(trash)'
-                : '$(circle)';
+                ? 'trash'
+                : 'circle';
       const ctxValue = d.canonical
         ? 'capix-canonical-deploy'
         : d.state === 'running'

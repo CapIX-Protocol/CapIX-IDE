@@ -1,32 +1,17 @@
-/**
- * Cloud Panels — data provider for Capix cloud compute instances.
- *
- * The sidebar tree views that used to render this data (instances, agents,
- * jobs, API keys) were consolidated into the tabbed `capix.cloud.hub`
- * webview. The InstancesTreeProvider stays as a data store: commands
- * (SSH terminal, SSH key download) read its `instances` snapshot.
- *
- * The agents / jobs / api-keys providers were removed — their routes are
- * intentionally unused (agent deployment is disabled for launch; the IDE
- * authenticates with OAuth, not portal API keys) and the cloud hub renders
- * jobs / API keys directly from CapixClient.
- */
-
 import * as vscode from 'vscode';
 import { CapixClient } from './apiClient';
 import { logger } from './logger';
 import { dollarsToMicro, microToDisplay } from './moneyUtils';
 
-// ── Shared types for cloud resources ───────────────────────────────────────
-interface CloudInstance {
+// ── Types ──────────────────────────────────────────────────────────────────
+export interface CloudInstance {
   id: string;
   tier: string;
   status: string;
-  startedAt: string;
   costUsdPerHour: number;
+  startedAt: string;
   nodes: Array<{
-    nodeId: string;
-    location: string;
+    id: string;
     sshHost: string | null;
     sshPort: number | null;
     gpu: string | null;
@@ -54,7 +39,10 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
         const res = await this.client.listInstances();
         this.instances = res.instances;
       } catch (err) {
-        logger.error('InstancesTreeProvider.load failed', { error: String(err) });
+        const status = (err as { status?: number }).status;
+        if (status === 401) logger.info('Instances are waiting for a refreshed Capix session');
+        else if (status === 503) logger.info('Instances are temporarily unavailable');
+        else logger.warn('InstancesTreeProvider.load failed', { error: String(err) });
         this.instances = [];
       }
       this.refresh();
@@ -70,10 +58,12 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
 
   async getChildren(): Promise<CloudItem[]> {
     if (!(await this.client.checkConfigured())) {
-      return [CloudItem.info('Connect wallet to view instances')];
+      return [
+        CloudItem.info('Connect wallet to view instances'),
+      ];
     }
     if (this.instances.length === 0) {
-      return [CloudItem.info('No instances — deploy from the Console')];
+      return [CloudItem.info('No instances yet — deploy one below')];
     }
     return this.instances.map((inst) => {
       const item = new CloudItem(
@@ -84,10 +74,10 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
       item.description = `${inst.status} · $${microToDisplay(dollarsToMicro(inst.costUsdPerHour), 2)}/hr`;
       item.iconPath = new vscode.ThemeIcon(
         inst.status === 'running'
-          ? '$(vm-active)'
+          ? 'vm-active'
           : inst.status === 'stopped'
-            ? '$(vm-outline)'
-            : '$(vm-connect)'
+            ? 'vm-outline'
+            : 'vm-connect'
       );
       item.tooltip = `${inst.tier}\n${inst.nodes.length} node(s) · since ${new Date(inst.startedAt).toLocaleString()}`;
       item.contextValue = `capix-instance-${inst.status}`;
@@ -120,7 +110,7 @@ export class CloudItem extends vscode.TreeItem {
 
   static info(label: string): CloudItem {
     const item = new CloudItem(label, 'capix-info', vscode.TreeItemCollapsibleState.None);
-    item.iconPath = new vscode.ThemeIcon('$(info)');
+    item.iconPath = new vscode.ThemeIcon('info');
     return item;
   }
 }
