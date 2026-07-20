@@ -948,8 +948,8 @@ const PANEL_SCRIPT = `
   function renderInlineMd(text) {
     let s = esc(text);
     s = s.replace(/\`([^\`]+)\`/g, '<code class="inline">$1</code>');
-    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    return s.replace(/\n/g, '<br>');
+    s = s.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+    return s.replace(/\\n/g, '<br>');
   }
   function renderMarkdown(text) {
     let html = '';
@@ -959,7 +959,7 @@ const PANEL_SCRIPT = `
       if (fence === -1) { html += '<p>' + renderInlineMd(text.slice(i)) + '</p>'; break; }
       if (fence > i) html += '<p>' + renderInlineMd(text.slice(i, fence)) + '</p>';
       const afterFence = text.slice(fence + 3);
-      const nl = afterFence.indexOf('\n');
+      const nl = afterFence.indexOf('\\n');
       const lang = nl >= 0 ? afterFence.slice(0, nl) : afterFence;
       const codeStart = nl >= 0 ? fence + 3 + nl + 1 : fence + 3;
       const close = text.indexOf('\`\`\`', codeStart);
@@ -1022,7 +1022,7 @@ const PANEL_SCRIPT = `
     const card = activeTools.get(evt.callId);
     if (!card) return;
     const out = card.querySelector('.tool-out');
-    if (out) out.textContent += evt.output + '\n';
+    if (out) out.textContent += evt.output + '\\n';
     card.classList.remove('collapsed');
     conversation.scrollTop = conversation.scrollHeight;
   }
@@ -1084,7 +1084,7 @@ const PANEL_SCRIPT = `
     }
     const tb = activeAssistant && activeAssistant.querySelector('.text-block');
     if (tb) tb.classList.remove('cursor');
-    if (msg) appendText('\n' + msg);
+    if (msg) appendText('\\n' + msg);
   }
 
   // ── Diff panel ───────────────────────────────────────────────────────────
