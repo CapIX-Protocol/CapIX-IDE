@@ -672,7 +672,7 @@ ${csp}
 		return `<div class="mem-card" data-mem-id="${esc(n.id)}">
         <div class="mem-head">
           <span class="ov-type type-${esc(n.type)}">${esc(n.type)}</span>
-          <div class="conf-bar"><div class="conf-fill" style="width:${Math.round(confidence * 100}%"></div></div>
+          <div class="conf-bar"><div class="conf-fill" style="width:${Math.round(confidence * 100)}%"></div></div>
           <span class="conf-val">${Math.round(confidence * 100)}%</span>
           <span class="ov-recency">${esc(recency(n.createdAt))}</span>
         </div>
@@ -731,8 +731,8 @@ ${csp}
             <div class="skill-actions">
               <button class="btn btn-mini" data-action="invokeSkill" data-id="${esc(s.id)}" ${s.enabled ? "" : "disabled"}>Invoke</button>
               ${s.enabled
-												? `<button class="btn btn-mini" data-action="disableSkill" data-id="${esc(s.id)}">Disable</button>`
-												: `<button class="btn btn-mini" data-action="enableSkill" data-id="${esc(s.id)}">Enable</button>`}
+								? `<button class="btn btn-mini" data-action="disableSkill" data-id="${esc(s.id)}">Disable</button>`
+								: `<button class="btn btn-mini" data-action="enableSkill" data-id="${esc(s.id)}">Enable</button>`}
               <button class="btn btn-mini" data-action="pinSkill" data-id="${esc(s.id)}">Pin</button>
             </div>
           </div>`;
@@ -773,8 +773,8 @@ ${csp}
               <span class="gen-pill">gen ${a.generation}</span>
               <div class="agent-actions">
                 ${(a.status === "running" || a.status === "pending")
-												? `<button class="btn btn-mini" data-action="completeAgent" data-id="${esc(a.id)}">Complete</button>`
-												: ""}
+								? `<button class="btn btn-mini" data-action="completeAgent" data-id="${esc(a.id)}">Complete</button>`
+								: ""}
               </div>
             </div>${children.map((c) => subtree(c, depth + 1)).join("")}`;
 		};
