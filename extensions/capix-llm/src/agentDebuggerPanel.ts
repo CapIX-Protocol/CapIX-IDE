@@ -192,6 +192,10 @@ export class CapixAgentDebuggerViewProvider implements vscode.WebviewViewProvide
   private readonly tripped = new Set<string>();
   /** Step mode pauses again at the next step-producing event. */
   private stepOnce = false;
+  /** When set (agent hub embed), state snapshots go to the sink instead of a view. */
+  private stateSink: ((state: AgentDebuggerViewState) => void) | null = null;
+  /** When set (agent hub embed), step inspections go to the sink instead of a view. */
+  private inspectionSink: ((inspection: StepInspection | null) => void) | null = null;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -275,9 +279,18 @@ export class CapixAgentDebuggerViewProvider implements vscode.WebviewViewProvide
     this.pushState();
   }
 
+  /** Route state snapshots to the agent hub instead of a dedicated view. */
+  setStateSink(sink: ((state: AgentDebuggerViewState) => void) | null): void {
+    this.stateSink = sink;
+  }
+
+  /** Route step inspections to the agent hub instead of a dedicated view. */
+  setInspectionSink(sink: ((inspection: StepInspection | null) => void) | null): void {
+    this.inspectionSink = sink;
+  }
+
   /** Push the current snapshot to the webview. */
   pushState(): void {
-    if (!this.view) return;
     const state = toDebuggerViewState(
       this.timeline,
       this.profiler,
@@ -285,10 +298,15 @@ export class CapixAgentDebuggerViewProvider implements vscode.WebviewViewProvide
       this.execution,
       this.pausedAtStepId
     );
+    if (this.stateSink) {
+      this.stateSink(state);
+      return;
+    }
+    if (!this.view) return;
     void this.view.webview.postMessage({ type: 'state', state });
   }
 
-  private handleMessage(msg: {
+  public handleMessage(msg: {
     type: string;
     id?: string;
     stepId?: string;
@@ -348,8 +366,13 @@ export class CapixAgentDebuggerViewProvider implements vscode.WebviewViewProvide
           return;
         }
         case 'inspect': {
-          if (!msg.stepId || !this.view) return;
+          if (!msg.stepId) return;
           const inspection = inspectStepAt(this.timeline.getSteps(), msg.stepId);
+          if (this.inspectionSink) {
+            this.inspectionSink(inspection);
+            return;
+          }
+          if (!this.view) return;
           void this.view.webview.postMessage({ type: 'inspection', inspection });
           return;
         }
@@ -372,7 +395,55 @@ export class CapixAgentDebuggerViewProvider implements vscode.WebviewViewProvide
 <head>
 <meta charset="UTF-8">
 ${csp}
-<style>
+<style>${AGENT_DEBUGGER_STYLES}</style>
+</head>
+<body>
+${AGENT_DEBUGGER_BODY}
+  <script nonce="${nonce}">${AGENT_DEBUGGER_SCRIPT}</script>
+</body>
+</html>`;
+  }
+}
+
+// ── Webview script (no dependencies; state arrives via postMessage) ─────────
+
+
+/**
+ * Body markup of the panel surface, exported so the agent hub can embed
+ * it as a tab body (hub re-prefixes the element ids).
+ */
+export const AGENT_DEBUGGER_BODY = /* html */ `
+  <h2>Debugger</h2>
+  <div id="status" class="status idle">idle</div>
+  <div class="controls">
+    <button id="dbg-start" class="ghost">▶ debug</button>
+    <button id="dbg-continue" class="ghost">continue</button>
+    <button id="dbg-step" class="ghost">step</button>
+    <button id="dbg-pause" class="ghost">pause</button>
+  </div>
+
+  <h2>Breakpoints</h2>
+  <div class="bp-form">
+    <input id="bp-tool" placeholder="tool (e.g. write_file)">
+    <input id="bp-file" placeholder="file (e.g. src/app.ts)">
+    <label class="ghost" style="padding:2px 8px;border:1px solid var(--border);border-radius:6px;">
+      <input type="checkbox" id="bp-error" style="min-width:0;"> on error
+    </label>
+    <button id="bp-add" class="ghost">add</button>
+  </div>
+  <div id="breakpoints"></div>
+
+  <h2>Profiler</h2>
+  <div id="totals" class="totals"></div>
+  <div id="tools"></div>
+
+  <h2>Execution</h2>
+  <div id="steps"></div>
+  <div id="inspection"></div>
+`;
+
+// ── Inline styles (shared by the standalone view and the agent hub embed) ──
+export const AGENT_DEBUGGER_STYLES = /* css */ `
   :root {
     --canvas: #0a0e14;
     --panel: #11161f;
@@ -424,46 +495,9 @@ ${csp}
   th, td { text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 600; }
   .empty { color: var(--muted); }
-</style>
-</head>
-<body>
-  <h2>Debugger</h2>
-  <div id="status" class="status idle">idle</div>
-  <div class="controls">
-    <button id="dbg-start" class="ghost">▶ debug</button>
-    <button id="dbg-continue" class="ghost">continue</button>
-    <button id="dbg-step" class="ghost">step</button>
-    <button id="dbg-pause" class="ghost">pause</button>
-  </div>
+`;
 
-  <h2>Breakpoints</h2>
-  <div class="bp-form">
-    <input id="bp-tool" placeholder="tool (e.g. write_file)">
-    <input id="bp-file" placeholder="file (e.g. src/app.ts)">
-    <label class="ghost" style="padding:2px 8px;border:1px solid var(--border);border-radius:6px;">
-      <input type="checkbox" id="bp-error" style="min-width:0;"> on error
-    </label>
-    <button id="bp-add" class="ghost">add</button>
-  </div>
-  <div id="breakpoints"></div>
-
-  <h2>Profiler</h2>
-  <div id="totals" class="totals"></div>
-  <div id="tools"></div>
-
-  <h2>Execution</h2>
-  <div id="steps"></div>
-  <div id="inspection"></div>
-
-  <script nonce="${nonce}">${AGENT_DEBUGGER_SCRIPT}</script>
-</body>
-</html>`;
-  }
-}
-
-// ── Webview script (no dependencies; state arrives via postMessage) ─────────
-
-const AGENT_DEBUGGER_SCRIPT = /* javascript */ `
+export const AGENT_DEBUGGER_SCRIPT = /* javascript */ `
 const vscode = acquireVsCodeApi();
 let state = null;
 let selectedStepId = null;

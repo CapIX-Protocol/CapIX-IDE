@@ -89,6 +89,8 @@ export class CapixAgentTimelineViewProvider implements vscode.WebviewViewProvide
   private view?: vscode.WebviewView;
   private timeline: AgentTimeline;
   private profiler: AgentProfiler;
+  /** When set (agent hub embed), state snapshots go to the sink instead of a view. */
+  private stateSink: ((state: AgentTimelineViewState) => void) | null = null;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -142,14 +144,23 @@ export class CapixAgentTimelineViewProvider implements vscode.WebviewViewProvide
     this.pushState();
   }
 
+  /** Route state snapshots to the agent hub instead of a dedicated view. */
+  setStateSink(sink: ((state: AgentTimelineViewState) => void) | null): void {
+    this.stateSink = sink;
+  }
+
   /** Push the current engine snapshot to the webview. */
   pushState(): void {
-    if (!this.view) return;
     const state = toViewState(this.timeline, this.profiler);
+    if (this.stateSink) {
+      this.stateSink(state);
+      return;
+    }
+    if (!this.view) return;
     void this.view.webview.postMessage({ type: 'state', state });
   }
 
-  private async handleMessage(msg: { type: string; stepId?: string }): Promise<void> {
+  public async handleMessage(msg: { type: string; stepId?: string }): Promise<void> {
     try {
       switch (msg.type) {
         case 'ready':
@@ -187,7 +198,40 @@ export class CapixAgentTimelineViewProvider implements vscode.WebviewViewProvide
 <head>
 <meta charset="UTF-8">
 ${csp}
-<style>
+<style>${AGENT_TIMELINE_STYLES}</style>
+</head>
+<body>
+${AGENT_TIMELINE_BODY}
+  <script nonce="${nonce}">${AGENT_TIMELINE_SCRIPT}</script>
+</body>
+</html>`;
+  }
+}
+
+// ── Webview script (no dependencies; state arrives via postMessage) ─────────
+
+
+/**
+ * Body markup of the panel surface, exported so the agent hub can embed
+ * it as a tab body (hub re-prefixes the element ids).
+ */
+export const AGENT_TIMELINE_BODY = /* html */ `
+  <h2>Profiler</h2>
+  <div id="totals" class="totals"></div>
+  <div id="tools"></div>
+  <div id="bottlenecks"></div>
+
+  <h2>Timeline</h2>
+  <div class="replay">
+    <button id="replay-play" class="ghost">▶ replay</button>
+    <button id="replay-step" class="ghost">step</button>
+    <button id="replay-stop" class="ghost">stop</button>
+  </div>
+  <div id="steps"></div>
+`;
+
+// ── Inline styles (shared by the standalone view and the agent hub embed) ──
+export const AGENT_TIMELINE_STYLES = /* css */ `
   :root {
     --canvas: #0a0e14;
     --panel: #11161f;
@@ -236,31 +280,9 @@ ${csp}
   .bottleneck .kind { color: var(--amber); text-transform: uppercase; font-size: 10px;
                       letter-spacing: .06em; }
   .empty { color: var(--muted); }
-</style>
-</head>
-<body>
-  <h2>Profiler</h2>
-  <div id="totals" class="totals"></div>
-  <div id="tools"></div>
-  <div id="bottlenecks"></div>
+`;
 
-  <h2>Timeline</h2>
-  <div class="replay">
-    <button id="replay-play" class="ghost">▶ replay</button>
-    <button id="replay-step" class="ghost">step</button>
-    <button id="replay-stop" class="ghost">stop</button>
-  </div>
-  <div id="steps"></div>
-
-  <script nonce="${nonce}">${AGENT_TIMELINE_SCRIPT}</script>
-</body>
-</html>`;
-  }
-}
-
-// ── Webview script (no dependencies; state arrives via postMessage) ─────────
-
-const AGENT_TIMELINE_SCRIPT = /* javascript */ `
+export const AGENT_TIMELINE_SCRIPT = /* javascript */ `
 const vscode = acquireVsCodeApi();
 let state = null;
 let selectedStepId = null;

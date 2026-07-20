@@ -40,42 +40,8 @@
     "views": {
       "capix-cloud": [
         {
-          "id": "capix.cloud.overview",
-          "name": "Cloud",
-          "type": "webview"
-        },
-        {
-          "id": "capix.llm.profile",
-          "name": "Profile",
-          "type": "webview"
-        },
-        {
-          "id": "capix.llm.deploys",
-          "name": "My Deploys"
-        },
-        {
-          "id": "capix.llm.instances",
-          "name": "Instances"
-        },
-        {
-          "id": "capix.llm.jobs",
-          "name": "Serverless Jobs"
-        },
-        {
-          "id": "capix.llm.apikeys",
-          "name": "API Keys"
-        },
-        {
-          "id": "capix.llm.catalog",
-          "name": "Model Catalog"
-        },
-        {
-          "id": "capix.llm.hosted",
-          "name": "Ready Now (Hosted)"
-        },
-        {
-          "id": "capix.cloud.resource",
-          "name": "Resource",
+          "id": "capix.cloud.hub",
+          "name": "Capix Cloud",
           "type": "webview"
         }
       ],
@@ -84,10 +50,6 @@
           "id": "capix.intelligence.panel",
           "name": "Intelligence",
           "type": "webview"
-        },
-        {
-          "id": "capix.llm.agents",
-          "name": "Agents"
         }
       ],
       "capix-code": [
@@ -97,16 +59,9 @@
           "type": "webview"
         },
         {
-          "id": "capix.orchestration.view",
-          "name": "Orchestration"
-        },
-        {
-          "id": "capix.agentTimeline.view",
-          "name": "Agent Timeline"
-        },
-        {
-          "id": "capix.agentDebugger.view",
-          "name": "Agent Debugger"
+          "id": "capix.agent.hub",
+          "name": "Agent Hub",
+          "type": "webview"
         }
       ]
     },
@@ -445,131 +400,7 @@
         "mac": "cmd+alt+space"
       }
     ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "capix.deployModel",
-          "when": "view == capix.llm.catalog",
-          "group": "navigation"
-        },
-        {
-          "command": "capix.deployCustomModel",
-          "when": "view == capix.llm.catalog",
-          "group": "navigation"
-        },
-        {
-          "command": "capix.refreshCatalog",
-          "when": "view == capix.llm.catalog",
-          "group": "navigation"
-        },
-        {
-          "command": "capix.refreshDeploys",
-          "when": "view == capix.llm.deploys",
-          "group": "navigation@1"
-        },
-        {
-          "command": "capix.setRouteMode",
-          "when": "view == capix.llm.deploys",
-          "group": "navigation@2"
-        },
-        {
-          "command": "capix.deployPrivateLlm",
-          "when": "view == capix.llm.deploys",
-          "group": "navigation@3"
-        },
-        {
-          "command": "capix.destroyPrivateLlm",
-          "when": "view == capix.llm.deploys && capix.privateLlmActive",
-          "group": "navigation@4"
-        },
-        {
-          "command": "capix.routerMemory",
-          "when": "view == capix.llm.deploys",
-          "group": "navigation@5"
-        },
-        {
-          "command": "capix.launchCapixCode",
-          "when": "view == capix.llm.deploys",
-          "group": "navigation@6"
-        },
-        {
-          "command": "capix.refreshInstances",
-          "when": "view == capix.llm.instances",
-          "group": "navigation"
-        },
-        {
-          "command": "capix.refreshAgents",
-          "when": "view == capix.llm.agents",
-          "group": "navigation"
-        },
-        {
-          "command": "capix.refreshJobs",
-          "when": "view == capix.llm.jobs",
-          "group": "navigation"
-        },
-        {
-          "command": "capix.refreshApiKeys",
-          "when": "view == capix.llm.apikeys",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "capix.destroyDeploy",
-          "when": "viewItem == capix-deploy",
-          "group": "inline"
-        },
-        {
-          "command": "capix.stopDeploy",
-          "when": "viewItem == capix-deploy-running",
-          "group": "inline"
-        },
-        {
-          "command": "capix.startDeploy",
-          "when": "viewItem == capix-deploy-stopped",
-          "group": "inline"
-        },
-        {
-          "command": "capix.viewLogs",
-          "when": "viewItem =~ /^capix-deploy/",
-          "group": "inline"
-        },
-        {
-          "command": "capix.copyEndpoint",
-          "when": "viewItem =~ /^capix-deploy/"
-        },
-        {
-          "command": "capix.copyApiKey",
-          "when": "viewItem =~ /^capix-deploy/"
-        },
-        {
-          "command": "capix.execOnInstance",
-          "when": "viewItem =~ /^capix-deploy/"
-        },
-        {
-          "command": "capix.destroyDeploy",
-          "when": "viewItem =~ /^capix-deploy/"
-        },
-        {
-          "command": "capix.openTerminal",
-          "when": "viewItem =~ /^capix-instance/ || viewItem =~ /^capix-agent/ || viewItem =~ /^capix-job/",
-          "group": "inline"
-        },
-        {
-          "command": "capix.downloadSshKey",
-          "when": "viewItem =~ /^capix-instance/",
-          "group": "inline"
-        },
-        {
-          "command": "capix.routerBlockModel",
-          "when": "viewItem == capix-model"
-        },
-        {
-          "command": "capix.routerFavorModel",
-          "when": "viewItem == capix-model"
-        }
-      ]
-    },
+    "menus": {},
     "configuration": {
       "title": "Capix LLM",
       "properties": {
