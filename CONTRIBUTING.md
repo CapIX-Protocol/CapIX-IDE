@@ -15,8 +15,8 @@ CapixIDE is a VS Code extension + rebrand kit built on top of the Void editor (a
 ### Dev Setup
 
 ```bash
-git clone https://github.com/Ritzky/CapixIDE.git
-cd CapixIDE
+git clone https://github.com/CapIX-Protocol/CapIX-IDE.git
+cd CapIX-IDE
 ./scripts/bootstrap.sh   # clones the Void editor source + applies the Capix rebrand
 cd extensions/capix-llm && npm install
 cd ../..
