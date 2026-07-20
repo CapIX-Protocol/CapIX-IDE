@@ -23,6 +23,7 @@
 import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import type { CapixClient } from "./apiClient";
+import { icon } from "./webviewIcons";
 
 // ── Navigation ──────────────────────────────────────────────────────────────
 
@@ -688,12 +689,12 @@ ${csp}
 <body>
   <header class="ws-header">
     <div class="ws-title">
-      <span class="ws-mark">$(sparkle)</span>
+      <span class="ws-mark">${icon("sparkle")}</span>
       <span class="ws-name">Intelligence</span>
       <span class="ws-sub">${esc(this.updatedLabel())}</span>
     </div>
     <div class="ws-actions">
-      <button class="btn btn-mini" data-action="refresh" title="Refresh">$(refresh)</button>
+      <button class="btn btn-mini" data-action="refresh" title="Refresh">${icon("refresh")}</button>
     </div>
   </header>
   <nav class="nav-bar">${tabs}</nav>
@@ -877,12 +878,12 @@ ${csp}
           <span title="provenance chain">${provChain}</span>
         </div>
         <div class="mem-actions">
-          <button class="icon-btn" data-action="pinMemory" data-id="${esc(n.id)}" title="${isPinned ? "Unpin" : "Pin important"}">$(pin)</button>
-          <button class="icon-btn" data-action="editMemory" data-id="${esc(n.id)}" title="Edit">$(edit)</button>
-          <button class="icon-btn danger" data-action="forgetMemory" data-id="${esc(n.id)}" title="Forget">$(discard)</button>
+          <button class="icon-btn" data-action="pinMemory" data-id="${esc(n.id)}" title="${isPinned ? "Unpin" : "Pin important"}">${icon("pin")}</button>
+          <button class="icon-btn" data-action="editMemory" data-id="${esc(n.id)}" title="Edit">${icon("edit")}</button>
+          <button class="icon-btn danger" data-action="forgetMemory" data-id="${esc(n.id)}" title="Forget">${icon("discard")}</button>
           ${n.anchorTx
             ? `<span class="anchor-pill" title="${esc(n.anchorTx)}">on-chain</span>`
-            : `<button class="icon-btn" data-action="anchorMemory" data-id="${esc(n.id)}" title="Anchor on-chain">$(link)</button>`}
+            : `<button class="icon-btn" data-action="anchorMemory" data-id="${esc(n.id)}" title="Anchor on-chain">${icon("link")}</button>`}
         </div>
       </div>
     </div>`;
@@ -1014,7 +1015,7 @@ ${csp}
           <span class="cov-prec">${i + 1}</span>
           <span class="ov-content">${esc(r.rule)}</span>
           ${r.description ? `<span class="muted" title="${esc(r.description)}">?</span>` : ""}
-          <button class="icon-btn" data-action="editCovenantRule" data-id="${esc(r.id)}" title="Edit rule">$(edit)</button>
+          <button class="icon-btn" data-action="editCovenantRule" data-id="${esc(r.id)}" title="Edit rule">${icon("edit")}</button>
         </div>`).join("")
       : `<div class="state subtle">No covenant ratified. Apply a template or ratify custom rules below.</div>`;
 
@@ -1102,7 +1103,7 @@ ${csp}
 
     return `
       <section class="card">
-        <div class="section-head"><h2>Work Receipts</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+        <div class="section-head"><h2>Work Receipts</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
         <div class="rcpt-head">
           <span>status</span><span>id</span><span>task</span><span>cost</span><span>merkle</span><span>chain</span><span></span>
         </div>
