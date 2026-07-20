@@ -31,6 +31,7 @@ import { CapixClient } from "./apiClient";
 import { AgentRuntimeEngine, type EngineEvent, type EngineMode } from "./agentRuntimeEngine";
 import { logger } from "./logger";
 import type { ToolDefinition } from "./shared/agent-runtime/index";
+import { icon } from "./webviewIcons";
 
 type ComposerMode = EngineMode;
 type ProviderPreference = "auto" | "usepod" | "openrouter" | "surplus";
@@ -487,10 +488,10 @@ ${csp}
       <span class="conn-dot" id="conn-dot" title="Engine status"></span>
     </div>
     <div class="header-actions">
-      <button class="hdr-btn" data-cmd="newSession" title="New session">$(add)</button>
-      <button class="hdr-btn" data-cmd="history" title="History">$(history)</button>
-      <button class="hdr-btn" data-cmd="checkpoint" title="Checkpoint">$(save)</button>
-      <button class="hdr-btn" data-cmd="focus" title="Expand / focus">$(chrome-maximize)</button>
+      <button class="hdr-btn" data-cmd="newSession" title="New session">${icon("add")}</button>
+      <button class="hdr-btn" data-cmd="history" title="History">${icon("history")}</button>
+      <button class="hdr-btn" data-cmd="checkpoint" title="Checkpoint">${icon("save")}</button>
+      <button class="hdr-btn" data-cmd="focus" title="Expand / focus">${icon("chrome-maximize")}</button>
     </div>
   </header>
 
@@ -526,7 +527,7 @@ ${csp}
 
   <div class="attach-bar" id="attach-bar" hidden>
     <span class="attach-chip" id="attach-chip"></span>
-    <button class="attach-x" data-cmd="clearAttach">$(close)</button>
+    <button class="attach-x" data-cmd="clearAttach">${icon("close")}</button>
   </div>
 
   <div class="slash-menu" id="slash-menu" hidden></div>
@@ -535,9 +536,9 @@ ${csp}
     <div class="diff-head">
       <span class="diff-title" id="diff-title">Agent changes</span>
       <span class="diff-actions">
-        <button class="diff-btn accept" data-cmd="acceptAll" title="Accept all changes">$(check) Accept all</button>
-        <button class="diff-btn revert" data-cmd="revertAll" title="Revert all changes">$(discard) Revert all</button>
-        <button class="diff-btn expand" id="diff-toggle" data-cmd="toggleDiff">$(chevron-down)</button>
+        <button class="diff-btn accept" data-cmd="acceptAll" title="Accept all changes">${icon("check")} Accept all</button>
+        <button class="diff-btn revert" data-cmd="revertAll" title="Revert all changes">${icon("discard")} Revert all</button>
+        <button class="diff-btn expand" id="diff-toggle" data-cmd="toggleDiff">${icon("chevron-down")}</button>
       </span>
     </div>
     <div class="diff-files" id="diff-files"></div>
@@ -550,14 +551,14 @@ ${csp}
     <textarea id="composer-input" class="composer-input" placeholder="Ask, plan, build…" rows="1"></textarea>
     <div class="composer-foot">
       <div class="foot-left">
-        <button class="foot-btn" data-cmd="attach" title="Attach file">$(attachment)</button>
+        <button class="foot-btn" data-cmd="attach" title="Attach file">${icon("attachment")}</button>
         <span class="cost" id="cost-estimate">$0.0000</span>
       </div>
       <div class="foot-right">
         <button class="send-btn working" id="stop-btn" hidden data-cmd="stop" title="Cancel agent">
           <span class="spinner"></span> Working…
         </button>
-        <button class="send-btn" id="send-btn" data-cmd="submit">$(arrow-up)</button>
+        <button class="send-btn" id="send-btn" data-cmd="submit">${icon("arrow-up")}</button>
       </div>
     </div>
   </footer>
@@ -947,8 +948,8 @@ const PANEL_SCRIPT = `
   function renderInlineMd(text) {
     let s = esc(text);
     s = s.replace(/\`([^\`]+)\`/g, '<code class="inline">$1</code>');
-    s = s.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-    return s.replace(/\\n/g, '<br>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    return s.replace(/\n/g, '<br>');
   }
   function renderMarkdown(text) {
     let html = '';
@@ -958,7 +959,7 @@ const PANEL_SCRIPT = `
       if (fence === -1) { html += '<p>' + renderInlineMd(text.slice(i)) + '</p>'; break; }
       if (fence > i) html += '<p>' + renderInlineMd(text.slice(i, fence)) + '</p>';
       const afterFence = text.slice(fence + 3);
-      const nl = afterFence.indexOf('\\n');
+      const nl = afterFence.indexOf('\n');
       const lang = nl >= 0 ? afterFence.slice(0, nl) : afterFence;
       const codeStart = nl >= 0 ? fence + 3 + nl + 1 : fence + 3;
       const close = text.indexOf('\`\`\`', codeStart);
@@ -1011,7 +1012,7 @@ const PANEL_SCRIPT = `
     const card = document.createElement('div');
     card.className = 'tool-card collapsed';
     card.dataset.callId = evt.callId;
-    card.innerHTML = '<div class="tool-head"><span class="tool-glyph">$(tool)</span><span class="tool-label">' + esc(label) + '</span><span class="tool-chev">$(chevron-right)</span></div><div class="tool-out"></div>';
+    card.innerHTML = '<div class="tool-head"><span class="tool-glyph">${icon("tool")}</span><span class="tool-label">' + esc(label) + '</span><span class="tool-chev">${icon("chevron-right")}</span></div><div class="tool-out"></div>';
     activeAssistant.appendChild(card);
     activeTools.set(evt.callId, card);
     conversation.scrollTop = conversation.scrollHeight;
@@ -1021,7 +1022,7 @@ const PANEL_SCRIPT = `
     const card = activeTools.get(evt.callId);
     if (!card) return;
     const out = card.querySelector('.tool-out');
-    if (out) out.textContent += evt.output + '\\n';
+    if (out) out.textContent += evt.output + '\n';
     card.classList.remove('collapsed');
     conversation.scrollTop = conversation.scrollHeight;
   }
@@ -1030,7 +1031,7 @@ const PANEL_SCRIPT = `
     if (!activeAssistant) startAssistant(currentMode);
     const chip = document.createElement('span');
     chip.className = 'file-chip ' + evt.changeType;
-    const glyph = evt.changeType === 'created' ? '$(add)' : evt.changeType === 'deleted' ? '$(trash)' : '$(edit)';
+    const glyph = evt.changeType === 'created' ? '${icon("add")}' : evt.changeType === 'deleted' ? '${icon("trash")}' : '${icon("edit")}';
     chip.innerHTML = '<span>' + glyph + '</span>' + esc(evt.filePath);
     activeAssistant.appendChild(chip);
     conversation.scrollTop = conversation.scrollHeight;
@@ -1083,7 +1084,7 @@ const PANEL_SCRIPT = `
     }
     const tb = activeAssistant && activeAssistant.querySelector('.text-block');
     if (tb) tb.classList.remove('cursor');
-    if (msg) appendText('\\n' + msg);
+    if (msg) appendText('\n' + msg);
   }
 
   // ── Diff panel ───────────────────────────────────────────────────────────
