@@ -17,8 +17,8 @@
  * the active tab.
  *
  * Design tokens (@capix/ui-tokens): dark foundation, cyan accents (#3DCED6),
- * green primary (#14F195). Tab bar: horizontal, top, 32px, cyan underline on
- * the active tab, compact mono labels.
+ * green primary (#14F195). Tab bar: horizontal, top, 36px, cyan underline on
+ * the active tab.
  */
 
 import * as vscode from 'vscode';
@@ -27,7 +27,6 @@ import { CapixApiError, CapixClient } from './apiClient';
 import { logger } from './logger';
 import { dollarsToMicro, microToDisplay } from './moneyUtils';
 import type { CatalogModel, HostedEndpoint, LlmDeploy } from './types';
-import { icon } from "./webviewIcons";
 
 // ── Tab state model ─────────────────────────────────────────────────────────
 
@@ -345,7 +344,7 @@ export class CloudHubProvider implements vscode.WebviewViewProvider {
             : err instanceof CapixApiError && err.status
               ? `${label} could not be loaded (HTTP ${err.status}).`
               : `${label} could not be loaded. Check your connection and retry.`;
-        logger.warn(`CloudHub.${tab} load failed`, { error: String(err) });
+        logger.error(`CloudHub.${tab} load failed`, { error: String(err) });
         this.errors[tab] = reason;
         return null;
       };
@@ -605,9 +604,9 @@ ${csp}
               </div>
               <div class="res-actions">
                 <span class="res-rate">${esc(microToDisplay(dollarsToMicro(i.costUsdPerHour), 2))}/hr</span>
-                <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open">${icon("link")}</button>
-                ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">${icon("debug-stop")}</button>` : ''}
-                <button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">${icon("trash")}</button>
+                <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open">$(link)</button>
+                ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">$(debug-stop)</button>` : ''}
+                <button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">$(trash)</button>
               </div>
             </div>`
           )
@@ -641,7 +640,7 @@ ${csp}
         <div class="stat"><div class="stat-value">$${esc(a?.totalSpent ?? '0.00')}</div><div class="stat-label">Total spent</div></div>
       </section>
       <section class="card">
-        <div class="section-head"><h2>Active Resources</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
+        <div class="section-head"><h2>Active Resources</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
         ${instanceRows}
       </section>
       <section class="card">
@@ -666,19 +665,19 @@ ${csp}
         const actions = live
           ? [
               d.ready && d.endpoint
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyEndpoint" data-id="${esc(d.instanceRecordId)}" title="Copy endpoint">${icon("link")}</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyEndpoint" data-id="${esc(d.instanceRecordId)}" title="Copy endpoint">$(link)</button>`
                 : '',
               d.ready
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyApiKey" data-id="${esc(d.instanceRecordId)}" title="Copy API key">${icon("key")}</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="copyApiKey" data-id="${esc(d.instanceRecordId)}" title="Copy API key">$(key)</button>`
                 : '',
-              `<button class="icon-btn" data-action="deployAction" data-tab="logs" data-id="${esc(d.instanceRecordId)}" title="View logs">${icon("output")}</button>`,
+              `<button class="icon-btn" data-action="deployAction" data-tab="logs" data-id="${esc(d.instanceRecordId)}" title="View logs">$(output)</button>`,
               d.state === 'running' || d.state === 'provisioning'
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="stop" data-id="${esc(d.instanceRecordId)}" title="Stop">${icon("debug-stop")}</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="stop" data-id="${esc(d.instanceRecordId)}" title="Stop">$(debug-stop)</button>`
                 : '',
               d.state === 'stopped'
-                ? `<button class="icon-btn" data-action="deployAction" data-tab="start" data-id="${esc(d.instanceRecordId)}" title="Start">${icon("debug-start")}</button>`
+                ? `<button class="icon-btn" data-action="deployAction" data-tab="start" data-id="${esc(d.instanceRecordId)}" title="Start">$(debug-start)</button>`
                 : '',
-              `<button class="icon-btn danger" data-action="deployAction" data-tab="destroy" data-id="${esc(d.instanceRecordId)}" title="Destroy">${icon("trash")}</button>`,
+              `<button class="icon-btn danger" data-action="deployAction" data-tab="destroy" data-id="${esc(d.instanceRecordId)}" title="Destroy">$(trash)</button>`,
             ].join('')
           : '';
         const meta =
@@ -698,7 +697,7 @@ ${csp}
       })
       .join('');
     return `<section class="card">
-      <div class="section-head"><h2>Deployments</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
+      <div class="section-head"><h2>Deployments</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
       ${rows}
     </section>`;
   }
@@ -717,15 +716,15 @@ ${csp}
           </div>
           <div class="res-actions">
             <span class="res-rate">${esc(microToDisplay(dollarsToMicro(i.costUsdPerHour), 2))}/hr</span>
-            <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open detail">${icon("link")}</button>
-            ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">${icon("debug-stop")}</button>` : ''}
-            ${i.badge !== 'destroyed' ? `<button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">${icon("trash")}</button>` : ''}
+            <button class="icon-btn" data-action="openInstance" data-id="${esc(i.id)}" title="Open detail">$(link)</button>
+            ${i.badge === 'active' ? `<button class="icon-btn" data-action="stopInstance" data-id="${esc(i.id)}" title="Stop">$(debug-stop)</button>` : ''}
+            ${i.badge !== 'destroyed' ? `<button class="icon-btn danger" data-action="destroyInstance" data-id="${esc(i.id)}" title="Destroy">$(trash)</button>` : ''}
           </div>
         </div>`
       )
       .join('');
     return `<section class="card">
-      <div class="section-head"><h2>Instances</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
+      <div class="section-head"><h2>Instances</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
       ${rows}
     </section>`;
   }
@@ -746,7 +745,7 @@ ${csp}
           .join('')
       : `<div class="state subtle">No serverless jobs yet — trigger one to see it here with live status.</div>`;
     return `<section class="card">
-      <div class="section-head"><h2>Serverless Jobs</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
+      <div class="section-head"><h2>Serverless Jobs</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
       ${rows}
       <button class="btn btn-secondary btn-block" data-action="triggerJob">Trigger a job…</button>
     </section>`;
@@ -765,14 +764,14 @@ ${csp}
               </div>
               <div class="res-actions">
                 <span class="res-id">${esc(String(k.totalRequests))} reqs</span>
-                <button class="icon-btn danger" data-action="revokeApiKey" data-id="${esc(k.id)}" title="Revoke">${icon("trash")}</button>
+                <button class="icon-btn danger" data-action="revokeApiKey" data-id="${esc(k.id)}" title="Revoke">$(trash)</button>
               </div>
             </div>`
           )
           .join('')
       : `<div class="state subtle">The IDE signs in with your OAuth session — no API key required. Create one only for external gateway access.</div>`;
     return `<section class="card">
-      <div class="section-head"><h2>API Keys</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
+      <div class="section-head"><h2>API Keys</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
       ${rows}
       <button class="btn btn-secondary btn-block" data-action="createApiKey">+ Create API key…</button>
     </section>`;
@@ -808,7 +807,7 @@ ${csp}
          ${communityRows ? `<div class="section-head"><h2>Community models</h2></div>${communityRows}` : ''}`
         : `<div class="state subtle">Model catalog is empty.</div>`;
     return `<section class="card">
-        <div class="section-head"><h2>Ready Now (Hosted)</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
+        <div class="section-head"><h2>Ready Now (Hosted)</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
         ${hostedRows}
       </section>
       <section class="card">${catalogRows}</section>`;
@@ -829,7 +828,7 @@ ${csp}
       : `<div class="state subtle">No ledger activity yet.</div>`;
     return `
       <section class="card">
-        <div class="section-head"><h2>Wallet</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
+        <div class="section-head"><h2>Wallet</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
         <div class="account-balance">$${esc(a.balanceUsd)}</div>
         <div class="account-sub">${esc(a.balanceSol)} SOL · ${esc(a.balanceUsdc)} USDC</div>
         <div class="btn-row">
@@ -849,14 +848,17 @@ ${csp}
 }
 
 // ── Inline styles + script ──────────────────────────────────────────────────
-// @capix/ui-tokens: dark foundation, cyan accents, green primary.
+// @capix/ui-tokens: dark foundation, cyan accents (#3DCED6), one button system.
 const HUB_STYLES = `
   :root {
-    --capix-bg: var(--vscode-sideBar-background, #14161a);
-    --capix-surface: var(--vscode-sideBarSectionHeader-background, rgba(255,255,255,0.03));
-    --capix-border: var(--vscode-panel-border, rgba(255,255,255,0.08));
-    --capix-fg: var(--vscode-foreground, #d4d4d4);
-    --capix-muted: rgba(212,212,212,0.55);
+    --capix-bg: var(--vscode-sideBar-background, #0a0e14);
+    --capix-surface: var(--vscode-sideBarSectionHeader-background, rgba(255,255,255,0.035));
+    --capix-surface-2: rgba(255,255,255,0.055);
+    --capix-border: var(--vscode-panel-border, rgba(255,255,255,0.07));
+    --capix-border-accent: rgba(61,206,214,0.35);
+    --capix-fg: var(--vscode-foreground, #f1efe9);
+    --capix-muted: #94a3b8;
+    --capix-dim: #64748b;
     --capix-cyan: #3DCED6;
     --capix-green: #14F195;
     --capix-amber: #FFAE00;
@@ -868,28 +870,32 @@ const HUB_STYLES = `
     color: var(--capix-fg);
     background: var(--capix-bg);
     margin: 0; padding: 0;
-    font-size: 12px;
+    font-size: 13px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
   }
+
+  /* Header: balance + primary actions */
   .hub-header {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; padding: 10px 10px 8px;
+    gap: 8px; padding: 12px 12px 10px;
   }
   .balance-chip {
-    display: flex; align-items: baseline; gap: 6px;
+    display: flex; align-items: baseline; gap: 7px;
     background: var(--capix-surface);
     border: 1px solid var(--capix-border);
     border-radius: 999px;
-    padding: 4px 12px;
+    padding: 5px 13px;
   }
-  .chip-label { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: var(--capix-muted); }
-  .chip-value { font-weight: 700; color: var(--capix-cyan); font-size: 14px; }
-  .chip-sub { font-size: 9px; color: var(--capix-muted); font-family: var(--vscode-editor-font-family, monospace); }
+  .chip-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--capix-dim); }
+  .chip-value { font-weight: 700; color: var(--capix-cyan); font-size: 15px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .chip-sub { font-size: 10px; color: var(--capix-dim); font-variant-numeric: tabular-nums; }
 
-  /* Tab bar: horizontal, top, 32px, cyan underline on the active tab. */
+  /* Tab bar */
   .hub-tabs {
-    display: flex; align-items: stretch; height: 32px;
+    display: flex; align-items: stretch; height: 36px;
     border-bottom: 1px solid var(--capix-border);
     overflow-x: auto; scrollbar-width: none;
+    padding: 0 4px;
   }
   .hub-tabs::-webkit-scrollbar { display: none; }
   .hub-tab {
@@ -897,66 +903,94 @@ const HUB_STYLES = `
     background: transparent; border: none; cursor: pointer;
     border-bottom: 2px solid transparent;
     color: var(--capix-muted);
-    font-family: var(--vscode-editor-font-family, monospace);
-    font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+    font-family: inherit;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
     padding: 0 12px;
+    transition: color .12s ease, border-color .12s ease;
   }
   .hub-tab:hover { color: var(--capix-fg); }
   .hub-tab.active { color: var(--capix-cyan); border-bottom-color: var(--capix-cyan); }
 
-  main { padding: 10px; }
+  main { padding: 12px; }
+
+  /* Buttons — one system: primary cyan, secondary ghost, mini outline */
   .btn {
-    border: none; border-radius: 6px; cursor: pointer;
-    font-weight: 600; font-size: 11px; padding: 7px 14px;
+    border: none; border-radius: 8px; cursor: pointer;
+    font-weight: 600; font-size: 12px; padding: 8px 14px;
     font-family: inherit;
+    transition: background .12s ease, border-color .12s ease, color .12s ease, filter .12s ease;
   }
-  .btn-new { background: var(--capix-green); color: #000; }
-  .btn-primary { background: var(--capix-green); color: #000; }
-  .btn-secondary { background: rgba(255,255,255,0.08); color: var(--capix-fg); }
-  .btn-mini { background: transparent; color: var(--capix-cyan); padding: 4px 8px; font-size: 11px; border: 1px solid rgba(61,206,214,0.35); }
+  .btn:active { filter: brightness(0.92); }
+  .btn-new, .btn-primary { background: var(--capix-cyan); color: #04252b; }
+  .btn-new:hover, .btn-primary:hover { filter: brightness(1.1); }
+  .btn-secondary { background: var(--capix-surface-2); color: var(--capix-fg); border: 1px solid var(--capix-border); }
+  .btn-secondary:hover { border-color: var(--capix-border-accent); }
+  .btn-mini {
+    background: transparent; color: var(--capix-cyan);
+    padding: 4px 10px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--capix-border-accent); border-radius: 7px;
+  }
+  .btn-mini:hover { background: rgba(61,206,214,0.10); }
   .btn-block { width: 100%; margin-top: 10px; text-align: center; }
-  .btn:hover { opacity: .88; }
   .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+  /* Cards */
   .card {
     background: var(--capix-surface);
     border: 1px solid var(--capix-border);
-    border-radius: 8px; padding: 12px; margin-bottom: 10px;
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 12px;
   }
-  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .stat-row-2 { grid-template-columns: repeat(2, 1fr); }
-  .stat { text-align: center; }
-  .stat-value { font-size: 15px; font-weight: 700; color: var(--capix-cyan); font-family: var(--vscode-editor-font-family, monospace); }
-  .stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: var(--capix-muted); margin-top: 2px; }
-  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .section-head h2 { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--capix-muted); margin: 0; font-weight: 600; }
-  .updated { font-size: 9px; color: var(--capix-muted); }
-  .res-row {
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.045);
+  .stat { text-align: center; padding: 4px 0; }
+  .stat-value {
+    font-size: 17px; font-weight: 700; color: var(--capix-cyan);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
   }
-  .res-row:last-child { border-bottom: none; }
-  .res-main { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
-  .res-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .res-id { font-size: 9px; color: var(--capix-muted); font-family: var(--vscode-editor-font-family, monospace); }
-  .res-badge { font-size: 8px; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; letter-spacing: .04em; }
-  .badge-active, .badge-running, .badge-ready, .badge-healthy { background: rgba(20,241,149,0.12); color: var(--capix-green); }
-  .badge-provisioning, .badge-pending, .badge-loading, .badge-starting, .badge-creating, .badge-queued { background: rgba(61,206,214,0.12); color: var(--capix-cyan); }
-  .badge-stopped, .badge-unknown { background: rgba(255,174,0,0.12); color: var(--capix-amber); }
-  .badge-destroyed { background: rgba(255,100,100,0.12); color: var(--capix-red); }
-  .res-rate { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--capix-green); }
-  .recent-amt { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--capix-muted); }
-  .res-actions { display: flex; align-items: center; gap: 4px; }
+  .stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--capix-dim); margin-top: 3px; }
+
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .section-head h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--capix-dim); margin: 0; }
+  .updated { font-size: 10px; color: var(--capix-dim); font-variant-numeric: tabular-nums; }
+
+  /* Resource list: carded rows instead of bare text */
+  .res-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--capix-surface);
+    border: 1px solid var(--capix-border);
+    border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 6px;
+    transition: border-color .12s ease, background .12s ease;
+  }
+  .res-row:hover { border-color: rgba(255,255,255,0.14); background: var(--capix-surface-2); }
+  .res-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .res-name { font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .res-id { font-size: 10px; color: var(--capix-dim); font-family: var(--vscode-editor-font-family, monospace); }
+  .res-badge {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px; letter-spacing: .05em;
+  }
+  .badge-active, .badge-running, .badge-ready, .badge-healthy { background: rgba(20,241,149,0.10); color: var(--capix-green); }
+  .badge-provisioning, .badge-pending, .badge-loading, .badge-starting, .badge-creating, .badge-queued { background: rgba(61,206,214,0.10); color: var(--capix-cyan); }
+  .badge-stopped, .badge-unknown { background: rgba(255,255,255,0.06); color: var(--capix-muted); }
+  .badge-destroyed { background: rgba(255,100,100,0.10); color: var(--capix-red); }
+  .res-rate { font-size: 12px; font-weight: 600; color: var(--capix-muted); font-variant-numeric: tabular-nums; }
+  .recent-amt { font-size: 12px; color: var(--capix-muted); font-variant-numeric: tabular-nums; }
+  .res-actions { display: flex; align-items: center; gap: 2px; }
   .icon-btn {
-    background: transparent; border: none; cursor: pointer; color: var(--capix-muted);
-    font-family: inherit; font-size: 12px; padding: 2px 4px; border-radius: 4px;
+    background: transparent; border: none; cursor: pointer; color: var(--capix-dim);
+    font-family: inherit; font-size: 12px; padding: 4px 6px; border-radius: 6px;
+    transition: background .12s ease, color .12s ease;
   }
   .icon-btn:hover { background: rgba(255,255,255,0.08); color: var(--capix-fg); }
   .icon-btn.danger:hover { color: var(--capix-red); }
-  .account-balance { font-size: 26px; font-weight: 700; color: var(--capix-cyan); }
-  .account-sub { font-size: 10px; color: var(--capix-muted); font-family: var(--vscode-editor-font-family, monospace); margin-top: 2px; }
-  .state { padding: 20px 8px; text-align: center; color: var(--capix-muted); }
+
+  .account-balance { font-size: 28px; font-weight: 700; color: var(--capix-cyan); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .account-sub { font-size: 11px; color: var(--capix-dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  .state { padding: 24px 10px; text-align: center; color: var(--capix-muted); }
   .state.connect p, .state.error p { margin-bottom: 12px; }
-  .state.subtle { padding: 14px; text-align: center; opacity: .55; }
+  .state.subtle { padding: 16px; text-align: center; opacity: .6; }
   .state.subtle .btn { margin-top: 8px; }
 `;
 
