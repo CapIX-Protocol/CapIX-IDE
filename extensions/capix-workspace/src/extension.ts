@@ -1,19 +1,16 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Capix Network. All rights reserved.
- *  Licensed under the Apache License, Version 2.0.
+/**
+ * capix-workspace/extension - remote workspace attach, port forwarding and private
+ * preview UI for the standalone IDE.
  *
- *  capix-workspace/extension - remote workspace attach, port forwarding and private
- *  preview UI for the standalone IDE.
+ * Registers the Sessions tree view (capix.workspace.sessions) and the Ports tree
+ * view (capix.workspace.ports), plus commands: connect, reconnect, disconnect,
+ * forward port, close port, open preview, open terminal and open file. Every
+ * action goes through the typed main-process broker (`capix:remote:*` and
+ * `capix:workspace:*` channels); the extension never receives the one-use session
+ * ticket, the mTLS workload identity or a raw provider SSH command
+ * (architecture S11.6; target ownership: extensions/capix-workspace/).
  *
- *  Registers the Sessions tree view (capix.workspace.sessions) and the Ports tree
- *  view (capix.workspace.ports), plus commands: connect, reconnect, disconnect,
- *  forward port, close port, open preview, open terminal and open file. Every
- *  action goes through the typed main-process broker (`capix:remote:*` and
- *  `capix:workspace:*` channels); the extension never receives the one-use session
- *  ticket, the mTLS workload identity or a raw provider SSH command
- *  (architecture S11.6; target ownership: extensions/capix-workspace/).
- *
- *  This is an internal module of one CapixIDE release, not a marketplace extension.
+ * This is an internal module of one CapixIDE release, not a marketplace extension.
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from "vscode";
@@ -380,7 +377,7 @@ class SessionNode extends vscode.TreeItem {
 		this.id = s.workspaceId;
 		this.description = `${s.resourceKind} - ${s.provider ?? "?"}/${s.region ?? "?"}`;
 		this.tooltip = `workspace ${s.workspaceId}\nproject ${s.projectId}\n${s.connected ? "connected" : "disconnected"}`;
-		this.iconPath = new vscode.ThemeIcon(s.connected ? "$(vm-active)" : "$(vm-outline)");
+		this.iconPath = new vscode.ThemeIcon(s.connected ? "vm-active" : "vm-outline");
 		this.contextValue = s.connected ? "capix-session-connected" : "capix-session";
 		this.command = {
 			command: "capix.workspace.connect",
@@ -400,7 +397,7 @@ class PortNode extends vscode.TreeItem {
 		this.id = `${session.workspaceId}:${p.localPort}`;
 		this.description = p.previewHost;
 		this.tooltip = `port ${p.localPort} -> ${p.previewHost}\n${p.open ? "open" : "opening…"}\ncreated ${new Date(p.createdAt).toLocaleTimeString()}`;
-		this.iconPath = new vscode.ThemeIcon(p.open ? "$(globe)" : "$(loading~spin)");
+		this.iconPath = new vscode.ThemeIcon(p.open ? "globe" : "loading");
 		this.contextValue = "capix-port";
 		this.command = {
 			command: "capix.workspace.openPreview",
