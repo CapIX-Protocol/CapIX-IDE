@@ -113,48 +113,12 @@ export function activate(context: vscode.ExtensionContext): void {
 		context.extensionUri,
 	);
 
-	// ── DEPRECATED: Tree view + workspace registrations ─────────────────────
-	// All of these are superseded by `capix.intelligence.panel` in the
-	// capix-llm extension. They remain registered so context menus, `when`
-	// clauses, and existing command flows keep functioning during migration.
-	context.subscriptions.push(
-		vscode.window.createTreeView("capix.intelligence.plan", {
-			treeDataProvider: planProvider,
-			showCollapseAll: true,
-		}),
-		vscode.window.createTreeView("capix.intelligence.agents", {
-			treeDataProvider: agentsProvider,
-			showCollapseAll: true,
-		}),
-		vscode.window.createTreeView("capix.intelligence.memory", {
-			treeDataProvider: memoryProvider,
-			showCollapseAll: true,
-		}),
-		vscode.window.createTreeView("capix.intelligence.covenant", {
-			treeDataProvider: covenantProvider,
-			showCollapseAll: true,
-		}),
-		vscode.window.createTreeView("capix.intelligence.decisions", {
-			treeDataProvider: decisionsProvider,
-			showCollapseAll: true,
-		}),
-		vscode.window.createTreeView("capix.intelligence.checkpoints", {
-			treeDataProvider: checkpointsProvider,
-			showCollapseAll: true,
-		}),
-		vscode.window.createTreeView("capix.intelligence.receipts", {
-			treeDataProvider: receiptsProvider,
-			showCollapseAll: true,
-		}),
-		vscode.window.registerWebviewViewProvider(
-			"capix.intelligence.graph",
-			graphProvider,
-		),
-		vscode.window.registerWebviewViewProvider(
-			"capix.intelligence.workspace",
-			workspaceProvider,
-		), // ← deprecated; use capix.intelligence.panel
-	);
+	// ── RETIRED: deprecated tree/webview registrations ──────────────────────
+	// These views are superseded by `capix.intelligence.panel` (capix-llm) and
+	// their package.json contributions were removed. Registering them anyway
+	// produced "No view is registered with id" warnings at startup — so the
+	// providers below stay constructed (commands/menus still call into them)
+	// but no views are registered.
 
 	// Commands
 	context.subscriptions.push(
