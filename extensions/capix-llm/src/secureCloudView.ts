@@ -49,7 +49,7 @@ class SecureItem extends vscode.TreeItem {
 
   static info(label: string): SecureItem {
     const item = new SecureItem(label, "info", vscode.TreeItemCollapsibleState.None);
-    item.iconPath = new vscode.ThemeIcon("$(info)");
+    item.iconPath = new vscode.ThemeIcon("info");
     return item;
   }
 }
@@ -87,7 +87,7 @@ export class SecureCloudTreeProvider implements vscode.TreeDataProvider<SecureIt
         const status = (err as { status?: number }).status;
         if (status === 401) logger.info("Secure Cloud resources are waiting for a refreshed Capix session");
         else if (status === 503) logger.info("Secure Cloud resources are temporarily unavailable");
-        else logger.error("SecureCloudTreeProvider.load failed", { error: String(err) });
+        else logger.warn("SecureCloudTreeProvider.load failed", { error: String(err) });
         this.clear();
       }
       this.refresh();
@@ -111,8 +111,8 @@ export class SecureCloudTreeProvider implements vscode.TreeDataProvider<SecureIt
     // Top-level categories
     if (!element) {
       const items: SecureItem[] = [];
-      items.push(this.category("Confidential Deployments", "category-deployments", this.deployments.length, "$(shield)"));
-      items.push(this.category("Proof Receipts", "category-proofs", this.proofs.length, "$(verified)"));
+      items.push(this.category("Confidential Deployments", "category-deployments", this.deployments.length, "shield"));
+      items.push(this.category("Proof Receipts", "category-proofs", this.proofs.length, "verified"));
       return items;
     }
 
@@ -144,7 +144,7 @@ export class SecureCloudTreeProvider implements vscode.TreeDataProvider<SecureIt
       const item = new SecureItem(label, "deployment", vscode.TreeItemCollapsibleState.Collapsed);
       const attestation = d.attestationStatus === "verified" ? "verified ✓" : d.attestationStatus === "failed" ? "failed ✗" : d.attestationStatus;
       item.description = `${attestation} · ${d.region} · $${d.costUsdPerHour.toFixed(2)}/hr`;
-      const icon = d.attestationStatus === "verified" ? "$(shield)" : d.attestationStatus === "failed" ? "$(error)" : "$(loading~spin)";
+      const icon = d.attestationStatus === "verified" ? "shield" : d.attestationStatus === "failed" ? "error" : "loading";
       item.iconPath = new vscode.ThemeIcon(icon);
       item.tooltip = `${d.workload}\nTEE tier: ${d.teeTier}\nAttestation: ${attestation}\nRegion: ${d.region}\nCost: $${d.costUsdPerHour.toFixed(2)}/hr\nStarted: ${new Date(d.startedAt).toLocaleString()}`;
       (item as SecureItem & { _deploymentId?: string })._deploymentId = d.id;
@@ -167,13 +167,13 @@ export class SecureCloudTreeProvider implements vscode.TreeDataProvider<SecureIt
     }
 
     const items: SecureItem[] = [];
-    items.push(this.detailRow("TEE Tier", detail.teeTier, "$(shield)"));
+    items.push(this.detailRow("TEE Tier", detail.teeTier, "shield"));
     const attestationLabel = detail.attestationStatus === "verified" ? "verified ✓" : detail.attestationStatus === "failed" ? "failed ✗" : detail.attestationStatus;
-    items.push(this.detailRow("Attestation", attestationLabel, detail.attestationStatus === "verified" ? "$(check)" : "$(error)"));
-    items.push(this.detailRow("TCB Version", detail.tcbVersion, "$(versions)"));
-    items.push(this.detailRow("Evidence Hash", detail.evidenceHash, "$(fingerprint)"));
-    items.push(this.detailRow("Verification Time", detail.verificationTime, "$(history)"));
-    items.push(this.detailRow("Cert Chain", detail.certificateChain, "$(link)"));
+    items.push(this.detailRow("Attestation", attestationLabel, detail.attestationStatus === "verified" ? "check" : "error"));
+    items.push(this.detailRow("TCB Version", detail.tcbVersion, "versions"));
+    items.push(this.detailRow("Evidence Hash", detail.evidenceHash, "fingerprint"));
+    items.push(this.detailRow("Verification Time", detail.verificationTime, "history"));
+    items.push(this.detailRow("Cert Chain", detail.certificateChain, "link"));
     return items;
   }
 
@@ -186,7 +186,7 @@ export class SecureCloudTreeProvider implements vscode.TreeDataProvider<SecureIt
         command: "capix.openInstance", title: "Inspect", arguments: [p.id],
       });
       item.description = `${p.provingSystem} · ${p.verified ? "verified ✓" : "unverified"} · ${new Date(p.createdAt).toLocaleDateString()}`;
-      item.iconPath = new vscode.ThemeIcon(p.verified ? "$(verified)" : "$(question)");
+      item.iconPath = new vscode.ThemeIcon(p.verified ? "verified" : "question");
       item.tooltip = `Proof: ${p.id}\nSystem: ${p.provingSystem}\nCircuit: ${p.circuitId}\nClaim: ${p.claim}\nVerified: ${p.verified ? "yes" : "no"}\nProducer: ${p.producer}\nCreated: ${new Date(p.createdAt).toLocaleString()}`;
       return item;
     });

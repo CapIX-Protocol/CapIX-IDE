@@ -38,7 +38,7 @@ class NetItem extends vscode.TreeItem {
 
   static info(label: string): NetItem {
     const item = new NetItem(label, "info", vscode.TreeItemCollapsibleState.None);
-    item.iconPath = new vscode.ThemeIcon("$(info)");
+    item.iconPath = new vscode.ThemeIcon("info");
     return item;
   }
 }
@@ -82,7 +82,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
         const status = (err as { status?: number }).status;
         if (status === 401) logger.info("Network resources are waiting for a refreshed Capix session");
         else if (status === 503) logger.info("Network resources are temporarily unavailable");
-        else logger.error("NetworkTreeProvider.load failed", { error: String(err) });
+        else logger.warn("NetworkTreeProvider.load failed", { error: String(err) });
         this.clear();
       }
       this.refresh();
@@ -108,10 +108,10 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
     // Top-level categories
     if (!element) {
       const items: NetItem[] = [];
-      items.push(this.category("VPCs", "category-vpcs", this.vpcs.length, "$(symbol-namespace)"));
-      items.push(this.category("Public Endpoints", "category-endpoints", this.endpoints.length, "$(globe)"));
-      items.push(this.category("DNS Records", "category-dns", this.dns.length, "$(link)"));
-      items.push(this.category("SSH Connections", "category-ssh", this.ssh.length, "$(terminal)"));
+      items.push(this.category("VPCs", "category-vpcs", this.vpcs.length, "symbol-namespace"));
+      items.push(this.category("Public Endpoints", "category-endpoints", this.endpoints.length, "globe"));
+      items.push(this.category("DNS Records", "category-dns", this.dns.length, "link"));
+      items.push(this.category("SSH Connections", "category-ssh", this.ssh.length, "terminal"));
       return items;
     }
 
@@ -145,7 +145,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
     return this.vpcs.map((v) => {
       const item = new NetItem(v.name || v.id, "vpc", vscode.TreeItemCollapsibleState.Collapsed);
       item.description = `${v.cidrBlock} · ${v.region} · ${v.state}`;
-      item.iconPath = new vscode.ThemeIcon("$(vm-connect)");
+      item.iconPath = new vscode.ThemeIcon("vm-connect");
       item.tooltip = `${v.name}\nCIDR: ${v.cidrBlock}\nRegion: ${v.region}\nState: ${v.state}`;
       (item as NetItem & { _vpcId?: string })._vpcId = v.id;
       return item;
@@ -159,7 +159,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
         command: "capix.openInstance", title: "Open", arguments: [e.id],
       });
       item.description = `${e.status}${e.healthy ? " · healthy" : " · unhealthy"}`;
-      item.iconPath = new vscode.ThemeIcon(e.healthy ? "$(globe)" : "$(warning)");
+      item.iconPath = new vscode.ThemeIcon(e.healthy ? "globe" : "warning");
       item.tooltip = `${e.label}\nURL: ${e.url}\nStatus: ${e.status}\nHealthy: ${e.healthy ? "yes" : "no"}`;
       return item;
     });
@@ -170,7 +170,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
     return this.dns.map((r) => {
       const item = new NetItem(r.name, "dns", vscode.TreeItemCollapsibleState.None);
       item.description = `${r.type} · ${r.value} · ${r.ttl}s`;
-      item.iconPath = new vscode.ThemeIcon("$(link)");
+      item.iconPath = new vscode.ThemeIcon("link");
       item.tooltip = `${r.name} (${r.type})\nValue: ${r.value}\nTTL: ${r.ttl}s`;
       return item;
     });
@@ -183,7 +183,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
         command: "capix.openTerminal", title: "Open", arguments: [s.deploymentId],
       });
       item.description = `${s.host}:${s.port} · pid ${s.pid}`;
-      item.iconPath = new vscode.ThemeIcon("$(terminal)");
+      item.iconPath = new vscode.ThemeIcon("terminal");
       item.tooltip = `Deployment: ${s.deploymentId}\nHost: ${s.host}:${s.port}\nPID: ${s.pid}\nExpires: ${new Date(s.expiresAt).toLocaleString()}`;
       return item;
     });
@@ -216,7 +216,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
     for (const s of cached.subnets) {
       const item = new NetItem(s.name || s.id, "subnet", vscode.TreeItemCollapsibleState.None);
       item.description = `${s.cidrBlock} · ${s.visibility} · ${s.state}`;
-      item.iconPath = new vscode.ThemeIcon("$(circuit-board)");
+      item.iconPath = new vscode.ThemeIcon("circuit-board");
       item.tooltip = `${s.name}\nCIDR: ${s.cidrBlock}\nVisibility: ${s.visibility}\nState: ${s.state}`;
       items.push(item);
     }
@@ -226,7 +226,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
     for (const g of cached.securityGroups) {
       const item = new NetItem(g.name || g.id, "security-group", vscode.TreeItemCollapsibleState.None);
       item.description = `${g.ruleCount} rule(s)`;
-      item.iconPath = new vscode.ThemeIcon("$(shield)");
+      item.iconPath = new vscode.ThemeIcon("shield");
       item.tooltip = `${g.name}\nRules: ${g.ruleCount}`;
       items.push(item);
     }
@@ -236,7 +236,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
     for (const r of cached.routes) {
       const item = new NetItem(r.destination, "route", vscode.TreeItemCollapsibleState.None);
       item.description = `${r.target} · ${r.type}`;
-      item.iconPath = new vscode.ThemeIcon("$(arrow-swap)");
+      item.iconPath = new vscode.ThemeIcon("arrow-swap");
       item.tooltip = `Destination: ${r.destination}\nTarget: ${r.target}\nType: ${r.type}`;
       items.push(item);
     }
@@ -246,7 +246,7 @@ export class NetworkTreeProvider implements vscode.TreeDataProvider<NetItem> {
   private subHeader(label: string, count: number): NetItem {
     const item = new NetItem(label, "info", vscode.TreeItemCollapsibleState.None);
     item.description = String(count);
-    item.iconPath = new vscode.ThemeIcon("$(folder)");
+    item.iconPath = new vscode.ThemeIcon("folder");
     return item;
   }
 }
