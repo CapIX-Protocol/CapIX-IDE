@@ -63,6 +63,7 @@ for required in \
   src/vs/workbench/contrib/capix-ai/index.ts \
   src/vs/workbench/contrib/capix-remote/index.ts \
   src/vs/workbench/contrib/capix-onboarding/index.ts \
+  src/vs/workbench/contrib/capix-layout/index.ts \
   remote/capix-server/package.json; do
   if [ ! -f "$required" ]; then
     echo "ERROR: packaged Capix module missing after overlay: $required"
