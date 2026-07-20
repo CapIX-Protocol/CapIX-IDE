@@ -123,14 +123,22 @@ function activate(context) {
     (0, telemetry_1.initTelemetry)(context);
     // First-run default: apply the Capix Dark theme unless the user has
     // explicitly chosen a theme already. One-shot, keyed in globalState.
-    if (!context.globalState.get("capix.themeDefaultApplied")) {
+    // First-run default: apply the Capix Dark theme unless the user has
+    // explicitly chosen a NON-stock theme. A stock theme (VS Code / Void
+    // defaults) means "never picked one" — safe to restyle. v2 flag: earlier
+    // builds marked the one-shot done without applying, so stock-theme users
+    // from those builds are migrated here too.
+    if (!context.globalState.get("capix.themeDefaultAppliedV2")) {
+        const STOCK_THEMES = new Set(["Default Dark Modern", "Default Light Modern", "Void Dark", "Dark (Void)", undefined]);
         const inspect = vscode.workspace.getConfiguration().inspect("workbench.colorTheme");
-        if (!inspect?.globalValue && !inspect?.workspaceValue) {
+        const current = (inspect?.globalValue ?? inspect?.workspaceValue ?? inspect?.defaultValue);
+        const userPicked = (inspect?.globalValue ?? inspect?.workspaceValue);
+        if (!userPicked || STOCK_THEMES.has(userPicked) || STOCK_THEMES.has(current)) {
             void vscode.workspace
                 .getConfiguration()
                 .update("workbench.colorTheme", "Capix Dark", vscode.ConfigurationTarget.Global);
         }
-        void context.globalState.update("capix.themeDefaultApplied", true);
+        void context.globalState.update("capix.themeDefaultAppliedV2", true);
     }
     client = new apiClient_1.CapixClient();
     // Security: use VS Code SecretStorage for the session token instead of plaintext settings.json

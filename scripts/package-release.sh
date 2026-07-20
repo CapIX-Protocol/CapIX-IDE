@@ -75,10 +75,9 @@ else
   tar -C "$(dirname "$CONTENT")" -czf "$ARCHIVE" "$(basename "$CONTENT")"
 fi
 
-if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
-else
-  shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
-fi
+# Write '<hash>  <basename>' so `shasum -a 256 -c` works from any directory —
+# embedding the CI build path makes customer verification fail.
+HASH="$( (command -v sha256sum >/dev/null 2>&1 && sha256sum "$ARCHIVE" || shasum -a 256 "$ARCHIVE") | awk '{print $1}' )"
+printf '%s  %s\n' "$HASH" "$(basename "$ARCHIVE")" > "$ARCHIVE.sha256"
 printf '%s\n' "$(git -C "$ROOT" rev-parse HEAD)" > "$OUT/$NAME.source-commit.txt"
 echo "Verified release artifact: $ARCHIVE"

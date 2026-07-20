@@ -40,6 +40,29 @@ for (const name of ['package.json', 'package-lock.json']) {
 NODE
 echo "  done: CapixIDE version metadata"
 
+# The app version is Capix-stamped (2.x), but built-in extensions declare
+# engines.vscode against the Code-OSS engine (1.x) and their language clients
+# hard-fail version checks (json-language-features died on "version 2.3.3").
+# The engine IS compatible — it is just mislabeled — so relax engines.vscode
+# for built-in extensions shipped in the tree.
+node - "$VSCODE" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = path.join(process.argv[2], 'extensions');
+let relaxed = 0;
+for (const name of fs.readdirSync(root)) {
+  const file = path.join(root, name, 'package.json');
+  if (!fs.existsSync(file)) continue;
+  const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (json.engines && typeof json.engines.vscode === 'string' && json.engines.vscode !== '*') {
+    json.engines.vscode = '*';
+    fs.writeFileSync(file, JSON.stringify(json, null, 2) + '\n');
+    relaxed++;
+  }
+}
+console.log(`  done: relaxed engines.vscode on ${relaxed} built-in extensions`);
+NODE
+
 # 2. Overlay every maintained Capix built-in extension. Keep this list explicit:
 # a missing customer module must fail the build instead of silently disappearing.
 CAPIX_EXTENSIONS=(capix-llm capix-cloud capix-workspace capix-agent-ui capix-intelligence)
