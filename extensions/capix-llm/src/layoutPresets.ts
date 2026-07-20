@@ -23,7 +23,7 @@ export interface LayoutConfig {
   // Which views to show/hide and where
   views: {
     "workbench.view.explorer": boolean; // Left: project explorer
-    "capix.cloud.overview": boolean; // Left: cloud resources
+    "capix.cloud.hub": boolean; // Left: cloud resources
     "capix.intelligence": boolean; // Left: intelligence
     "capix.code.chat": boolean; // Right: Capix Code
     "workbench.view.terminal": boolean; // Bottom: terminal
@@ -46,7 +46,7 @@ export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutConfig> = {
     description: "Explorer left, editor centre, Capix Code right (400px), terminal below",
     views: {
       "workbench.view.explorer": true,
-      "capix.cloud.overview": false,
+      "capix.cloud.hub": false,
       "capix.intelligence": false,
       "capix.code.chat": true,
       "workbench.view.terminal": true,
@@ -64,7 +64,7 @@ export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutConfig> = {
     description: "Wide editor, compact Capix Code rail (48px), explorer left",
     views: {
       "workbench.view.explorer": true,
-      "capix.cloud.overview": false,
+      "capix.cloud.hub": false,
       "capix.intelligence": false,
       "capix.code.chat": true,
       "workbench.view.terminal": false,
@@ -82,7 +82,7 @@ export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutConfig> = {
     description: "Cloud resources left, deployment details centre, Capix Code right (350px)",
     views: {
       "workbench.view.explorer": false,
-      "capix.cloud.overview": true,
+      "capix.cloud.hub": true,
       "capix.intelligence": false,
       "capix.code.chat": true,
       "workbench.view.terminal": false,
@@ -100,7 +100,7 @@ export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutConfig> = {
     description: "Maximized conversation, minimal chrome, floating composer",
     views: {
       "workbench.view.explorer": false,
-      "capix.cloud.overview": false,
+      "capix.cloud.hub": false,
       "capix.intelligence": false,
       "capix.code.chat": true,
       "workbench.view.terminal": false,
@@ -176,7 +176,7 @@ export async function applyLayout(
   await context.workspaceState.update(STORAGE_KEY, preset);
 
   // Context keys drive view `when` clauses and the Capix Code webview density.
-  await tryCmd("setContext", "capix.view.cloud", config.views["capix.cloud.overview"]);
+  await tryCmd("setContext", "capix.view.cloud", config.views["capix.cloud.hub"]);
   await tryCmd("setContext", "capix.view.intelligence", config.views["capix.intelligence"]);
   await tryCmd("setContext", "capix.view.capixCode", config.views["capix.code.chat"]);
   await tryCmd("setContext", "capix.code.compact", preset === "editor");
@@ -187,7 +187,7 @@ export async function applyLayout(
   if (config.leftSidebarVisible) {
     if (config.views["workbench.view.explorer"]) {
       await tryCmd("workbench.view.explorer");
-    } else if (config.views["capix.cloud.overview"]) {
+    } else if (config.views["capix.cloud.hub"]) {
       await tryCmd("workbench.view.extension.capix-llm");
     }
   } else {

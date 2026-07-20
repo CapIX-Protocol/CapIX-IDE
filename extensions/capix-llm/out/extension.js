@@ -2,9 +2,12 @@
 /**
  * Capix LLM Extension — entry point.
  *
- * Registers three sidebar tree views (deploys, catalog, hosted) and all
- * commands: deploy, deploy custom, destroy, stop, start, view logs, exec,
- * copy endpoint, copy API key, connect wallet, refresh, open console.
+ * Registers the consolidated sidebar surfaces — `capix.cloud.hub` (tabbed
+ * cloud webview), `capix.code.chat` (flagship chat), `capix.agent.hub`
+ * (orchestration / timeline / debugger tabs) and `capix.intelligence.panel`
+ * — plus all commands: deploy, deploy custom, destroy, stop, start, view
+ * logs, exec, copy endpoint, copy API key, connect wallet, refresh, open
+ * console.
  *
  * The extension talks to capix.network /api/llm/* using the session token
  * from Settings. No local server needed — it's a thin API client.
@@ -52,12 +55,12 @@ const authBroker_1 = require("./authBroker");
 const cliTokenBroker_1 = require("./cliTokenBroker");
 const treeViews_1 = require("./treeViews");
 const cloudPanels_1 = require("./cloudPanels");
-const profileView_1 = require("./profileView");
-const cloudDashboard_1 = require("./cloudDashboard");
+const cloudHub_1 = require("./cloudHub");
 const capixCodePanel_1 = require("./capixCodePanel");
 const orchestrationView_1 = require("./orchestrationView");
 const agentTimelinePanel_1 = require("./agentTimelinePanel");
 const agentDebuggerPanel_1 = require("./agentDebuggerPanel");
+const agentHub_1 = require("./agentHub");
 const orchestration_1 = require("./shared/agent-runtime/orchestration");
 const layoutPresets_1 = require("./layoutPresets");
 const activityBar_1 = require("./activityBar");
@@ -91,14 +94,8 @@ let client;
 let authBroker;
 let mcpAutoInstaller;
 let deploysProvider;
-let catalogProvider;
-let hostedProvider;
 let instancesProvider;
-let agentsProvider;
-let jobsProvider;
-let apiKeysProvider;
-let profileProvider;
-let cloudDashboardProvider;
+let cloudHubProvider;
 let capixCodeProvider;
 let terminalManager;
 let autoConnect;
@@ -200,16 +197,13 @@ function activate(context) {
             void mcpAutoInstaller.unregister();
         }
     });
-    // ── Tree views ────────────────────────────────────────────────────────
+    // ── Sidebar surfaces ────────────────────────────────────────────────────
+    // Deploys/instances providers stay as data stores — commands
+    // (stop/start/destroy/logs/SSH) read their snapshots. The sidebar views
+    // themselves are consolidated into the cloud + agent hubs below.
     deploysProvider = new treeViews_1.DeploysTreeProvider(client);
-    catalogProvider = new treeViews_1.CatalogTreeProvider(client);
-    hostedProvider = new treeViews_1.HostedTreeProvider(client);
     instancesProvider = new cloudPanels_1.InstancesTreeProvider(client);
-    agentsProvider = new cloudPanels_1.AgentsTreeProvider(client);
-    jobsProvider = new cloudPanels_1.JobsTreeProvider(client);
-    apiKeysProvider = new cloudPanels_1.ApiKeysTreeProvider(client);
-    profileProvider = new profileView_1.ProfileViewProvider(client, context.extensionUri);
-    cloudDashboardProvider = new cloudDashboard_1.CloudDashboardProvider(client, context.extensionUri);
+    cloudHubProvider = new cloudHub_1.CloudHubProvider(client, context.extensionUri);
     // ── Web control: shared manager + browser tools for the assistant ──────
     webControlManager = new webControl_1.WebControlManager();
     // ── Infra stack: live deployments, logs, SSH/tunnels, scaling ──────────
@@ -288,18 +282,21 @@ function activate(context) {
     context.subscriptions.push(gitWatcher);
     // Poll git state every 10s (lightweight).
     setInterval(() => vscode.commands.executeCommand("capix.checkCommits"), 10_000);
-    const deploysView = vscode.window.createTreeView("capix.llm.deploys", { treeDataProvider: deploysProvider });
-    const catalogView = vscode.window.createTreeView("capix.llm.catalog", { treeDataProvider: catalogProvider });
-    const hostedView = vscode.window.createTreeView("capix.llm.hosted", { treeDataProvider: hostedProvider });
-    const instancesView = vscode.window.createTreeView("capix.llm.instances", { treeDataProvider: instancesProvider });
-    const agentsView = vscode.window.createTreeView("capix.llm.agents", { treeDataProvider: agentsProvider });
-    const jobsView = vscode.window.createTreeView("capix.llm.jobs", { treeDataProvider: jobsProvider });
-    const apiKeysView = vscode.window.createTreeView("capix.llm.apikeys", { treeDataProvider: apiKeysProvider });
+    // ── Consolidated sidebar hubs ────────────────────────────────────────────
+    // capix.cloud.hub: one tabbed webview (Overview, Deployments, Instances,
+    // Jobs, API Keys, Models, Account) replacing the 9 retired capix-cloud
+    // views. capix.agent.hub: one tabbed webview hosting the orchestration,
+    // agent timeline and agent debugger panels as three tab bodies.
     const orchestrationEngine = new orchestration_1.OrchestrationEngine({ maxParallel: 3 });
     const orchestrationProvider = new orchestrationView_1.CapixOrchestrationViewProvider(orchestrationEngine, context.extensionUri);
     const agentTimelineProvider = new agentTimelinePanel_1.CapixAgentTimelineViewProvider(context.extensionUri);
     const agentDebuggerProvider = new agentDebuggerPanel_1.CapixAgentDebuggerViewProvider(context.extensionUri);
-    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), deploysView, catalogView, hostedView, instancesView, agentsView, jobsView, apiKeysView, vscode.window.registerWebviewViewProvider("capix.llm.profile", profileProvider), vscode.window.registerWebviewViewProvider("capix.cloud.overview", cloudDashboardProvider), vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider), vscode.window.registerWebviewViewProvider("capix.cloud.resource", resourceDetailsProvider), vscode.window.registerWebviewViewProvider("capix.orchestration.view", orchestrationProvider), vscode.window.registerWebviewViewProvider("capix.agentTimeline.view", agentTimelineProvider), vscode.window.registerWebviewViewProvider("capix.agentDebugger.view", agentDebuggerProvider));
+    const agentHubProvider = new agentHub_1.CapixAgentHubProvider({
+        orchestration: orchestrationProvider,
+        timeline: agentTimelineProvider,
+        debugger: agentDebuggerProvider,
+    }, context.extensionUri);
+    context.subscriptions.push(vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()), vscode.window.registerWebviewViewProvider("capix.cloud.hub", cloudHubProvider), vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider), vscode.window.registerWebviewViewProvider("capix.agent.hub", agentHubProvider));
     // ── Run-On target: status bar + change handler ──────────────────────────
     runOnStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
     runOnStatusBarItem.text = (0, runOnSelector_1.runOnLabel)(runOnSelector.getCurrentTarget());
@@ -334,8 +331,8 @@ function activate(context) {
         sendChatMessage: (text) => capixCodeProvider.sendTestMessage(text),
         focusCloud: () => {
             void vscode.commands
-                .executeCommand("capix.cloud.overview.focus")
-                .then(undefined, () => vscode.commands.executeCommand("workbench.view.extension.capix-llm"));
+                .executeCommand("capix.cloud.hub.focus")
+                .then(undefined, () => vscode.commands.executeCommand("workbench.view.extension.capix-cloud"));
         },
     });
     modelStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 51);
@@ -374,7 +371,7 @@ function activate(context) {
     // LLM commands
     vscode.commands.registerCommand("capix.deployModel", (model) => cmdDeployModel(model)), vscode.commands.registerCommand("capix.deployCustomModel", () => cmdDeployCustomModel()), vscode.commands.registerCommand("capix.deployVps", () => cmdDeployVps()), vscode.commands.registerCommand("capix.destroyDeploy", (item) => cmdDestroyDeploy(item)), vscode.commands.registerCommand("capix.stopDeploy", (item) => cmdStopDeploy(item)), vscode.commands.registerCommand("capix.startDeploy", (item) => cmdStartDeploy(item)), vscode.commands.registerCommand("capix.viewLogs", (item) => cmdViewLogs(item)), vscode.commands.registerCommand("capix.execOnInstance", (item) => cmdExecOnInstance(item)), vscode.commands.registerCommand("capix.copyEndpoint", (item) => cmdCopyEndpoint(item)), vscode.commands.registerCommand("capix.copyApiKey", (item) => cmdCopyApiKey(item)), 
     // Refresh commands
-    vscode.commands.registerCommand("capix.refreshDeploys", () => { deploysProvider.load(); }), vscode.commands.registerCommand("capix.refreshCatalog", () => { catalogProvider.load(); }), vscode.commands.registerCommand("capix.refreshInstances", () => { instancesProvider.load(); }), vscode.commands.registerCommand("capix.refreshAgents", () => { agentsProvider.load(); }), vscode.commands.registerCommand("capix.refreshJobs", () => { jobsProvider.load(); }), vscode.commands.registerCommand("capix.refreshApiKeys", () => { apiKeysProvider.load(); }), vscode.commands.registerCommand("capix.refreshProfile", () => { profileProvider.refresh(); }), 
+    vscode.commands.registerCommand("capix.refreshDeploys", () => { deploysProvider.load(); void cloudHubProvider.refresh(); }), vscode.commands.registerCommand("capix.refreshCatalog", () => { void cloudHubProvider.refresh(); }), vscode.commands.registerCommand("capix.refreshInstances", () => { instancesProvider.load(); void cloudHubProvider.refresh(); }), vscode.commands.registerCommand("capix.refreshAgents", () => { void cloudHubProvider.refresh(); }), vscode.commands.registerCommand("capix.refreshJobs", () => { void cloudHubProvider.refresh(); }), vscode.commands.registerCommand("capix.refreshApiKeys", () => { void cloudHubProvider.refresh(); }), vscode.commands.registerCommand("capix.refreshProfile", () => { void cloudHubProvider.refresh(); }), 
     // Navigation
     vscode.commands.registerCommand("capix.openConsole", () => {
         vscode.env.openExternal(vscode.Uri.parse(`${client.getBaseUrl()}/cloud/llm`));
@@ -515,10 +512,9 @@ function updateModelStatusBar() {
 async function refreshAll() {
     await client.checkConfigured();
     await Promise.all([
-        deploysProvider.load(), catalogProvider.load(), hostedProvider.load(),
-        instancesProvider.load(), agentsProvider.load(), jobsProvider.load(),
-        apiKeysProvider.load(), profileProvider.refresh(),
-        cloudDashboardProvider.refresh(),
+        deploysProvider.load(),
+        instancesProvider.load(),
+        cloudHubProvider.refresh(),
     ]);
     if (statusBarItem)
         await updateStatusBar(statusBarItem);
@@ -533,12 +529,8 @@ function setupAutoRefresh(context) {
         }
         const handle = setInterval(() => {
             deploysProvider.load();
-            hostedProvider.load();
             instancesProvider.load();
-            agentsProvider.load();
-            jobsProvider.load();
-            profileProvider.refresh();
-            cloudDashboardProvider.refresh();
+            void cloudHubProvider.refresh();
         }, interval * 1000);
         refreshTimer = new vscode.Disposable(() => clearInterval(handle));
     };
@@ -940,8 +932,8 @@ async function cmdDeployAgent() {
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Deploying ${repoUrl.split("/").pop()}…` }, async () => {
         const res = await client.deployAgent(repoUrl, branch, {}, useInference?.value || false);
         if (res.ok) {
-            vscode.window.showInformationMessage("✓ Agent deployed — check the Agents panel.");
-            agentsProvider.load();
+            vscode.window.showInformationMessage("✓ Agent deployed — check the Capix Cloud hub.");
+            void cloudHubProvider.refresh();
             devTokens.onDeploy();
         }
         else {
@@ -962,8 +954,8 @@ async function cmdTriggerJob() {
         return;
     const res = await client.triggerJob(yaml);
     if (res.ok) {
-        vscode.window.showInformationMessage("✓ Serverless job triggered — check the Jobs panel.");
-        jobsProvider.load();
+        vscode.window.showInformationMessage("✓ Serverless job triggered — check the Jobs tab in the Capix Cloud hub.");
+        void cloudHubProvider.refresh();
         devTokens.onDeploy();
     }
     else {
@@ -981,7 +973,7 @@ async function cmdCreateApiKey() {
     if (res.ok && res.secret) {
         vscode.env.clipboard.writeText(res.secret);
         vscode.window.showInformationMessage("✓ API key created and copied to clipboard.", res.warning || "");
-        apiKeysProvider.load();
+        void cloudHubProvider.refresh();
     }
     else {
         vscode.window.showErrorMessage(res.error || "Failed to create API key.");

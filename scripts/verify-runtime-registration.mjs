@@ -88,15 +88,58 @@ if (contributedViews.get("capix.code.chat") !== "capix-llm") {
 if (contributedViews.has("capix.agent.chat")) {
   fail("capix.agent.chat is retired; the canonical chat surface is capix.code.chat");
 }
+// Canonical consolidated hubs (panel consolidation: 15 views → 4).
+// capix.cloud.hub is the single capix-cloud surface (7 internal tabs);
+// capix.agent.hub hosts orchestration / timeline / debugger as tab bodies.
+for (const requiredView of ["capix.cloud.hub", "capix.agent.hub"]) {
+  if (contributedViews.get(requiredView) !== "capix-llm") {
+    fail(`${requiredView} must be packaged as a capix-llm view contribution`);
+  }
+}
+for (const retiredView of [
+  "capix.cloud.overview",
+  "capix.cloud.resource",
+  "capix.llm.profile",
+  "capix.llm.deploys",
+  "capix.llm.instances",
+  "capix.llm.jobs",
+  "capix.llm.apikeys",
+  "capix.llm.catalog",
+  "capix.llm.hosted",
+  "capix.llm.agents",
+  "capix.orchestration.view",
+  "capix.agentTimeline.view",
+  "capix.agentDebugger.view",
+]) {
+  if (contributedViews.has(retiredView)) {
+    fail(`${retiredView} is retired; use the consolidated capix.cloud.hub / capix.agent.hub surfaces`);
+  }
+}
 for (const [viewId, contributor] of contributedViews) {
   const providers = registrations.get(viewId) ?? [];
   if (providers.length !== 1) {
     fail(`view ${viewId} from ${contributor} must have exactly one runtime provider; found ${providers.length}`);
   }
 }
-for (const retiredView of ["capix.cloud.billing", "capix.cloud.deployments"]) {
+for (const retiredView of [
+  "capix.cloud.billing",
+  "capix.cloud.deployments",
+  "capix.cloud.overview",
+  "capix.cloud.resource",
+  "capix.llm.profile",
+  "capix.llm.deploys",
+  "capix.llm.instances",
+  "capix.llm.jobs",
+  "capix.llm.apikeys",
+  "capix.llm.catalog",
+  "capix.llm.hosted",
+  "capix.llm.agents",
+  "capix.orchestration.view",
+  "capix.agentTimeline.view",
+  "capix.agentDebugger.view",
+]) {
   if (registrations.has(retiredView)) {
-    fail(`${retiredView} is a retired orphan view; use the canonical capix-llm surfaces`);
+    fail(`${retiredView} is a retired orphan view; use the canonical capix-llm hub surfaces`);
   }
 }
 

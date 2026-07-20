@@ -2,8 +2,9 @@
  * Resource Details — the centre viewer for a selected Capix cloud resource.
  *
  * Opens in the editor centre when a cloud resource is selected (via
- * `capix.cloud.resource.open`). Implements vscode.WebviewViewProvider so the
- * same renderer can also host the registered `capix.cloud.resource` view.
+ * `capix.cloud.resource.open`). The retired `capix.cloud.resource` sidebar
+ * view was consolidated into the `capix.cloud.hub` tabs; this provider now
+ * only serves the editor-centre panel.
  *
  * Shows: state + provisioning progress, resource specification, price +
  * accrued usage, created + expiry, region, health, logs, metrics, ports,
@@ -83,13 +84,9 @@ export class ResourceDetailsProvider implements vscode.WebviewViewProvider {
     this.startPolling();
   }
 
-  /** Show the registered sidebar view (if any). */
+  /** Show the resource in the editor centre (the sidebar view is retired). */
   show(): void {
-    if (this.view) {
-      this.view.show?.(true);
-    } else {
-      void vscode.commands.executeCommand("capix.cloud.resource.focus");
-    }
+    if (this.currentId) void this.openCentre(this.currentId);
   }
 
   async refresh(): Promise<void> {

@@ -110,6 +110,8 @@ export class CapixOrchestrationViewProvider implements vscode.WebviewViewProvide
   private draftRole: string | undefined;
   private readonly engine: OrchestrationEngine;
   private readonly unsubscribeEngine: () => void;
+  /** When set (agent hub embed), state snapshots go to the sink instead of a view. */
+  private stateSink: ((state: OrchestrationViewState) => void) | null = null;
 
   constructor(
     engine: OrchestrationEngine,
@@ -139,14 +141,23 @@ export class CapixOrchestrationViewProvider implements vscode.WebviewViewProvide
     this.unsubscribeEngine();
   }
 
+  /** Route state snapshots to the agent hub instead of a dedicated view. */
+  setStateSink(sink: ((state: OrchestrationViewState) => void) | null): void {
+    this.stateSink = sink;
+  }
+
   /** Push the current engine snapshot to the webview. */
   pushState(): void {
-    if (!this.view) return;
     const state = toViewState(this.engine, { task: this.draftTask, role: this.draftRole });
+    if (this.stateSink) {
+      this.stateSink(state);
+      return;
+    }
+    if (!this.view) return;
     void this.view.webview.postMessage({ type: 'state', state });
   }
 
-  private async handleMessage(msg: {
+  public async handleMessage(msg: {
     type: string;
     task?: string;
     role?: string;
@@ -217,7 +228,47 @@ export class CapixOrchestrationViewProvider implements vscode.WebviewViewProvide
 <head>
 <meta charset="UTF-8">
 ${csp}
-<style>
+<style>${ORCHESTRATION_STYLES}</style>
+</head>
+<body>
+${ORCHESTRATION_BODY}
+  <script nonce="${nonce}">${ORCHESTRATION_SCRIPT}</script>
+</body>
+</html>`;
+  }
+}
+
+// ── Webview script (no dependencies; state arrives via postMessage) ─────────
+
+
+/**
+ * Body markup of the panel surface, exported so the agent hub can embed
+ * it as a tab body (hub re-prefixes the element ids).
+ */
+export const ORCHESTRATION_BODY = /* html */ `
+  <h2>Pipeline</h2>
+  <div id="pipeline" class="pipeline"></div>
+
+  <h2>Agents</h2>
+  <div id="agents" class="cards"></div>
+
+  <h2>Delegate</h2>
+  <div class="composer">
+    <input id="task" type="text" placeholder="Describe the task — specialists are suggested automatically" />
+    <div id="chips" class="chips"></div>
+    <div id="estimate" class="estimate"></div>
+    <div>
+      <button id="delegate" class="primary">Delegate</button>
+      <button id="pipeline-start" class="ghost">Run full pipeline</button>
+    </div>
+  </div>
+
+  <h2>History</h2>
+  <div id="history"></div>
+`;
+
+// ── Inline styles (shared by the standalone view and the agent hub embed) ──
+export const ORCHESTRATION_STYLES = /* css */ `
   :root {
     --canvas: #0a0e14;
     --panel: #11161f;
@@ -271,38 +322,9 @@ ${csp}
   .history-item .meta { color: var(--muted); font-size: 11px; }
   .ok { color: var(--green); } .fail { color: var(--red); } .partial { color: var(--amber); }
   .empty { color: var(--muted); }
-</style>
-</head>
-<body>
-  <h2>Pipeline</h2>
-  <div id="pipeline" class="pipeline"></div>
+`;
 
-  <h2>Agents</h2>
-  <div id="agents" class="cards"></div>
-
-  <h2>Delegate</h2>
-  <div class="composer">
-    <input id="task" type="text" placeholder="Describe the task — specialists are suggested automatically" />
-    <div id="chips" class="chips"></div>
-    <div id="estimate" class="estimate"></div>
-    <div>
-      <button id="delegate" class="primary">Delegate</button>
-      <button id="pipeline-start" class="ghost">Run full pipeline</button>
-    </div>
-  </div>
-
-  <h2>History</h2>
-  <div id="history"></div>
-
-  <script nonce="${nonce}">${ORCHESTRATION_SCRIPT}</script>
-</body>
-</html>`;
-  }
-}
-
-// ── Webview script (no dependencies; state arrives via postMessage) ─────────
-
-const ORCHESTRATION_SCRIPT = /* javascript */ `
+export const ORCHESTRATION_SCRIPT = /* javascript */ `
 const vscode = acquireVsCodeApi();
 let state = null;
 let selectedRole = "";

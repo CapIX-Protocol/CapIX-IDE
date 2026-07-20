@@ -48,12 +48,7 @@ export const DESTINATIONS: DestinationConfig[] = [
     id: "cloud",
     label: "Cloud",
     icon: "cloud",
-    views: [
-      "capix.cloud.overview",
-      "capix.cloud.compute",
-      "capix.cloud.models",
-      "capix.cloud.usage",
-    ],
+    views: ["capix.cloud.hub"],
     order: 2,
   },
   {
