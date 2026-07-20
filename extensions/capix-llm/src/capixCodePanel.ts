@@ -32,6 +32,8 @@ import { AgentRuntimeEngine, type EngineEvent, type EngineMode } from "./agentRu
 import { logger } from "./logger";
 import type { ToolDefinition } from "./shared/agent-runtime/index";
 import { icon } from "./webviewIcons";
+import { PANEL_STYLES } from "./capixCodePanelStyles";
+import { PANEL_SCRIPT } from "./capixCodePanelScript";
 
 type ComposerMode = EngineMode;
 type ProviderPreference = "auto" | "usepod" | "openrouter" | "surplus";
@@ -48,14 +50,6 @@ const MODES: Array<{ id: ComposerMode; label: string }> = [
   { id: "build", label: "Build" },
   { id: "debug", label: "Debug" },
   { id: "review", label: "Review" },
-];
-
-const SLASH_COMMANDS: Array<{ cmd: string; desc: string }> = [
-  { cmd: "/explain", desc: "Explain the selected code" },
-  { cmd: "/test", desc: "Generate tests" },
-  { cmd: "/review", desc: "Review changes" },
-  { cmd: "/fix", desc: "Fix the error" },
-  { cmd: "/refactor", desc: "Refactor the code" },
 ];
 
 export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
@@ -261,12 +255,14 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
     model?: string;
     provider?: ProviderPreference;
     callId?: string;
+    mentions?: string[];
+    query?: string;
     approved?: boolean;
     filePath?: string;
   }): void {
     switch (msg.type) {
       case "submit":
-        if (msg.text) void this.handleSubmit(msg.text, msg.mode ?? this.mode);
+        if (msg.text) void this.handleSubmit(msg.text, msg.mode ?? this.mode, msg.mentions);
         break;
       case "stop":
         void this.cancelTurn();
@@ -298,6 +294,12 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
           );
           this.pushState();
         }
+        break;
+      case "listFiles":
+        void this.listFiles(String(msg.query ?? ""));
+        break;
+      case "runOnGpu":
+        void vscode.commands.executeCommand("capix.runOn");
         break;
       case "attach":
         void this.attachActiveEditor();
@@ -359,7 +361,7 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
 
   // ── Submit / stream ──────────────────────────────────────────────────────
 
-  private async handleSubmit(text: string, mode: ComposerMode): Promise<void> {
+  private async handleSubmit(text: string, mode: ComposerMode, mentions?: string[]): Promise<void> {
     if (this.streaming) return;
     await this.ensureEngine();
     if (!this.engineStarted) return;
@@ -373,6 +375,14 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
       contextFiles = [this.attached.name];
     }
     this.attached = null;
+
+    if (mentions?.length) {
+      const blocks = await this.readMentionedFiles(mentions.slice(0, 5));
+      if (blocks.length) {
+        content += "\n\n" + blocks.map((b) => b.block).join("\n\n");
+        contextFiles = [...(contextFiles ?? []), ...blocks.map((b) => b.name)];
+      }
+    }
 
     this.streaming = true;
     this.view?.webview.postMessage({ type: "turn", role: "user", content: text });
@@ -443,6 +453,49 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
 
   // ── Context attach + history + model picker ───────────────────────────────
 
+  /** Fuzzy file lookup for the composer @-mention menu. */
+  private async listFiles(query: string): Promise<void> {
+    try {
+      const pattern = query ? `**/*${query}*` : "**/*";
+      const uris = await vscode.workspace.findFiles(pattern, "**/{node_modules,.git,dist,out,build,target}/**", 60);
+      let rels = uris.map((u) => vscode.workspace.asRelativePath(u, false));
+      if (query) {
+        const q = query.toLowerCase();
+        rels = rels.filter((r) => r.toLowerCase().includes(q));
+        rels.sort((a, b) => {
+          const an = (a.split("/").pop() ?? a).toLowerCase();
+          const bn = (b.split("/").pop() ?? b).toLowerCase();
+          const as = an.startsWith(q) ? 0 : 1;
+          const bs = bn.startsWith(q) ? 0 : 1;
+          return as - bs || a.length - b.length;
+        });
+      }
+      this.view?.webview.postMessage({ type: "fileList", files: rels.slice(0, 8) });
+    } catch {
+      this.view?.webview.postMessage({ type: "fileList", files: [] });
+    }
+  }
+
+  /** Read @-mentioned files (capped) into shared <file> context blocks. */
+  private async readMentionedFiles(paths: string[]): Promise<Array<{ name: string; block: string }>> {
+    const root = this.workspaceRoot();
+    if (!root) return [];
+    const out: Array<{ name: string; block: string }> = [];
+    for (const rel of paths) {
+      try {
+        const uri = vscode.Uri.file(`${root}/${rel}`);
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        let text = Buffer.from(bytes).toString("utf8");
+        if (text.length > 4000) text = text.slice(0, 4000) + "\n…(truncated)";
+        const lang = rel.includes(".") ? rel.split(".").pop() ?? "" : "";
+        out.push({ name: rel, block: `<file name="${rel}">\n\`\`\`${lang}\n${text}\n\`\`\`` });
+      } catch {
+        // Skip unreadable mentions (deleted mid-compose, binary, etc.)
+      }
+    }
+    return out;
+  }
+
   private async attachActiveEditor(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -491,6 +544,7 @@ ${csp}
       <button class="hdr-btn" data-cmd="newSession" title="New session">${icon("add")}</button>
       <button class="hdr-btn" data-cmd="history" title="History">${icon("history")}</button>
       <button class="hdr-btn" data-cmd="checkpoint" title="Checkpoint">${icon("save")}</button>
+      <button class="hdr-btn" data-cmd="runOnGpu" title="Run target — your GPU or Capix Cloud">${icon("vm")}</button>
       <button class="hdr-btn" data-cmd="focus" title="Expand / focus">${icon("chrome-maximize")}</button>
     </div>
   </header>
@@ -532,6 +586,8 @@ ${csp}
 
   <div class="slash-menu" id="slash-menu" hidden></div>
 
+  <div class="mention-menu" id="mention-menu" hidden></div>
+
   <div class="diff-panel" id="diff-panel" hidden>
     <div class="diff-head">
       <span class="diff-title" id="diff-title">Agent changes</span>
@@ -570,708 +626,3 @@ ${csp}
 </html>`;
   }
 }
-
-const SLASH_HTML = SLASH_COMMANDS.map(
-  (s) => `<div class="slash-item" data-slash="${s.cmd}"><span class="slash-cmd">${s.cmd}</span><span class="slash-desc">${s.desc}</span></div>`,
-).join("");
-
-// ── Inline styles + script ──────────────────────────────────────────────────
-// @capix/ui-tokens: dark foundation, cyan accents, green primary.
-const PANEL_STYLES = `
-  :root {
-    --capix-bg: var(--vscode-sideBar-background, #14161a);
-    --capix-surface: var(--vscode-sideBarSectionHeader-background, rgba(255,255,255,0.03));
-    --capix-border: var(--vscode-panel-border, rgba(255,255,255,0.08));
-    --capix-fg: var(--vscode-foreground, #d4d4d4);
-    --capix-muted: rgba(212,212,212,0.55);
-    --capix-cyan: #3DCED6;
-    --capix-green: #14F195;
-    --capix-amber: #FFAE00;
-    --capix-red: #FF6464;
-    --capix-blue: #5A9DFF;
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    font-family: var(--vscode-font-family, system-ui, sans-serif);
-    color: var(--capix-fg); background: var(--capix-bg);
-    display: flex; flex-direction: column; font-size: 12px;
-    overflow: hidden;
-  }
-  .panel-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 10px; border-bottom: 1px solid var(--capix-border);
-  }
-  .header-left { display: flex; align-items: center; gap: 8px; }
-  .session-title { font-weight: 600; font-size: 12px; }
-  .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--capix-muted); flex: none; }
-  .conn-dot.online { background: var(--capix-green); box-shadow: 0 0 6px rgba(20,241,149,0.6); }
-  .conn-dot.offline { background: var(--capix-amber); }
-  .header-actions { display: flex; gap: 2px; }
-  .hdr-btn {
-    background: transparent; border: none; cursor: pointer; color: var(--capix-muted);
-    font-family: inherit; font-size: 13px; padding: 3px 6px; border-radius: 5px;
-  }
-  .hdr-btn:hover { background: rgba(255,255,255,0.08); color: var(--capix-fg); }
-  .meta-row { display: flex; gap: 4px; padding: 6px 10px; flex-wrap: wrap; }
-  .meta-chip {
-    font-size: 9px; padding: 2px 8px; border-radius: 999px;
-    background: var(--capix-surface); border: 1px solid var(--capix-border);
-    color: var(--capix-muted); text-transform: uppercase; letter-spacing: .04em;
-  }
-  .route-control { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; color: var(--capix-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
-  .route-control select { max-width: 132px; border: 1px solid var(--capix-border); border-radius: 999px; background: var(--capix-surface); color: var(--capix-fg); font: inherit; padding: 2px 7px; outline: none; }
-  .route-control select:focus { border-color: rgba(61,206,214,.55); }
-  #chip-mode { color: var(--capix-cyan); }
-  .conversation { flex: 1; overflow-y: auto; padding: 10px; }
-  .empty-state { text-align: center; color: var(--capix-muted); padding: 40px 16px; }
-  .empty-glyph { font-size: 28px; opacity: .4; margin-bottom: 8px; }
-  .msg { margin-bottom: 12px; }
-  .msg-role {
-    font-size: 9px; text-transform: uppercase; letter-spacing: .1em;
-    color: var(--capix-muted); margin-bottom: 3px; display: flex; align-items: center; gap: 6px;
-  }
-  .msg.user .msg-role { color: var(--capix-cyan); }
-  .msg.assistant .msg-role { color: var(--capix-green); }
-  .msg-role .working-dot {
-    width: 6px; height: 6px; border-radius: 50%; background: var(--capix-cyan);
-    animation: pulse 1s ease-in-out infinite;
-  }
-  @keyframes pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
-  .msg-body { line-height: 1.5; word-break: break-word; }
-  .msg-body p { margin: 0 0 6px; white-space: pre-wrap; }
-  .text-block { white-space: normal; }
-  .text-block .cursor::after { content: '▋'; color: var(--capix-cyan); animation: blink 1s steps(2) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
-  .msg-body pre.code-block {
-    background: rgba(0,0,0,0.32); border: 1px solid var(--capix-border); border-radius: 6px;
-    padding: 8px; overflow-x: auto; margin: 6px 0; position: relative;
-  }
-  .msg-body pre.code-block::before {
-    content: attr(data-lang); position: absolute; top: 4px; right: 8px;
-    font-size: 8px; color: var(--capix-muted); text-transform: uppercase; letter-spacing: .08em;
-  }
-  .msg-body code, .msg-body pre code {
-    font-family: var(--vscode-editor-font-family, monospace); font-size: 11px;
-  }
-  .msg-body code.inline {
-    background: rgba(61,206,214,0.12); color: var(--capix-cyan);
-    padding: 1px 4px; border-radius: 4px; font-size: 11px;
-  }
-  .msg-body strong { color: var(--capix-fg); font-weight: 700; }
-
-  /* Tool cards */
-  .tool-card {
-    border: 1px solid var(--capix-border); border-radius: 8px;
-    background: var(--capix-surface); margin: 6px 0; overflow: hidden;
-  }
-  .tool-head {
-    display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer;
-    font-size: 11px; color: var(--capix-cyan); font-family: var(--vscode-editor-font-family, monospace);
-  }
-  .tool-head .tool-glyph { font-size: 12px; opacity: .9; }
-  .tool-head .tool-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tool-head .tool-chev { color: var(--capix-muted); font-size: 10px; }
-  .tool-card.collapsed .tool-out { display: none; }
-  .tool-out {
-    font-family: var(--vscode-editor-font-family, monospace); font-size: 10px;
-    white-space: pre-wrap; word-break: break-word; color: var(--capix-muted);
-    padding: 8px 10px; border-top: 1px solid var(--capix-border); max-height: 180px; overflow-y: auto;
-  }
-
-  /* File change chips */
-  .file-chip {
-    display: inline-flex; align-items: center; gap: 5px; font-size: 10px;
-    background: rgba(20,241,149,0.1); color: var(--capix-green);
-    padding: 2px 8px; border-radius: 5px; margin: 3px 4px 0 0;
-    font-family: var(--vscode-editor-font-family, monospace);
-  }
-  .file-chip.created { color: var(--capix-green); background: rgba(20,241,149,0.1); }
-  .file-chip.modified { color: var(--capix-amber); background: rgba(255,174,0,0.1); }
-  .file-chip.deleted { color: var(--capix-red); background: rgba(255,100,100,0.1); }
-
-  /* Plan checklist */
-  .plan-list { margin: 6px 0; padding-left: 0; list-style: none; }
-  .plan-item {
-    display: flex; align-items: flex-start; gap: 6px; padding: 4px 0;
-    font-size: 11px; color: var(--capix-fg);
-  }
-  .plan-item .plan-check {
-    width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--capix-border);
-    flex: none; margin-top: 2px; display: inline-block; position: relative;
-  }
-  .plan-item.done .plan-check { background: var(--capix-green); border-color: var(--capix-green); }
-  .plan-item.done .plan-check::after {
-    content: '✓'; position: absolute; inset: 0; color: #000; font-size: 9px; text-align: center; line-height: 12px;
-  }
-  .plan-item.done .plan-text { color: var(--capix-muted); text-decoration: line-through; }
-
-  /* Attach + slash */
-  .attach-bar { padding: 4px 10px; }
-  .attach-chip {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 10px;
-    background: rgba(61,206,214,0.1); color: var(--capix-cyan);
-    padding: 3px 8px; border-radius: 5px;
-  }
-  .attach-x { background: transparent; border: none; cursor: pointer; color: var(--capix-muted); font-family: inherit; }
-  .slash-menu { margin: 0 10px; border: 1px solid var(--capix-border); border-radius: 6px; background: var(--capix-surface); overflow: hidden; }
-  .slash-item { display: flex; justify-content: space-between; padding: 6px 10px; cursor: pointer; font-size: 11px; }
-  .slash-item:hover { background: rgba(61,206,214,0.1); }
-  .slash-cmd { color: var(--capix-cyan); font-family: var(--vscode-editor-font-family, monospace); }
-  .slash-desc { color: var(--capix-muted); }
-
-  /* Diff panel */
-  .diff-panel {
-    border-top: 1px solid var(--capix-border); background: var(--capix-surface);
-    max-height: 40%; display: flex; flex-direction: column;
-  }
-  .diff-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 10px; border-bottom: 1px solid var(--capix-border);
-  }
-  .diff-title { font-size: 10px; color: var(--capix-green); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
-  .diff-actions { display: flex; gap: 4px; align-items: center; }
-  .diff-btn {
-    background: transparent; border: 1px solid var(--capix-border); cursor: pointer;
-    color: var(--capix-muted); font-family: inherit; font-size: 10px;
-    padding: 3px 8px; border-radius: 5px;
-  }
-  .diff-btn:hover { color: var(--capix-fg); }
-  .diff-btn.accept { color: var(--capix-green); border-color: rgba(20,241,149,0.3); }
-  .diff-btn.revert { color: var(--capix-red); border-color: rgba(255,100,100,0.3); }
-  .diff-files { overflow-y: auto; }
-  .diff-file {
-    border-bottom: 1px solid var(--capix-border); padding: 6px 10px;
-  }
-  .diff-file-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-  .diff-file-path {
-    flex: 1; font-size: 10px; font-family: var(--vscode-editor-font-family, monospace);
-    color: var(--capix-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .diff-file-tag { font-size: 8px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; }
-  .diff-file-tag.created { background: rgba(20,241,149,0.15); color: var(--capix-green); }
-  .diff-file-tag.modified { background: rgba(255,174,0,0.15); color: var(--capix-amber); }
-  .diff-file-tag.deleted { background: rgba(255,100,100,0.15); color: var(--capix-red); }
-  .diff-file-actions { display: flex; gap: 4px; }
-  .diff-mini {
-    background: transparent; border: 1px solid var(--capix-border); cursor: pointer;
-    color: var(--capix-muted); font-family: inherit; font-size: 9px; padding: 2px 6px; border-radius: 4px;
-  }
-  .diff-mini.acc { color: var(--capix-green); border-color: rgba(20,241,149,0.3); }
-  .diff-mini.rev { color: var(--capix-red); border-color: rgba(255,100,100,0.3); }
-  .diff-mini:hover { color: var(--capix-fg); }
-  .diff-file pre {
-    background: rgba(0,0,0,0.32); border-radius: 4px; padding: 6px; overflow-x: auto;
-    font-family: var(--vscode-editor-font-family, monospace); font-size: 10px; margin: 0;
-    max-height: 160px; overflow-y: auto; color: var(--capix-fg);
-  }
-  .diff-panel.collapsed .diff-files { display: none; }
-
-  /* Composer */
-  .composer { border-top: 1px solid var(--capix-border); padding: 8px 10px; flex: none; }
-  .mode-row { display: flex; gap: 2px; margin-bottom: 6px; flex-wrap: wrap; }
-  .mode-btn {
-    background: transparent; border: 1px solid transparent; cursor: pointer;
-    color: var(--capix-muted); font-family: inherit; font-size: 10px;
-    padding: 3px 8px; border-radius: 999px;
-  }
-  .mode-btn:hover { color: var(--capix-fg); }
-  .mode-btn.active { background: rgba(61,206,214,0.14); color: var(--capix-cyan); border-color: rgba(61,206,214,0.3); }
-  .composer-input {
-    width: 100%; resize: none; border: 1px solid var(--capix-border); border-radius: 8px;
-    background: var(--capix-surface); color: var(--capix-fg);
-    font-family: inherit; font-size: 12px; padding: 8px 10px; min-height: 44px; max-height: 160px;
-  }
-  .composer-input:focus { outline: none; border-color: rgba(61,206,214,0.4); }
-  .composer-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
-  .foot-left { display: flex; align-items: center; gap: 8px; }
-  .foot-btn { background: transparent; border: none; cursor: pointer; color: var(--capix-muted); font-family: inherit; font-size: 13px; padding: 2px 4px; }
-  .foot-btn:hover { color: var(--capix-fg); }
-  .cost { font-size: 10px; color: var(--capix-muted); font-family: var(--vscode-editor-font-family, monospace); }
-  .send-btn {
-    background: var(--capix-cyan); border: none; color: #000; border-radius: 6px; cursor: pointer;
-    font-family: inherit; font-size: 12px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 6px;
-  }
-  .send-btn:hover { opacity: .88; }
-  .send-btn.working { background: var(--capix-amber); }
-  .spinner {
-    width: 10px; height: 10px; border: 2px solid rgba(0,0,0,0.3); border-top-color: #000;
-    border-radius: 50%; animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* Approval modal */
-  .modal-layer { position: relative; }
-  .approval {
-    border: 1px solid var(--capix-amber); border-radius: 8px; background: rgba(255,174,0,0.06);
-    padding: 8px 10px; margin: 6px 0;
-  }
-  .approval-head { font-size: 10px; color: var(--capix-amber); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; margin-bottom: 4px; }
-  .approval-desc { font-size: 11px; color: var(--capix-fg); margin-bottom: 8px; }
-  .approval-actions { display: flex; gap: 6px; }
-  .approval-btn {
-    border: 1px solid var(--capix-border); background: var(--capix-surface); color: var(--capix-fg);
-    cursor: pointer; font-family: inherit; font-size: 11px; padding: 4px 12px; border-radius: 5px;
-  }
-  .approval-btn.approve { background: var(--capix-green); color: #000; border-color: var(--capix-green); }
-  .approval-btn.deny { background: transparent; color: var(--capix-red); border-color: rgba(255,100,100,0.3); }
-
-  .route-pill {
-    display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 999px;
-    background: rgba(61,206,214,0.12); color: var(--capix-cyan); margin-bottom: 4px;
-  }
-
-  body.compact .meta-row, body.compact .mode-row { display: none; }
-  body.compact .composer-input { min-height: 28px; }
-
-  /* Premium auxiliary rail: conversation first, composer as the anchor. */
-  :root {
-    --capix-bg: #090d13;
-    --capix-surface: rgba(255,255,255,.035);
-    --capix-border: rgba(255,255,255,.075);
-    --capix-fg: #eef2f3;
-    --capix-muted: rgba(226,232,240,.52);
-  }
-  body { background: var(--capix-bg); }
-  .panel-header { min-height: 46px; padding: 10px 14px; border-bottom-color: rgba(255,255,255,.055); }
-  .session-title { font-size: 12px; letter-spacing: -.01em; }
-  .conn-dot { order: -1; width: 6px; height: 6px; }
-  .hdr-btn { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border-radius: 7px; }
-  .meta-row { padding: 9px 14px; gap: 7px; border-bottom: 1px solid rgba(255,255,255,.04); }
-  .meta-chip { padding: 3px 7px; border: 0; border-radius: 5px; background: rgba(255,255,255,.045); font-size: 8px; }
-  #chip-model { color: var(--capix-cyan); }
-  .conversation { padding: 16px 14px 22px; scrollbar-width: thin; }
-  .empty-state { padding: clamp(38px, 12vh, 104px) 4px 24px; text-align: left; max-width: 390px; margin: 0 auto; }
-  .empty-glyph { width: 36px; height: 36px; display: grid; place-items: center; margin: 0 0 22px; border-radius: 10px; font-size: 18px; opacity: 1; color: var(--capix-cyan); background: rgba(61,206,214,.09); border: 1px solid rgba(61,206,214,.18); }
-  .empty-kicker { color: var(--capix-cyan); font: 500 9px/1 var(--vscode-editor-font-family, monospace); text-transform: uppercase; letter-spacing: .13em; }
-  .empty-state h2 { margin: 9px 0 10px; color: var(--capix-fg); font-size: 22px; line-height: 1.1; letter-spacing: -.035em; }
-  .empty-state p { margin: 0 0 24px; line-height: 1.6; font-size: 11px; }
-  .starter-prompts { border-top: 1px solid var(--capix-border); }
-  .starter-prompts button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; color: rgba(238,242,243,.78); background: transparent; border: 0; border-bottom: 1px solid var(--capix-border); font: 500 11px/1.3 inherit; cursor: pointer; text-align: left; }
-  .starter-prompts button span { color: var(--capix-cyan); opacity: .55; transition: transform .15s ease, opacity .15s ease; }
-  .starter-prompts button:hover { color: var(--capix-fg); }
-  .starter-prompts button:hover span { opacity: 1; transform: translateX(3px); }
-  .empty-state small { display: block; margin-top: 18px; color: rgba(226,232,240,.34); font-size: 9px; }
-  .empty-state kbd { padding: 1px 4px; color: rgba(226,232,240,.62); background: rgba(255,255,255,.045); border: 1px solid var(--capix-border); border-radius: 4px; font: inherit; }
-  .msg { margin-bottom: 20px; }
-  .msg-role { margin-bottom: 7px; font-size: 8px; }
-  .msg-body { font-size: 12px; line-height: 1.62; }
-  .tool-card { border-radius: 7px; background: rgba(255,255,255,.025); }
-  .composer { margin: 0 10px 10px; padding: 8px; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: #0d121a; box-shadow: 0 12px 34px rgba(0,0,0,.28); transition: border-color .16s ease, box-shadow .16s ease; }
-  .composer:focus-within { border-color: rgba(61,206,214,.34); box-shadow: 0 12px 38px rgba(0,0,0,.36), 0 0 0 1px rgba(61,206,214,.05); }
-  .mode-row { margin: 0 0 4px; gap: 1px; }
-  .mode-btn { padding: 4px 7px; border-radius: 5px; font-size: 9px; }
-  .mode-btn.active { border-color: transparent; background: rgba(61,206,214,.09); }
-  .composer-input { min-height: 58px; padding: 9px 4px; border: 0; border-radius: 0; background: transparent; font-size: 12px; line-height: 1.5; }
-  .composer-input:focus { border: 0; }
-  .composer-input::placeholder { color: rgba(226,232,240,.32); }
-  .composer-foot { margin-top: 3px; }
-  .send-btn { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 8px; background: var(--capix-cyan); }
-  .send-btn.working { width: auto; padding: 0 9px; display: inline-flex; }
-  .cost { opacity: .62; }
-  .diff-panel { margin: 0 10px 8px; border: 1px solid var(--capix-border); border-radius: 9px; overflow: hidden; }
-  @media (prefers-reduced-motion: no-preference) {
-    .empty-state { animation: code-enter .34s ease-out both; }
-    @keyframes code-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
-  }
-`;
-
-const PANEL_SCRIPT = `
-  const vscode = acquireVsCodeApi();
-  const $ = (id) => document.getElementById(id);
-  let streaming = false;
-  let currentMode = 'ask';
-  let activeAssistant = null;
-  let activeTextRaw = '';
-  let activeTools = new Map();   // callId -> tool-card element
-  let diffExpanded = true;
-
-  function esc(s) {
-    if (s === null || s === undefined) return '';
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  }
-
-  const conversation = $('conversation');
-  const emptyState = $('empty-state');
-  const input = $('composer-input');
-
-  function clearEmpty() { if (emptyState) emptyState.remove(); }
-
-  function appendTurn(role, content) {
-    clearEmpty();
-    const div = document.createElement('div');
-    div.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
-    div.innerHTML = '<div class="msg-role">' + (role === 'user' ? 'You' : 'Capix Code') + '</div><div class="msg-body"></div>';
-    conversation.appendChild(div);
-    conversation.scrollTop = conversation.scrollHeight;
-    return div.querySelector('.msg-body');
-  }
-
-  function startAssistant(mode) {
-    clearEmpty();
-    const div = document.createElement('div');
-    div.className = 'msg assistant';
-    if (mode === 'plan') div.insertAdjacentHTML('afterbegin', '<span class="route-pill">Planning</span>');
-    div.innerHTML = '<div class="msg-role"><span class="working-dot"></span> Capix Code · Working…</div><div class="msg-body"></div>';
-    conversation.appendChild(div);
-    activeAssistant = div.querySelector('.msg-body');
-    activeTextRaw = '';
-    activeTools = new Map();
-    conversation.scrollTop = conversation.scrollHeight;
-    return div;
-  }
-
-  function autoGrow() {
-    input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-  }
-
-  function setStreaming(v) {
-    streaming = v;
-    $('send-btn').hidden = v;
-    $('stop-btn').hidden = !v;
-  }
-
-  function pickMode(mode) {
-    currentMode = mode;
-    document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
-    $('chip-mode').textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
-  }
-
-  function showSlashMenu(show) {
-    const menu = $('slash-menu');
-    menu.hidden = !show;
-    if (show && !menu.children.length) menu.innerHTML = ${JSON.stringify(SLASH_HTML)} || '';
-  }
-
-  // ── Markdown (code fences + inline code/bold + line breaks) ──────────────
-  function renderInlineMd(text) {
-    let s = esc(text);
-    s = s.replace(/\`([^\`]+)\`/g, '<code class="inline">$1</code>');
-    s = s.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-    return s.replace(/\\n/g, '<br>');
-  }
-  function renderMarkdown(text) {
-    let html = '';
-    let i = 0;
-    while (i < text.length) {
-      const fence = text.indexOf('\`\`\`', i);
-      if (fence === -1) { html += '<p>' + renderInlineMd(text.slice(i)) + '</p>'; break; }
-      if (fence > i) html += '<p>' + renderInlineMd(text.slice(i, fence)) + '</p>';
-      const afterFence = text.slice(fence + 3);
-      const nl = afterFence.indexOf('\\n');
-      const lang = nl >= 0 ? afterFence.slice(0, nl) : afterFence;
-      const codeStart = nl >= 0 ? fence + 3 + nl + 1 : fence + 3;
-      const close = text.indexOf('\`\`\`', codeStart);
-      if (close === -1) {
-        const code = text.slice(codeStart);
-        html += '<pre class="code-block" data-lang="' + esc(lang || 'code') + '"><code>' + esc(code) + '</code></pre>';
-        i = text.length;
-      } else {
-        const code = text.slice(codeStart, close);
-        html += '<pre class="code-block" data-lang="' + esc(lang || 'code') + '"><code>' + esc(code) + '</code></pre>';
-        i = close + 3;
-      }
-    }
-    return html;
-  }
-
-  function appendText(content) {
-    if (!activeAssistant) startAssistant(currentMode);
-    activeTextRaw += content;
-    let block = activeAssistant.querySelector('.text-block');
-    if (!block) {
-      block = document.createElement('div');
-      block.className = 'text-block cursor';
-      activeAssistant.appendChild(block);
-    }
-    block.innerHTML = renderMarkdown(activeTextRaw);
-    conversation.scrollTop = conversation.scrollHeight;
-  }
-
-  function toolLabel(tool, args) {
-    if (!args || typeof args !== 'object') return tool;
-    const a = args;
-    const fp = a.file_path || a.path || a.file || a.target;
-    const cmd = a.command || a.cmd;
-    const pat = a.pattern || a.query || a.glob;
-    if (fp) {
-      if (/edit|write|str_replace|update|patch|apply/i.test(tool)) return 'Editing ' + fp;
-      if (/read|view|cat|open/i.test(tool)) return 'Reading ' + fp;
-      if (/delete|remove|rm/i.test(tool)) return 'Deleting ' + fp;
-      return (tool + ' · ' + fp);
-    }
-    if (cmd) return 'Running: ' + cmd;
-    if (pat) return 'Searching: ' + pat;
-    return tool;
-  }
-
-  function appendToolCall(evt) {
-    if (!activeAssistant) startAssistant(currentMode);
-    const label = toolLabel(evt.tool, evt.args);
-    const card = document.createElement('div');
-    card.className = 'tool-card collapsed';
-    card.dataset.callId = evt.callId;
-    card.innerHTML = '<div class="tool-head"><span class="tool-glyph">${icon("tool")}</span><span class="tool-label">' + esc(label) + '</span><span class="tool-chev">${icon("chevron-right")}</span></div><div class="tool-out"></div>';
-    activeAssistant.appendChild(card);
-    activeTools.set(evt.callId, card);
-    conversation.scrollTop = conversation.scrollHeight;
-  }
-
-  function appendToolResult(evt) {
-    const card = activeTools.get(evt.callId);
-    if (!card) return;
-    const out = card.querySelector('.tool-out');
-    if (out) out.textContent += evt.output + '\\n';
-    card.classList.remove('collapsed');
-    conversation.scrollTop = conversation.scrollHeight;
-  }
-
-  function appendFileChanged(evt) {
-    if (!activeAssistant) startAssistant(currentMode);
-    const chip = document.createElement('span');
-    chip.className = 'file-chip ' + evt.changeType;
-    const glyph = evt.changeType === 'created' ? '${icon("add")}' : evt.changeType === 'deleted' ? '${icon("trash")}' : '${icon("edit")}';
-    chip.innerHTML = '<span>' + glyph + '</span>' + esc(evt.filePath);
-    activeAssistant.appendChild(chip);
-    conversation.scrollTop = conversation.scrollHeight;
-  }
-
-  function appendPlan(evt) {
-    if (!activeAssistant) startAssistant(currentMode);
-    const wrap = document.createElement('div');
-    wrap.className = 'plan-wrap';
-    const steps = Array.isArray(evt.plan) ? evt.plan
-      : (evt.plan && Array.isArray(evt.plan.steps)) ? evt.plan.steps
-      : (evt.plan && Array.isArray(evt.plan.items)) ? evt.plan.items : null;
-    const items = steps ? steps.map((s) => {
-      const isObj = s && typeof s === 'object';
-      const text = isObj ? (s.description || s.text || s.summary || JSON.stringify(s)) : String(s);
-      const done = isObj ? !!s.done : false;
-      return '<li class="plan-item' + (done ? ' done' : '') + '"><span class="plan-check"></span><span class="plan-text">' + esc(text) + '</span></li>';
-    }).join('') : '<li class="plan-item"><span class="plan-check"></span><span class="plan-text">' + esc(typeof evt.plan === 'string' ? evt.plan : JSON.stringify(evt.plan)) + '</span></li>';
-    wrap.innerHTML = '<ul class="plan-list">' + items + '</ul>';
-    activeAssistant.appendChild(wrap);
-    conversation.scrollTop = conversation.scrollHeight;
-  }
-
-  function showApproval(evt) {
-    if (!activeAssistant) startAssistant(currentMode);
-    const modal = document.createElement('div');
-    modal.className = 'approval';
-    modal.dataset.callId = evt.callId;
-    modal.innerHTML = '<div class="approval-head">Approval required</div>' +
-      '<div class="approval-desc"><b>' + esc(evt.tool) + '</b> — ' + esc(evt.description) + '</div>' +
-      '<div class="approval-actions">' +
-        '<button class="approval-btn approve" data-approve="1" data-call-id="' + esc(evt.callId) + '">Approve</button>' +
-        '<button class="approval-btn deny" data-approve="0" data-call-id="' + esc(evt.callId) + '">Deny</button>' +
-      '</div>';
-    activeAssistant.appendChild(modal);
-    conversation.scrollTop = conversation.scrollHeight;
-  }
-
-  function dismissApproval(callId) {
-    const m = activeAssistant && activeAssistant.querySelector('.approval[data-call-id="' + cssAttr(callId) + '"]');
-    if (m) m.remove();
-  }
-  function cssAttr(s) { return String(s).replace(/"/g, ''); }
-
-  function finishAssistant(msg) {
-    const msgEl = activeAssistant && activeAssistant.closest('.msg');
-    if (msgEl) {
-      const role = msgEl.querySelector('.msg-role');
-      if (role) role.innerHTML = 'Capix Code';
-    }
-    const tb = activeAssistant && activeAssistant.querySelector('.text-block');
-    if (tb) tb.classList.remove('cursor');
-    if (msg) appendText('\\n' + msg);
-  }
-
-  // ── Diff panel ───────────────────────────────────────────────────────────
-  function renderDiffPanel(files) {
-    const panel = $('diff-panel');
-    const list = $('diff-files');
-    if (!files || !files.length) { panel.hidden = true; list.innerHTML = ''; return; }
-    panel.hidden = false;
-    $('diff-title').textContent = 'Agent changes (' + files.length + ')';
-    list.innerHTML = files.map((f) => {
-      const tag = f.changeType || 'modified';
-      return '<div class="diff-file">' +
-        '<div class="diff-file-head">' +
-          '<span class="diff-file-path">' + esc(f.filePath) + '</span>' +
-          '<span class="diff-file-tag ' + tag + '">' + tag + '</span>' +
-          '<span class="diff-file-actions">' +
-            '<button class="diff-mini acc" data-accept-file="' + esc(f.filePath) + '">Accept</button>' +
-            '<button class="diff-mini rev" data-revert-file="' + esc(f.filePath) + '">Revert</button>' +
-          '</span>' +
-        '</div>' +
-        '<pre>' + esc(f.diff || '') + '</pre>' +
-      '</div>';
-    }).join('');
-  }
-
-  // ── Event delegation (CSP-safe) ───────────────────────────────────────────
-  document.addEventListener('click', (e) => {
-    const t = e.target instanceof Element ? e.target : null;
-
-    // Tool card collapse toggle (header click)
-    const head = t && t.closest('.tool-head');
-    if (head && !e.target.closest('.tool-out')) {
-      head.closest('.tool-card').classList.toggle('collapsed');
-      return;
-    }
-
-    // Approval buttons
-    const appr = t && t.closest('[data-approve]');
-    if (appr) {
-      const callId = appr.getAttribute('data-call-id');
-      const approved = appr.getAttribute('data-approve') === '1';
-      dismissApproval(callId);
-      vscode.postMessage({ type: 'approve', callId, approved });
-      return;
-    }
-
-    // Per-file accept/revert in diff panel
-    const accFile = t && t.closest('[data-accept-file]');
-    if (accFile) {
-      vscode.postMessage({ type: 'acceptFile', filePath: accFile.getAttribute('data-accept-file') });
-      return;
-    }
-    const revFile = t && t.closest('[data-revert-file]');
-    if (revFile) {
-      vscode.postMessage({ type: 'revertFile', filePath: revFile.getAttribute('data-revert-file') });
-      return;
-    }
-
-    const prompt = t && t.closest('[data-prompt]');
-    if (prompt) {
-      input.value = prompt.getAttribute('data-prompt') || '';
-      autoGrow();
-      input.focus();
-      return;
-    }
-
-    const tgt = t && t.closest('[data-cmd],[data-mode],[data-slash]');
-    if (!tgt) return;
-    if (t && t.dataset && t.dataset.mode) { pickMode(t.dataset.mode); vscode.postMessage({ type: 'setMode', mode: t.dataset.mode }); return; }
-
-    const el = tgt;
-    if (el.dataset.mode) { pickMode(el.dataset.mode); vscode.postMessage({ type: 'setMode', mode: el.dataset.mode }); return; }
-    if (el.dataset.slash) { input.value = el.dataset.slash + ' '; showSlashMenu(false); autoGrow(); input.focus(); return; }
-    if (el.dataset.cmd === 'toggleDiff') {
-      diffExpanded = !diffExpanded;
-      $('diff-panel').classList.toggle('collapsed', !diffExpanded);
-      return;
-    }
-    if (el.dataset.cmd === 'submit') {
-      const text = input.value.trim();
-      if (!text || streaming) return;
-      appendTurn('user', text);
-      activeAssistant = null; activeTextRaw = ''; activeTools = new Map();
-      input.value = ''; autoGrow();
-      vscode.postMessage({ type: 'submit', text, mode: currentMode });
-      setStreaming(true);
-    } else if (el.dataset.cmd === 'stop') {
-      vscode.postMessage({ type: 'stop' });
-    } else {
-      vscode.postMessage({ type: el.dataset.cmd });
-    }
-  });
-
-  input.addEventListener('input', () => {
-    autoGrow();
-    const v = input.value;
-    showSlashMenu(v.startsWith('/') && !v.includes(' '));
-  });
-  input.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      $('send-btn').click();
-    }
-  });
-  $('provider-select').addEventListener('change', (e) => {
-    vscode.postMessage({ type: 'setProvider', provider: e.target.value });
-  });
-
-  // ── Messages from extension host ─────────────────────────────────────────
-  window.addEventListener('message', (e) => {
-    const msg = e.data;
-    switch (msg.type) {
-      case 'state':
-        $('conn-dot').className = 'conn-dot ' + (msg.engineStatus === 'online' ? 'online' : (msg.configured ? 'offline' : 'offline'));
-        $('session-title').textContent = msg.sessionId ? ('Session ' + String(msg.sessionId).slice(0, 8)) : 'Capix Code';
-        $('chip-project').textContent = msg.project || '—';
-        $('chip-model').textContent = msg.model || 'auto';
-        $('provider-select').value = msg.preferredProvider || 'auto';
-        if (msg.mode) pickMode(msg.mode);
-        if (msg.streaming) setStreaming(true);
-        break;
-      case 'turn':
-        appendTurn(msg.role, msg.content);
-        activeAssistant = null; activeTextRaw = ''; activeTools = new Map();
-        break;
-      case 'streamStart':
-        startAssistant(msg.mode);
-        break;
-      case 'engineEvent': {
-        const evt = msg.event;
-        if (!evt) break;
-        if (evt.type === 'text') appendText(evt.content);
-        else if (evt.type === 'tool_call') appendToolCall(evt);
-        else if (evt.type === 'tool_result') appendToolResult(evt);
-        else if (evt.type === 'file_changed') appendFileChanged(evt);
-        else if (evt.type === 'plan') appendPlan(evt);
-        else if (evt.type === 'approval_request') showApproval(evt);
-        break;
-      }
-      case 'usage':
-        $('cost-estimate').textContent = '$' + Number(msg.costUsd || 0).toFixed(4);
-        break;
-      case 'streamDone':
-        finishAssistant();
-        setStreaming(false);
-        break;
-      case 'streaming':
-        setStreaming(msg.value);
-        if (!msg.value) finishAssistant();
-        break;
-      case 'error':
-        setStreaming(false);
-        appendTurn('assistant', '⚠ ' + esc(msg.message));
-        activeAssistant = null;
-        break;
-      case 'cleared':
-        conversation.innerHTML = '';
-        activeAssistant = null; activeTextRaw = ''; activeTools = new Map();
-        if (!$('empty-state')) {
-          const es = document.createElement('div');
-          es.className = 'empty-state'; es.id = 'empty-state';
-          es.innerHTML = '<div class="empty-glyph">✦</div><span class="empty-kicker">Workspace agent</span><h2>Build from here.</h2><p>Capix Code can understand the project, edit files, run commands and verify the result.</p>';
-          conversation.appendChild(es);
-        }
-        break;
-      case 'attached':
-        $('attach-bar').hidden = false;
-        $('attach-chip').textContent = '📎 ' + msg.name;
-        break;
-      case 'attachCleared':
-        $('attach-bar').hidden = true;
-        break;
-      case 'compose':
-        input.value = msg.text; autoGrow(); input.focus();
-        break;
-      case 'density':
-        document.body.classList.toggle('compact', !!msg.compact);
-        break;
-      case 'diffPanel':
-        renderDiffPanel(msg.files);
-        break;
-      case 'checkpointCreated':
-        appendTurn('assistant', '✓ Checkpoint created: ' + esc(msg.id));
-        activeAssistant = null;
-        break;
-    }
-  });
-
-  autoGrow();
-`;
