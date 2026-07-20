@@ -1,3 +1,4 @@
+
 /**
  * Capix API client — wraps fetch calls to capix.network /api/llm/* routes.
  * The production origin is compiled into the product. Workspace settings must
@@ -8,6 +9,7 @@ import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import type { CatalogModel, GpuOffer, LlmDeploy, HostedEndpoint, DeployResult } from "./types";
 import { minorToDisplay, sumMinor, usageCostToMicroUsd } from "./moneyUtils";
+import { routeStats } from "./routeStats";
 
 /**
  * Shared-broker token provider. When set, every authenticated request reads
@@ -283,6 +285,15 @@ export class CapixClient {
   }
 
   async streamAgentChat(input: unknown, signal: AbortSignal, onEvent: (event: Record<string, any>) => Promise<void>): Promise<void> {
+    const __t0 = Date.now();
+    let __model = "";
+    let __region = "";
+    let __costMinor = "0";
+    const __track = async (event: Record<string, any>): Promise<void> => {
+      if (event.type === "route") { __model = String(event.model ?? ""); __region = String(event.region ?? ""); }
+      if (event.type === "usage") { __costMinor = String(event.costMinor ?? "0"); }
+      await onEvent(event);
+    };
     // Canonical streaming inference route — /api/v1/chat/completions is the
     // non-streaming JSON compatibility surface and silently yields zero SSE
     // events, so the chat panel must stream from the canonical route.
@@ -293,19 +304,19 @@ export class CapixClient {
       if (raw === "[DONE]") return;
       let parsed: any; try { parsed = JSON.parse(raw); } catch { return; }
       // Canonical Capix stream contract (@capix/contracts inference-stream).
-      if (parsed.type === "capix.route") { await onEvent({ type: "route", receiptId: String(parsed.receiptId ?? ""), model: String(parsed.modelCapability ?? (input && (input as any).model) ?? ""), region: String(parsed.region ?? "global"), privacy: parsed.privacyClass }); return; }
-      if (parsed.type === "content.delta") { await onEvent({ type: "delta", content: typeof parsed.content === "string" ? parsed.content : "", toolCalls: undefined }); return; }
-      if (parsed.type === "tool.delta") { await onEvent({ type: "delta", content: undefined, toolCalls: [{ id: parsed.toolCallId, function: parsed.function, index: parsed.index }] }); return; }
-      if (parsed.type === "capix.usage") { await onEvent({ type: "usage", inputTokens: Number(parsed.inputUnits ?? 0), outputTokens: Number(parsed.outputUnits ?? 0), costMinor: usageCostToMicroUsd(parsed.provisionalCost), currency: "USD" }); return; }
-      if (parsed.type === "capix.final") { await onEvent({ type: "final", finishReason: String(parsed.finishReason ?? "stop"), receiptId: String(parsed.receiptId ?? "") }); return; }
+      if (parsed.type === "capix.route") { await __track({ type: "route", receiptId: String(parsed.receiptId ?? ""), model: String(parsed.modelCapability ?? (input && (input as any).model) ?? ""), region: String(parsed.region ?? "global"), privacy: parsed.privacyClass }); return; }
+      if (parsed.type === "content.delta") { await __track({ type: "delta", content: typeof parsed.content === "string" ? parsed.content : "", toolCalls: undefined }); return; }
+      if (parsed.type === "tool.delta") { await __track({ type: "delta", content: undefined, toolCalls: [{ id: parsed.toolCallId, function: parsed.function, index: parsed.index }] }); return; }
+      if (parsed.type === "capix.usage") { await __track({ type: "usage", inputTokens: Number(parsed.inputUnits ?? 0), outputTokens: Number(parsed.outputUnits ?? 0), costMinor: usageCostToMicroUsd(parsed.provisionalCost), currency: "USD" }); return; }
+      if (parsed.type === "capix.final") { await __track({ type: "final", finishReason: String(parsed.finishReason ?? "stop"), receiptId: String(parsed.receiptId ?? "") }); return; }
       if (parsed.type === "capix.error") throw new CapixApiError(Number(parsed.status ?? 500), String(parsed.capixCode ?? "inference_error"));
       // OpenAI-compatible chunks (compatibility surface / older gateways).
       const choice = parsed.choices?.[0];
-      if (choice?.delta?.content !== undefined || choice?.delta?.tool_calls !== undefined) await onEvent({ type: "delta", content: choice.delta.content, toolCalls: choice.delta.tool_calls });
-      if (parsed.capix?.receiptId || parsed.receiptId) await onEvent({ type: "route", receiptId: parsed.capix?.receiptId ?? parsed.receiptId, model: parsed.model ?? (input && (input as any).model), region: parsed.capix?.region ?? "global", privacy: parsed.capix?.privacy });
-      if (parsed.usage) await onEvent({ type: "usage", inputTokens: Number(parsed.usage.prompt_tokens ?? 0), outputTokens: Number(parsed.usage.completion_tokens ?? 0), costMinor: String(parsed.usage.cost_minor ?? parsed.capix?.costMinor ?? "0"), currency: String(parsed.usage.currency ?? parsed.capix?.currency ?? "USD") });
+      if (choice?.delta?.content !== undefined || choice?.delta?.tool_calls !== undefined) await __track({ type: "delta", content: choice.delta.content, toolCalls: choice.delta.tool_calls });
+      if (parsed.capix?.receiptId || parsed.receiptId) await __track({ type: "route", receiptId: parsed.capix?.receiptId ?? parsed.receiptId, model: parsed.model ?? (input && (input as any).model), region: parsed.capix?.region ?? "global", privacy: parsed.capix?.privacy });
+      if (parsed.usage) await __track({ type: "usage", inputTokens: Number(parsed.usage.prompt_tokens ?? 0), outputTokens: Number(parsed.usage.completion_tokens ?? 0), costMinor: String(parsed.usage.cost_minor ?? parsed.capix?.costMinor ?? "0"), currency: String(parsed.usage.currency ?? parsed.capix?.currency ?? "USD") });
     };
-    try { while (true) { const chunk = await reader.read(); if (chunk.done) break; buffer += decoder.decode(chunk.value, { stream: true }); let i: number; while ((i = buffer.indexOf("\n")) >= 0) { const line = buffer.slice(0, i).replace(/\r$/, ""); buffer = buffer.slice(i + 1); if (!line) { if (data.length) await emit(data.join("\n")); data = []; } else if (line.startsWith("data:")) data.push(line.slice(5).trimStart()); } } if (data.length) await emit(data.join("\n")); } finally { reader.releaseLock(); }
+    try { while (true) { const chunk = await reader.read(); if (chunk.done) break; buffer += decoder.decode(chunk.value, { stream: true }); let i: number; while ((i = buffer.indexOf("\n")) >= 0) { const line = buffer.slice(0, i).replace(/\r$/, ""); buffer = buffer.slice(i + 1); if (!line) { if (data.length) await emit(data.join("\n")); data = []; } else if (line.startsWith("data:")) data.push(line.slice(5).trimStart()); } } if (data.length) await emit(data.join("\n")); } finally { reader.releaseLock(); routeStats.record({ latencyMs: Date.now() - __t0, model: __model, region: __region, costMinor: __costMinor }); }
   }
 
   // ── Model catalog ──────────────────────────────────────────────────────
