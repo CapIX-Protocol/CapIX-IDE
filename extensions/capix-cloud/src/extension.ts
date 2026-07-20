@@ -41,6 +41,28 @@ export function activate(context: vscode.ExtensionContext): void {
 	deploymentsProvider = new DeploymentsTreeProvider(broker);
 	billingProvider = new BillingTreeProvider(broker);
 	context.subscriptions.push(
+		vscode.commands.registerCommand("capix.cloud.refreshDeployments", () =>
+			deploymentsProvider.refresh(),
+		),
+		vscode.commands.registerCommand("capix.cloud.refreshBilling", () =>
+			billingProvider.refresh(),
+		),
+		vscode.commands.registerCommand("capix.cloud.createDeployment", () =>
+			createDeployment(broker, deploymentsProvider),
+		),
+		vscode.commands.registerCommand(
+			"capix.cloud.deleteDeployment",
+			(node?: DeploymentNode) => deleteDeployment(broker, deploymentsProvider, node),
+		),
+		vscode.commands.registerCommand("capix.cloud.showOperation", (node?: DeploymentNode) =>
+			showOperation(broker, node),
+		),
+		vscode.commands.registerCommand("capix.cloud.cancelOperation", (node?: DeploymentNode) =>
+			cancelOperation(broker, node),
+		),
+		vscode.commands.registerCommand("capix.cloud.viewReceipt", (node?: InvoiceNode | ReceiptNode) =>
+			viewReceipt(broker, node),
+		),
 		vscode.commands.registerCommand("capix.cloud.openWebConsole", () =>
 			vscode.env.openExternal(
 				vscode.Uri.parse("https://www.capix.network/cloud"),
@@ -147,9 +169,32 @@ async function cancelOperation(
 
 async function viewReceipt(
 	broker: CapixCloudBroker,
-	node: InvoiceNode | ReceiptNode,
+	node?: InvoiceNode | ReceiptNode,
 ): Promise<void> {
-	const id = node instanceof InvoiceNode ? node.invoice.id : node.receipt.id;
+	let id: string | undefined;
+	if (node instanceof InvoiceNode) {
+		id = node.invoice.id;
+	} else if (node instanceof ReceiptNode) {
+		id = node.receipt.id;
+	} else {
+		// Invoked from the Command Palette without a tree node — let the user pick.
+		try {
+			const invoices = await broker.listInvoices();
+			const choice = await vscode.window.showQuickPick(
+				invoices.invoices.map((i) => ({
+					label: i.number || i.id,
+					description: i.status,
+					detail: i.id,
+				})),
+				{ placeHolder: "Select an invoice to view its receipt" },
+			);
+			id = choice?.detail;
+		} catch (err) {
+			handleError(err, "Load invoices failed");
+			return;
+		}
+	}
+	if (!id) return;
 	try {
 		const receipt: ReceiptView = await broker.getReceipt(id);
 		const panel = vscode.window.createWebviewPanel(
@@ -374,23 +419,23 @@ function isActive(state: DeploymentState): boolean {
 function stateIcon(state: DeploymentState): string {
 	switch (state) {
 		case "READY":
-			return "$(pass-filled)";
+			return "pass-filled";
 		case "FAILED":
 		case "TERMINATED":
-			return "$(error)";
+			return "error";
 		case "STOPPED":
 		case "STOPPING":
-			return "$(debug-stop)";
+			return "debug-stop";
 		case "DELETING":
-			return "$(trash)";
+			return "trash";
 		case "PROVISIONING":
 		case "BOOTSTRAPPING":
 		case "VERIFYING":
 		case "HOLD":
 		case "PENDING":
-			return "$(loading~spin)";
+			return "loading";
 		default:
-			return "$(circle)";
+			return "circle";
 	}
 }
 
