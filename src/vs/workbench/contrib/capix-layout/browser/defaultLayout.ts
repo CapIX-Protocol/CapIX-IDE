@@ -15,7 +15,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
-import { IViewContainersRegistry, IViewDescriptorService, ViewContainerLocations, ViewContainerLocation } from '../../../common/views.js';
+import { IViewContainersRegistry, IViewDescriptorService, ViewContainersRegistry, ViewContainerLocation } from '../../../common/views.js';
 
 /** Applied-once marker, scoped to the profile so fresh profiles get the default too. */
 const APPLIED_KEY = 'capix.layout.defaultApplied.v2';
@@ -52,7 +52,7 @@ export class CapixDefaultLayoutContribution extends Disposable implements IWorkb
 			// Fast path: react the moment the container registers. NOTE: the
 			// registry event payload is { viewContainer, viewContainerLocation },
 			// not the container itself.
-			const listener = Registry.as<IViewContainersRegistry>(ViewContainerLocations.ViewContainersRegistry).onDidRegister(e => {
+			const listener = Registry.as<IViewContainersRegistry>(ViewContainersRegistry).onDidRegister(e => {
 				try {
 					if (e && e.viewContainer && e.viewContainer.id === CAPIX_CODE_CONTAINER_ID) {
 						this.tryDock();
