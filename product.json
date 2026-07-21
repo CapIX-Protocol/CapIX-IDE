@@ -30,18 +30,54 @@
 	"licenseFileName": "LICENSE.txt",
 	"licenseUrl": "https://github.com/CapIX-Protocol/CapIX-IDE/blob/main/LICENSE",
 	"reportIssueUrl": "https://github.com/CapIX-Protocol/CapIX-IDE/issues/new",
-	"builtInExtensions": [],
+	"builtInExtensions": [
+		{
+			"name": "jeanp413.open-remote-ssh",
+			"version": "0.2.0",
+			"repo": "https://github.com/jeanp413/open-remote-ssh",
+			"sha256": "4da3bcb0096d86a2d1251e8a2a57335ac27b1dd66a92085033bd52506512eda6"
+		},
+		{
+			"name": "jeanp413.open-remote-wsl",
+			"version": "0.0.5",
+			"repo": "https://github.com/jeanp413/open-remote-wsl",
+			"sha256": "f1025d8a2cf7a2e9b2876bf11d7c97180e597f90a722722c22a94c0d5975a355"
+		}
+	],
+	"extensionsGallery": {
+		"serviceUrl": "https://open-vsx.org/vscode/gallery",
+		"itemUrl": "https://open-vsx.org/vscode/item",
+		"resourceUrlTemplate": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}",
+		"controlUrl": "",
+		"accessTokenUrl": "",
+		"recommendationsUrl": ""
+	},
 	"linkProtectionTrustedDomains": [
 		"https://capix.network",
 		"https://www.capix.network",
 		"https://github.com/CapIX-Protocol/CapIX-IDE"
 	],
 	"configurationDefaults": {
-		"workbench.colorTheme": "Capix Dark",
+		"workbench.colorTheme": "capix-dark",
 		"workbench.secondarySideBar.defaultVisibility": "visible",
 		"workbench.editor.tabSizing": "shrink",
 		"editor.minimap.enabled": false,
 		"capix.inlineCompletion.enabled": true,
-		"capix.ai.autocomplete.enabled": true
+		"capix.ai.autocomplete.enabled": true,
+		"workbench.colorCustomizations": {
+			"statusBar.background": "#070b10",
+			"statusBar.foreground": "#94a3b8",
+			"statusBar.border": "#ffffff0f",
+			"statusBar.noFolderBackground": "#070b10",
+			"statusBar.debuggingBackground": "#ff5252",
+			"statusBarItem.hoverBackground": "#ffffff0a",
+			"statusBarItem.activeBackground": "#3DCED633",
+			"statusBarItem.remoteBackground": "#3DCED6",
+			"statusBarItem.remoteForeground": "#0a0e14",
+			"titleBar.activeBackground": "#070b10",
+			"titleBar.activeForeground": "#94a3b8",
+			"titleBar.inactiveBackground": "#070b10",
+			"titleBar.border": "#ffffff0f"
+		}
 	}
 }
