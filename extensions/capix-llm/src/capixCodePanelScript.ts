@@ -5,6 +5,7 @@
  */
 
 import { SLASH_HTML } from "./capixCodePanelStyles";
+import { icon } from "./webviewIcons";
 
 export const PANEL_SCRIPT = `
   const vscode = acquireVsCodeApi();
