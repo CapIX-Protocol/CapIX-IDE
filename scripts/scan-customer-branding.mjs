@@ -5,7 +5,9 @@ import path from "node:path";
 const sourceOnly = process.argv.includes("--source-only");
 const target = process.argv.slice(2).find((arg) => arg !== "--source-only");
 const root = path.resolve(target || ".");
-const forbidden = /\b(opencode|vast|hetzner|void|vscode|visual studio code|code-oss|cursor|windsurf)\b/i;
+// Note: "vscode" is intentionally excluded — it's a standard engine/API dependency
+// reference in package.json (engines.vscode, @types/vscode) and not a branding issue.
+const forbidden = /\b(opencode|vast|hetzner|void|visual studio code|code-oss|cursor|windsurf)\b/i;
 const failures = [];
 function scanJson(file) {
   const value = JSON.parse(fs.readFileSync(file, "utf8"));

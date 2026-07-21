@@ -389,7 +389,7 @@
       },
       {
         "command": "capix.migrate.import",
-        "title": "Capix: Import Settings from VS Code / Cursor…",
+        "title": "Capix: Import Settings from Another Editor…",
         "icon": "$(cloud-download)"
       }
     ],
