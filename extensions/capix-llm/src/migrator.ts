@@ -33,6 +33,35 @@ interface SourceIde {
 
 const PROMPTED_KEY = "capix.migrate.prompted.v1";
 const DONE_KEY = "capix.migrate.completed.v1";
+const THEME_ENFORCED_KEY = "capix.theme.enforced.v1";
+
+/**
+ * Theme values we may replace exactly once — the stock VS Code / Void themes
+ * an install typically carries over. Anything else counts as a deliberate
+ * user choice and is left alone.
+ */
+const STOCK_THEMES = new Set([
+  "",
+  "Default Dark Modern",
+  "Default Dark+",
+  "Default Light Modern",
+  "Default Light+",
+  "Default High Contrast",
+  "Default High Contrast Light",
+  "Visual Studio Dark",
+  "Visual Studio Light",
+  "Abyss",
+  "Kimbie Dark",
+  "Monokai",
+  "Monokai Dimmed",
+  "Quiet Light",
+  "Red",
+  "Solarized Dark",
+  "Solarized Light",
+  "Tomorrow Night Blue",
+  "Void Dark",
+  "Void Light",
+]);
 
 /** Keys the source must not clobber in the Capix settings file. */
 function isProtectedKey(key: string): boolean {
@@ -321,11 +350,35 @@ async function maybePromptMigration(context: vscode.ExtensionContext): Promise<v
 }
 
 /**
+ * One-time brand theme enforcement. `configurationDefaults` only apply when
+ * the user has no explicit `workbench.colorTheme` setting, so installs that
+ * upgraded from stock VS Code/Void settings keep their old theme (stock
+ * purple status bar and all) forever. On first activation we move stock
+ * themes to Capix Dark; a deliberate non-stock choice is respected, and the
+ * guard key guarantees this never runs twice.
+ */
+async function enforceBrandTheme(context: vscode.ExtensionContext): Promise<void> {
+  if (context.globalState.get<string>(THEME_ENFORCED_KEY)) return;
+  await context.globalState.update(THEME_ENFORCED_KEY, new Date().toISOString());
+  try {
+    const config = vscode.workspace.getConfiguration("workbench");
+    const current = config.get<string>("colorTheme", "");
+    if (current === "capix-dark" || current === "Capix Dark") return;
+    const explicit = config.inspect<string>("colorTheme")?.globalValue;
+    if (explicit !== undefined && !STOCK_THEMES.has(explicit)) return;
+    await config.update("colorTheme", "capix-dark", vscode.ConfigurationTarget.Global);
+  } catch (err) {
+    logger.warn("theme enforcement failed", { error: String(err) });
+  }
+}
+
+/**
  * Register the import command and schedule the first-run nudge. Hosted from
  * `registerInlineCompletions` (activation plumbing lives there so extension.ts
  * stays untouched).
  */
 export function registerMigration(context: vscode.ExtensionContext): void {
+  void enforceBrandTheme(context);
   context.subscriptions.push(
     vscode.commands.registerCommand("capix.migrate.import", () => runMigration(context)),
   );
