@@ -47,7 +47,7 @@ class SiteItem extends vscode.TreeItem {
 
   static info(label: string): SiteItem {
     const item = new SiteItem(label, "info", vscode.TreeItemCollapsibleState.None);
-    item.iconPath = new vscode.ThemeIcon("$(info)");
+    item.iconPath = new vscode.ThemeIcon("info");
     return item;
   }
 }
@@ -80,7 +80,7 @@ export class WebsiteTreeProvider implements vscode.TreeDataProvider<SiteItem> {
         const status = (err as { status?: number }).status;
         if (status === 401) logger.info("Website resources are waiting for a refreshed Capix session");
         else if (status === 503) logger.info("Website resources are temporarily unavailable");
-        else logger.error("WebsiteTreeProvider.load failed", { error: String(err) });
+        else logger.warn("WebsiteTreeProvider.load failed", { error: String(err) });
         this.websites = [];
         this.details.clear();
       }
@@ -104,7 +104,7 @@ export class WebsiteTreeProvider implements vscode.TreeDataProvider<SiteItem> {
       return this.websites.map((w) => {
         const item = new SiteItem(w.name, "website", vscode.TreeItemCollapsibleState.Collapsed);
         item.description = w.productionUrl ? w.productionUrl : "no production URL";
-        item.iconPath = new vscode.ThemeIcon("$(globe)");
+        item.iconPath = new vscode.ThemeIcon("globe");
         item.tooltip = `${w.name}\nRepo: ${w.repo}\nFramework: ${w.framework}\nStatus: ${w.status}\nProduction: ${w.productionUrl || "(none)"}${w.lastDeployAt ? `\nLast deploy: ${new Date(w.lastDeployAt).toLocaleString()}` : ""}`;
         (item as SiteItem & { _websiteId?: string })._websiteId = w.id;
         return item;
@@ -144,7 +144,7 @@ export class WebsiteTreeProvider implements vscode.TreeDataProvider<SiteItem> {
         command: "capix.openInstance", title: "Open", arguments: [p.deployId],
       });
       item.description = `${p.status} · ${new Date(p.createdAt).toLocaleDateString()}`;
-      item.iconPath = new vscode.ThemeIcon("$(rocket)");
+      item.iconPath = new vscode.ThemeIcon("rocket");
       item.tooltip = `Branch: ${p.branch}\nURL: ${p.url}\nStatus: ${p.status}\nDeployed: ${new Date(p.createdAt).toLocaleString()}`;
       items.push(item);
     } else {
@@ -162,7 +162,7 @@ export class WebsiteTreeProvider implements vscode.TreeDataProvider<SiteItem> {
           command: "capix.openInstance", title: "Open", arguments: [pv.deployId],
         });
         item.description = `${pv.status} · ${new Date(pv.createdAt).toLocaleDateString()}`;
-        item.iconPath = new vscode.ThemeIcon("$(git-branch)");
+        item.iconPath = new vscode.ThemeIcon("git-branch");
         item.tooltip = `Label: ${pv.label}\nBranch: ${pv.branch}\nURL: ${pv.url}\nStatus: ${pv.status}\nCreated: ${new Date(pv.createdAt).toLocaleString()}\nExpires: ${new Date(pv.expiresAt).toLocaleString()}`;
         items.push(item);
       }
@@ -178,7 +178,7 @@ export class WebsiteTreeProvider implements vscode.TreeDataProvider<SiteItem> {
         const item = new SiteItem(d.domain, "domain", vscode.TreeItemCollapsibleState.None);
         const primaryTag = d.primary ? " · primary" : "";
         item.description = `${d.status}${primaryTag}${d.tlsExpiry ? ` · TLS ${new Date(d.tlsExpiry).toLocaleDateString()}` : ""}`;
-        item.iconPath = new vscode.ThemeIcon(d.status === "verified" ? "$(link)" : "$(warning)");
+        item.iconPath = new vscode.ThemeIcon(d.status === "verified" ? "link" : "warning");
         item.tooltip = `Domain: ${d.domain}\nStatus: ${d.status}\nPrimary: ${d.primary ? "yes" : "no"}${d.tlsExpiry ? `\nTLS expires: ${new Date(d.tlsExpiry).toLocaleString()}` : ""}`;
         items.push(item);
       }
@@ -192,7 +192,7 @@ export class WebsiteTreeProvider implements vscode.TreeDataProvider<SiteItem> {
         command: "capix.viewLogs", title: "View logs", arguments: [build.buildId],
       });
       item.description = `${build.status} · ${Math.round(build.durationMs / 1000)}s · ${new Date(build.startedAt).toLocaleDateString()}`;
-      item.iconPath = new vscode.ThemeIcon(build.status === "success" ? "$(check)" : build.status === "failed" ? "$(error)" : "$(loading~spin)");
+      item.iconPath = new vscode.ThemeIcon(build.status === "success" ? "check" : build.status === "failed" ? "error" : "loading");
       item.tooltip = `Build: ${build.buildId}\nStatus: ${build.status}\nStarted: ${new Date(build.startedAt).toLocaleString()}\nDuration: ${Math.round(build.durationMs / 1000)}s${build.logUrl ? `\nLogs: ${build.logUrl}` : ""}`;
       items.push(item);
     } else {
@@ -205,7 +205,7 @@ export class WebsiteTreeProvider implements vscode.TreeDataProvider<SiteItem> {
   private sectionHeader(label: string, count: number, kind: WebsiteNodeKind): SiteItem {
     const item = new SiteItem(label, kind, vscode.TreeItemCollapsibleState.None);
     item.description = String(count);
-    item.iconPath = new vscode.ThemeIcon("$(folder)");
+    item.iconPath = new vscode.ThemeIcon("folder");
     return item;
   }
 }

@@ -1,0 +1,13 @@
+diff --git a/src/vs/workbench/contrib/void/browser/void.contribution.ts b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+index 35c8918..c0ffee1 100644
+--- a/src/vs/workbench/contrib/void/browser/void.contribution.ts
++++ b/src/vs/workbench/contrib/void/browser/void.contribution.ts
+@@ -21,5 +21,8 @@
+ // register Autocomplete
+ // import './autocompleteService.js'
+ 
++// CapixIDE first-run layout: dock the Capix Code chat on the right (secondary side bar).
++import '../../capix-layout/browser/defaultLayout.js'
++
+ // register Context services
+ // import './contextGatheringService.js'

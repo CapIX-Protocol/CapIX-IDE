@@ -54,7 +54,10 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
         const res = await this.client.listInstances();
         this.instances = res.instances;
       } catch (err) {
-        logger.error('InstancesTreeProvider.load failed', { error: String(err) });
+        const status = (err as { status?: number }).status;
+        if (status === 401) logger.info('Instances are waiting for a refreshed Capix session');
+        else if (status === 503) logger.info('Instances are temporarily unavailable');
+        else logger.warn('InstancesTreeProvider.load failed', { error: String(err) });
         this.instances = [];
       }
       this.refresh();
@@ -84,10 +87,10 @@ export class InstancesTreeProvider implements vscode.TreeDataProvider<CloudItem>
       item.description = `${inst.status} · $${microToDisplay(dollarsToMicro(inst.costUsdPerHour), 2)}/hr`;
       item.iconPath = new vscode.ThemeIcon(
         inst.status === 'running'
-          ? '$(vm-active)'
+          ? 'vm-active'
           : inst.status === 'stopped'
-            ? '$(vm-outline)'
-            : '$(vm-connect)'
+            ? 'vm-outline'
+            : 'vm-connect'
       );
       item.tooltip = `${inst.tier}\n${inst.nodes.length} node(s) · since ${new Date(inst.startedAt).toLocaleString()}`;
       item.contextValue = `capix-instance-${inst.status}`;
@@ -120,7 +123,7 @@ export class CloudItem extends vscode.TreeItem {
 
   static info(label: string): CloudItem {
     const item = new CloudItem(label, 'capix-info', vscode.TreeItemCollapsibleState.None);
-    item.iconPath = new vscode.ThemeIcon('$(info)');
+    item.iconPath = new vscode.ThemeIcon('info');
     return item;
   }
 }

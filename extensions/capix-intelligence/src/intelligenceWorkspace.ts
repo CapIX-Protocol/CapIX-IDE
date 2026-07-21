@@ -40,6 +40,7 @@ import {
 	graphControllerScript,
 	graphStyles,
 } from "./graphRenderer.js";
+import { icon } from "./webviewIcons.js";
 
 // ── Navigation ──────────────────────────────────────────────────────────────
 
@@ -499,12 +500,12 @@ ${csp}
 <body>
   <header class="ws-header">
     <div class="ws-title">
-      <span class="ws-mark">$(sparkle)</span>
+      <span class="ws-mark">${icon("sparkle")}</span>
       <span class="ws-name">Intelligence</span>
       <span class="ws-sub">${esc(this.updatedLabel())}</span>
     </div>
     <div class="ws-actions">
-      <button class="btn btn-mini" data-action="refresh" title="Refresh">$(refresh)</button>
+      <button class="btn btn-mini" data-action="refresh" title="Refresh">${icon("refresh")}</button>
     </div>
   </header>
   <nav class="nav-bar">${tabs}</nav>
@@ -683,10 +684,10 @@ ${csp}
           </div>
           <div class="mem-related">${related}</div>
           <div class="mem-actions">
-            <button class="icon-btn" data-action="expandMemory" data-id="${esc(n.id)}" title="Expand">$(chevron-down)</button>
-            <button class="icon-btn" data-action="editMemory" data-id="${esc(n.id)}" title="Edit">$(edit)</button>
-            <button class="icon-btn danger" data-action="deleteMemory" data-id="${esc(n.id)}" title="Supersede">$(discard)</button>
-            ${n.anchorTx ? `<span class="anchor-pill" title="${esc(n.anchorTx)}">on-chain</span>` : `<button class="icon-btn" data-action="anchorMemory" data-id="${esc(n.id)}" title="Anchor on-chain">$(link)</button>`}
+            <button class="icon-btn" data-action="expandMemory" data-id="${esc(n.id)}" title="Expand">${icon("chevron-down")}</button>
+            <button class="icon-btn" data-action="editMemory" data-id="${esc(n.id)}" title="Edit">${icon("edit")}</button>
+            <button class="icon-btn danger" data-action="deleteMemory" data-id="${esc(n.id)}" title="Supersede">${icon("discard")}</button>
+            ${n.anchorTx ? `<span class="anchor-pill" title="${esc(n.anchorTx)}">on-chain</span>` : `<button class="icon-btn" data-action="anchorMemory" data-id="${esc(n.id)}" title="Anchor on-chain">${icon("link")}</button>`}
           </div>
         </div>
       </div>`;
@@ -863,7 +864,7 @@ ${csp}
 
 		return `
       <section class="card">
-        <div class="section-head"><h2>Work Receipts</h2><button class="btn btn-mini" data-action="refresh">$(refresh)</button></div>
+        <div class="section-head"><h2>Work Receipts</h2><button class="btn btn-mini" data-action="refresh">${icon("refresh")}</button></div>
         <div class="rcpt-head">
           <span>status</span><span>id</span><span>task</span><span>cost</span><span>merkle</span><span>chain</span><span></span>
         </div>

@@ -1,7 +1,7 @@
 {
   "name": "capix-llm",
   "displayName": "Capix LLM",
-  "description": "Deploy and manage LLM endpoints on the Capix GPU network \u2014 right from the IDE.",
+  "description": "Deploy and manage LLM endpoints on the Capix GPU network — right from the IDE.",
   "version": "2.3.2",
   "publisher": "capix",
   "license": "Apache-2.0",
@@ -78,12 +78,12 @@
       },
       {
         "command": "capix.deployModel",
-        "title": "Capix: Deploy LLM\u2026",
+        "title": "Capix: Deploy LLM…",
         "icon": "$(rocket)"
       },
       {
         "command": "capix.deployCustomModel",
-        "title": "Capix: Deploy Custom Model (Hugging Face link)\u2026",
+        "title": "Capix: Deploy Custom Model (Hugging Face link)…",
         "icon": "$(add)"
       },
       {
@@ -146,7 +146,7 @@
       },
       {
         "command": "capix.infra.architectPlan",
-        "title": "Capix: Architect Mode \u2014 Plan Infra\u2026",
+        "title": "Capix: Architect Mode — Plan Infra…",
         "icon": "$(symbol-misc)"
       },
       {
@@ -159,12 +159,12 @@
       },
       {
         "command": "capix.execOnInstance",
-        "title": "Capix: Run Command on GPU Instance\u2026",
+        "title": "Capix: Run Command on GPU Instance…",
         "icon": "$(terminal)"
       },
       {
         "command": "capix.topUp",
-        "title": "Capix: Top Up Wallet Balance\u2026",
+        "title": "Capix: Top Up Wallet Balance…",
         "icon": "$(credit-card)"
       },
       {
@@ -189,7 +189,7 @@
       },
       {
         "command": "capix.downloadSshKey",
-        "title": "Capix: Download SSH Key\u2026",
+        "title": "Capix: Download SSH Key…",
         "icon": "$(key)"
       },
       {
@@ -214,17 +214,17 @@
       },
       {
         "command": "capix.deployAgent",
-        "title": "Capix: Deploy Agent (GitHub repo)\u2026",
+        "title": "Capix: Deploy Agent (GitHub repo)…",
         "icon": "$(github)"
       },
       {
         "command": "capix.triggerJob",
-        "title": "Capix: Trigger Serverless Job\u2026",
+        "title": "Capix: Trigger Serverless Job…",
         "icon": "$(play)"
       },
       {
         "command": "capix.createApiKey",
-        "title": "Capix: Create API Key\u2026",
+        "title": "Capix: Create API Key…",
         "icon": "$(add)"
       },
       {
@@ -234,7 +234,7 @@
       },
       {
         "command": "capix.covenantRemember",
-        "title": "Capix: Remember (Save to Memory)\u2026"
+        "title": "Capix: Remember (Save to Memory)…"
       },
       {
         "command": "capix.covenantClear",
@@ -247,11 +247,11 @@
       },
       {
         "command": "capix.setRouteMode",
-        "title": "Capix: Set Routing Mode (Auto / Private / Loop)\u2026"
+        "title": "Capix: Set Routing Mode (Auto / Private / Loop)…"
       },
       {
         "command": "capix.deployPrivateLlm",
-        "title": "Capix: Deploy Private LLM (Uncensored)\u2026",
+        "title": "Capix: Deploy Private LLM (Uncensored)…",
         "icon": "$(shield)"
       },
       {
@@ -269,50 +269,50 @@
       },
       {
         "command": "capix.routerBlockModel",
-        "title": "Capix: Block Model (Never Suggest)\u2026"
+        "title": "Capix: Block Model (Never Suggest)…"
       },
       {
         "command": "capix.routerFavorModel",
-        "title": "Capix: Favor Model (Always Prefer)\u2026"
+        "title": "Capix: Favor Model (Always Prefer)…"
       },
       {
         "command": "capix.setLayout",
-        "title": "Capix: Switch Layout\u2026",
+        "title": "Capix: Switch Layout…",
         "icon": "$(layout)"
       },
       {
         "command": "capix.cloud.deploy",
-        "title": "Capix: New Cloud Resource\u2026",
+        "title": "Capix: New Cloud Resource…",
         "icon": "$(add)"
       },
       {
         "command": "capix.cloud.create.vm",
-        "title": "Capix: New Virtual Machine\u2026",
+        "title": "Capix: New Virtual Machine…",
         "icon": "$(vm)"
       },
       {
         "command": "capix.cloud.create.gpu",
-        "title": "Capix: New Dedicated GPU\u2026",
+        "title": "Capix: New Dedicated GPU…",
         "icon": "$(symbol-misc)"
       },
       {
         "command": "capix.cloud.create.model",
-        "title": "Capix: New Private Model\u2026",
+        "title": "Capix: New Private Model…",
         "icon": "$(shield)"
       },
       {
         "command": "capix.cloud.create.container",
-        "title": "Capix: New Container Service\u2026",
+        "title": "Capix: New Container Service…",
         "icon": "$(package)"
       },
       {
         "command": "capix.cloud.create.website",
-        "title": "Capix: New Website\u2026",
+        "title": "Capix: New Website…",
         "icon": "$(globe)"
       },
       {
         "command": "capix.cloud.create.job",
-        "title": "Capix: New Serverless Job\u2026",
+        "title": "Capix: New Serverless Job…",
         "icon": "$(zap)"
       },
       {
@@ -322,7 +322,7 @@
       },
       {
         "command": "capix.runOn",
-        "title": "Capix: Run on\u2026",
+        "title": "Capix: Run on…",
         "icon": "$(device-desktop)"
       },
       {
@@ -357,7 +357,7 @@
       },
       {
         "command": "capix.setDestination",
-        "title": "Capix: Switch Destination\u2026"
+        "title": "Capix: Switch Destination…"
       },
       {
         "command": "capix.onboarding",
@@ -366,7 +366,7 @@
       },
       {
         "command": "capix.selectModel",
-        "title": "Capix: Select Model\u2026",
+        "title": "Capix: Select Model…",
         "icon": "$(hub)"
       },
       {
@@ -381,6 +381,16 @@
       {
         "command": "capix.inlineCompletion.reject",
         "title": "Capix: Dismiss Inline Suggestion"
+      },
+      {
+        "command": "capix.inlineEdit",
+        "title": "Capix: Inline Edit (select code, then Cmd/Ctrl-K)",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "capix.migrate.import",
+        "title": "Capix: Import Settings from VS Code / Cursor…",
+        "icon": "$(cloud-download)"
       }
     ],
     "keybindings": [
@@ -398,6 +408,12 @@
         "command": "capix.inlineCompletion.toggle",
         "key": "ctrl+alt+space",
         "mac": "cmd+alt+space"
+      },
+      {
+        "command": "capix.inlineEdit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "editorTextFocus"
       }
     ],
     "menus": {},

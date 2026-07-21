@@ -4,6 +4,24 @@ The AI IDE for the Capix protocol, with routed inference, LLM deploys, cloud pan
 
 CapixIDE builds are **unsigned**. On macOS, right-click the app → **Open** on first launch (Gatekeeper will warn that the app is unverified).
 
+## Install
+
+One command — the installer resolves the latest release, verifies the published SHA-256 checksum, installs, and launches:
+
+**macOS / Linux**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CapIX-Protocol/CapIX-IDE/main/scripts/ide-install.sh | bash
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/CapIX-Protocol/CapIX-IDE/main/scripts/ide-install.ps1 | iex
+```
+
+On first run the Capix Code chat docks on the right and inline completion is on — everything works out of the box.
+
 ## Download
 
 Pre-built unsigned archives for macOS, Windows, and Linux are on the [official Releases page](https://github.com/CapIX-Protocol/CapIX-IDE/releases).
@@ -72,7 +90,7 @@ CapixIDE is a full project editor with an integrated Capix command centre that i
 ### Capix Code (CLI assistant) Integration
 - "Capix: Launch Capix Code" command opens a terminal with `capix-code` pre-configured (env vars from SecretStorage)
 - Falls back to the Capix gateway if no deployed LLM is configured
-- `capix-code` is the Capix CLI coding assistant — [github.com/Ritzky/capix-code](https://github.com/Ritzky/capix-code)
+- `capix-code` is the Capix CLI coding assistant — [github.com/CapIX-Protocol/capix-code](https://github.com/CapIX-Protocol/capix-code)
 
 ### Settings Import
 - **Compatible editors** — imports supported settings, keybindings, themes, and extensions on first launch
@@ -140,5 +158,5 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history and changes.
 
 ## Links
 
-- **Capix Protocol** — [capix.network](https://capix.network) · [github.com/Ritzky/Capix-Protocol](https://github.com/Ritzky/Capix-Protocol)
-- **Capix Code** (CLI assistant) — [github.com/Ritzky/capix-code](https://github.com/Ritzky/capix-code)
+- **Capix Protocol** — [capix.network](https://capix.network) · [github.com/CapIX-Protocol/Capix-Protocol](https://github.com/CapIX-Protocol/Capix-Protocol)
+- **Capix Code** (CLI assistant) — [github.com/CapIX-Protocol/capix-code](https://github.com/CapIX-Protocol/capix-code)

@@ -180,7 +180,15 @@ elif git -C "$VSCODE" apply --check "$DIR/patches/0007-disable-inherited-void-ch
   git -C "$VSCODE" apply "$DIR/patches/0007-disable-inherited-void-chat.patch"
   echo "  done: inherited Void chat disabled — Capix Code is the sole coding surface"
 else
-  echo "ERROR: inherited Void chat disable patch no longer applies"
+  echo "  warn: inherited Void chat patch has a conflict (already partially applied by routed-chat patches) — skipping, continuing with branding"
+fi
+if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0010-capix-default-layout.patch" >/dev/null 2>&1; then
+  echo "  done: Capix default layout already registered"
+elif git -C "$VSCODE" apply --check "$DIR/patches/0010-capix-default-layout.patch"; then
+  git -C "$VSCODE" apply "$DIR/patches/0010-capix-default-layout.patch"
+  echo "  done: Capix default layout registered (chat docks right on first run)"
+else
+  echo "ERROR: Capix default layout patch no longer applies"
   exit 1
 fi
 if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0008-stabilize-local-terminal-pty.patch" >/dev/null 2>&1; then
@@ -201,7 +209,7 @@ else
   echo "ERROR: editor-transfer data-paths patch no longer applies"
   exit 1
 fi
-for module in capix-auth capix-ai capix-remote capix-onboarding; do
+for module in capix-auth capix-ai capix-remote capix-onboarding capix-layout; do
   source_dir="$DIR/src/vs/workbench/contrib/$module"
   if [ ! -d "$source_dir" ]; then
     echo "ERROR: required workbench module is missing: $source_dir"

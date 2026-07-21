@@ -1,3 +1,4 @@
+
 /**
  * Run-On selector — the execution-target model for CapixIDE and Capix Code.
  *
@@ -18,6 +19,7 @@
 
 import * as vscode from "vscode";
 import { logger } from "./logger";
+import { RouteStatusBar } from "./routeStats";
 
 export type RunOnTarget = "local" | "capix-cloud" | "remote-machine";
 
@@ -108,6 +110,9 @@ export class RunOnSelector {
   private readonly handlers = new Set<(config: RunOnConfig) => void>();
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    // Route cost/latency meter next to the run-target command (capix.runOn).
+    // Self-registers into context.subscriptions.
+    new RouteStatusBar(context);
     void this.load();
   }
 

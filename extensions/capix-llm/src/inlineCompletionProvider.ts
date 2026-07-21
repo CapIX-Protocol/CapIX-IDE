@@ -21,6 +21,8 @@
 import * as vscode from "vscode";
 import { createHash } from "node:crypto";
 import { logger } from "./logger";
+import { registerInlineEdit } from "./inlineEdit";
+import { registerMigration } from "./migrator";
 
 /** Server-authoritative router target; the gateway picks the model. */
 const FALLBACK_MODEL = "capix/auto";
@@ -281,6 +283,8 @@ export function registerInlineCompletions(
   client: CompletionInferenceClient
 ): CapixInlineCompletionProvider {
   const provider = new CapixInlineCompletionProvider(client);
+  registerInlineEdit(context, client);
+  registerMigration(context);
   void vscode.commands.executeCommand(
     "setContext",
     "capix.inlineCompletion.enabled",

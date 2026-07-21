@@ -18,6 +18,7 @@
  *-------------------------------------------------------------------------------------------*/
 
 import type { GraphData, GraphEdge, GraphNode } from "./types.js";
+import { icon } from "./webviewIcons.js";
 
 // ── Palette ────────────────────────────────────────────────────────────────
 
@@ -329,7 +330,7 @@ export function renderGraphSvg(
     </svg>
   </div>
   <div class="graph-detail" id="graph-detail" hidden>
-    <button class="icon-btn" data-action="closeDetail" title="Close">$(close)</button>
+    <button class="icon-btn" data-action="closeDetail" title="Close">${icon("close")}</button>
     <div id="graph-detail-body"></div>
   </div>
   <div class="graph-legend">${legendEntries.join("")}</div>
@@ -545,45 +546,45 @@ export function graphControllerScript(): string {
 /** CSS for the graph SVG + chrome. Sourced from @capix/ui-tokens dark theme. */
 export function graphStyles(): string {
 	return `
-.graph-stage { position: relative; height: 100%; min-height: 380px; display: flex; flex-direction: column; }
-.graph-viewport { flex: 1; overflow: hidden; position: relative; background: #070b10; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
-#graph-svg { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-#graph-svg:active { cursor: grabbing; }
-.graph-viewport.dragging #graph-svg { cursor: grabbing; }
-.edge { transition: stroke 0.15s; }
-.edge-label, .node-label { font-family: var(--capix-font-mono, 'JetBrains Mono', monospace); font-size: 9px; fill: rgba(148,163,184,0.85); pointer-events: none; user-select: none; }
-.edge-label { fill: rgba(148,163,184,0.55); font-size: 8px; }
-.node { cursor: pointer; transition: opacity 0.15s; }
-.node circle { transition: stroke 0.15s, r 0.1s; }
-.node:hover circle { stroke: #fff; stroke-width: 2; }
-.node.selected circle { stroke: var(--capix-cyan, #3DCED6); stroke-width: 3; filter: drop-shadow(0 0 6px rgba(61,206,214,0.7)); }
-.node.hidden, .edge.hidden { display: none; }
-.node.collapsed circle { opacity: 0.25; }
-.graph-detail {
-  position: absolute; top: 10px; right: 10px; z-index: 5;
-  background: rgba(10,14,20,0.96); border: 1px solid rgba(61,206,214,0.30);
-  border-radius: 8px; padding: 10px 12px; min-width: 180px; max-width: 260px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.50);
-}
-.detail-title { font-weight: 600; font-size: 12px; color: #f1efe9; margin-bottom: 6px; word-break: break-word; }
-.detail-meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #94a3b8; margin-bottom: 8px; flex-wrap: wrap; }
-.detail-type { text-transform: uppercase; letter-spacing: 0.06em; }
-.detail-id { font-family: var(--capix-font-mono, 'JetBrains Mono', monospace); font-size: 9px; color: #64748b; }
-.detail-actions { display: flex; gap: 6px; }
-.legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-.graph-legend {
-  position: absolute; bottom: 10px; left: 10px; z-index: 4;
-  background: rgba(10,14,20,0.92); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px; padding: 6px 8px; font-size: 10px; color: #94a3b8;
-  max-height: 140px; overflow-y: auto; max-width: 180px;
-}
-.graph-legend .legend-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; cursor: pointer; }
-.graph-status {
-  position: absolute; bottom: 10px; right: 10px; z-index: 4;
-  background: rgba(10,14,20,0.92); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px; padding: 3px 8px; font-size: 10px; color: #94a3b8;
-  font-family: var(--capix-font-mono, 'JetBrains Mono', monospace);
-}`;
+	.graph-stage { position: relative; height: 100%; min-height: 380px; display: flex; flex-direction: column; }
+	.graph-viewport { flex: 1; overflow: hidden; position: relative; background: #070b10; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
+	#graph-svg { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+	#graph-svg:active { cursor: grabbing; }
+	.graph-viewport.dragging #graph-svg { cursor: grabbing; }
+	.edge { transition: stroke 0.15s; }
+	.edge-label, .node-label { font-family: var(--capix-font-mono, 'JetBrains Mono', monospace); font-size: 9px; fill: rgba(148,163,184,0.85); pointer-events: none; user-select: none; }
+	.edge-label { fill: rgba(148,163,184,0.55); font-size: 8px; }
+	.node { cursor: pointer; transition: opacity 0.15s; }
+	.node circle { transition: stroke 0.15s, r 0.1s; }
+	.node:hover circle { stroke: #fff; stroke-width: 2; }
+	.node.selected circle { stroke: var(--capix-cyan, #3DCED6); stroke-width: 3; filter: drop-shadow(0 0 6px rgba(61,206,214,0.7)); }
+	.node.hidden, .edge.hidden { display: none; }
+	.node.collapsed circle { opacity: 0.25; }
+	.graph-detail {
+	  position: absolute; top: 10px; right: 10px; z-index: 5;
+	  background: rgba(10,14,20,0.96); border: 1px solid rgba(61,206,214,0.30);
+	  border-radius: 8px; padding: 10px 12px; min-width: 180px; max-width: 260px;
+	  box-shadow: 0 12px 32px rgba(0,0,0,0.50);
+	}
+	.detail-title { font-weight: 600; font-size: 12px; color: #f1efe9; margin-bottom: 6px; word-break: break-word; }
+	.detail-meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #94a3b8; margin-bottom: 8px; flex-wrap: wrap; }
+	.detail-type { text-transform: uppercase; letter-spacing: 0.06em; }
+	.detail-id { font-family: var(--capix-font-mono, 'JetBrains Mono', monospace); font-size: 9px; color: #64748b; }
+	.detail-actions { display: flex; gap: 6px; }
+	.legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+	.graph-legend {
+	  position: absolute; bottom: 10px; left: 10px; z-index: 4;
+	  background: rgba(10,14,20,0.92); border: 1px solid rgba(255,255,255,0.08);
+	  border-radius: 6px; padding: 6px 8px; font-size: 10px; color: #94a3b8;
+	  max-height: 140px; overflow-y: auto; max-width: 180px;
+	}
+	.graph-legend .legend-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; cursor: pointer; }
+	.graph-status {
+	  position: absolute; bottom: 10px; right: 10px; z-index: 4;
+	  background: rgba(10,14,20,0.92); border: 1px solid rgba(255,255,255,0.08);
+	  border-radius: 6px; padding: 3px 8px; font-size: 10px; color: #94a3b8;
+	  font-family: var(--capix-font-mono, 'JetBrains Mono', monospace);
+	}`;
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
