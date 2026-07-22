@@ -99,7 +99,7 @@ CapixIDE is a full project editor with an integrated Capix command centre that i
 ### Other
 - **Capix logo + branding** — the activity bar icon is the real Capix brand mark, the status bar shows connection state, the sidebar is titled "Capix"
 - **Extension marketplace** — uses [Open VSX](https://open-vsx.org) (license-clean)
-- **Cross-platform** — `.dmg`, `.exe`, `.deb`, `.rpm`, AppImage via GitHub Actions
+- **Cross-platform** — portable, checksummed `.tar.gz` builds for macOS/Linux and `.zip` builds for Windows via GitHub Actions
 - **Security** — session tokens and API keys remain in the operating system credential store, with webview CSP, per-render nonces, an SSH command allowlist, and pinned host-key verification
 
 ## Quick start (users)
@@ -132,7 +132,7 @@ To package distributable installers:
 ```bash
 ./scripts/build.sh
 # Current-platform output paths are listed in INSTALL.md.
-./scripts/package-release.sh v2.3.12 darwin arm64
+./scripts/package-release.sh v2.3.13 darwin arm64
 ```
 
 For CI/cross-platform release builds, tag a version and the [Release workflow](.github/workflows/release.yml) builds the four supported targets in parallel: macOS arm64/x64, Linux x64, and Windows x64.

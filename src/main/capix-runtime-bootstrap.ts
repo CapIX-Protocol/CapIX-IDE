@@ -120,9 +120,13 @@ export function createControlPlaneSdk(origin: string, auth: CapixNativePkceAuth,
 	}
 
 	async function* streamInference(input: unknown, signal?: AbortSignal): AsyncGenerator<unknown> {
+		// One logical inference attempt (including a token-refresh retry) must
+		// retain one idempotency key so the canonical paid route cannot debit or
+		// execute twice when authentication rotates mid-request.
+		const idempotencyKey = randomUUID();
 		async function performRequest(token: string, isRetry: boolean): Promise<Response> {
 			const url = new URL("/api/v1/inference/chat/completions", origin);
-			const response = await fetchImpl(url, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
+			const response = await fetchImpl(url, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "text/event-stream", "idempotency-key": idempotencyKey }, body: JSON.stringify(input), signal });
 			if (response.status === 401 && !isRetry) {
 				const refreshed = await auth.getAccessToken();
 				return performRequest(refreshed.token, true);

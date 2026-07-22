@@ -60,22 +60,22 @@ jobs:
             ## Installation (UNSIGNED)
 
             This artifact is unsigned. To install on macOS:
-            1. Download the DMG
-            2. Verify SHA-256: `shasum -a 256 CapixIDE-*.dmg`
-            3. Open with Gatekeeper bypass: right-click → Open (or `xattr -cr /Applications/CapixIDE.app`)
+            1. Download the `.tar.gz` archive and adjacent `.sha256` file for your architecture
+            2. Verify it: `shasum -a 256 -c CapixIDE-*.tar.gz.sha256`
+            3. Extract it, copy `CapixIDE.app` to Applications, then control-click → Open
 
             ### Windows Installation (UNSIGNED)
 
             This artifact is unsigned. To install on Windows:
-            1. Download the `.exe` installer
-            2. Verify SHA-256: `certutil -hashfile CapixIDE-*.exe SHA256`
-            3. If SmartScreen appears, click "More info" → "Run anyway"
+            1. Download the `.zip` archive and adjacent `.sha256` file
+            2. Verify it with `Get-FileHash` as documented in `INSTALL.md`
+            3. Extract it and run `CapixIDE.exe`; if SmartScreen appears, click "More info" → "Run anyway"
 
             ### Linux Installation
 
-            1. Download the `.AppImage` or `.deb`
-            2. Verify SHA-256: `sha256sum CapixIDE-*.AppImage`
-            3. For AppImage: `chmod +x CapixIDE-*.AppImage && ./CapixIDE-*.AppImage`
+            1. Download the `.tar.gz` archive and adjacent `.sha256` file
+            2. Verify it: `sha256sum -c CapixIDE-*.tar.gz.sha256`
+            3. Extract it and follow the user-local installation commands in `INSTALL.md`
 
             If checksums do not match, the artifact may be tampered with — **do not install**.
 

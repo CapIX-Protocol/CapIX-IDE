@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.13
+
+- Add a stable idempotency key to every native Capix inference stream, including authentication-refresh retries, so IDE chat requests satisfy the production gateway contract without risking duplicate billing.
+- Make the release verifier fail closed when the native inference transport omits idempotency protection.
+- Correct customer release instructions to describe the portable, checksummed archives actually published by CI.
+
 ## 2.3.12
 
 - Bundle the immutable Capix Code 2.4.6 runtime whose cross-platform publication pipeline is fully verified.

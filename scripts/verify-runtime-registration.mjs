@@ -13,6 +13,13 @@ for (const file of ["capix-broker.ts", "capix-ipc-registration.ts", "capix-nativ
 }
 const mainSource = fs.readFileSync(path.join(vscodeRoot, "src", "main.ts"), "utf8");
 if (!mainSource.includes("startCapixNativeRuntime(product)")) fail("native runtime is not invoked by the Electron main-process entrypoint");
+const runtimeSource = fs.readFileSync(path.join(vscodeRoot, "src", "main", "capix-runtime-bootstrap.ts"), "utf8");
+if (!runtimeSource.includes('"idempotency-key": idempotencyKey')) {
+  fail("native inference does not send the canonical paid-route idempotency key");
+}
+if (!runtimeSource.includes("const idempotencyKey = randomUUID()")) {
+  fail("native inference does not reuse one idempotency key across auth refresh retries");
+}
 
 function fail(message) {
   console.error(`ERROR: Capix runtime registration verification failed: ${message}`);
