@@ -80,7 +80,9 @@ jobs:
             If checksums do not match, the artifact may be tampered with — **do not install**.
 
             Source commit: ${{ github.sha }}
-          draft: false
+          # Keep the release out of `/releases/latest` until the mandatory
+          # platform matrix and exact asset checks have succeeded.
+          draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -362,5 +364,6 @@ jobs:
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: release-assets/*
+          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
