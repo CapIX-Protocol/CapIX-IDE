@@ -297,7 +297,18 @@ export class CapixClient {
     // Canonical streaming inference route — /api/v1/chat/completions is the
     // non-streaming JSON compatibility surface and silently yields zero SSE
     // events, so the chat panel must stream from the canonical route.
-    const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/inference/chat/completions`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(input), signal });
+    const res = await this.authenticatedFetch(`${this.baseUrl}/api/v1/inference/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        // One key per logical user send. The authenticatedFetch 401 refresh
+        // replay reuses this RequestInit, preventing a second ledger hold.
+        "Idempotency-Key": randomUUID(),
+      },
+      body: JSON.stringify(input),
+      signal,
+    });
     if (!res.ok || !res.body) throw new CapixApiError(res.status, `inference_failed_${res.status}`);
     const reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; let data: string[] = [];
     const emit = async (raw: string) => {
@@ -621,7 +632,10 @@ export class CapixClient {
 
   // ── Chat (OpenAI-compatible gateway — for auto-connect) ────────────────
   async chat(body: { messages: Array<{ role: string; content: string }>; model?: string; max_tokens?: number }, apiKey?: string): Promise<{ ok: boolean; capix?: { route: string; tokensBilled: number; usdCost: number } }> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Idempotency-Key": randomUUID(),
+    };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     else Object.assign(headers, await this.getAuthHeaders());
     const res = await fetch(`${this.baseUrl}/api/v1/chat/completions`, {

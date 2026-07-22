@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("vscode", () => ({
+  EventEmitter: class {
+    event = vi.fn();
+    fire = vi.fn();
+    dispose = vi.fn();
+  },
   workspace: {
     getConfiguration: () => ({ get: (_key: string, def?: unknown) => def, update: vi.fn() }),
   },
@@ -57,8 +62,11 @@ describe("CapixClient.streamAgentChat (canonical inference stream)", () => {
     await client.streamAgentChat({ model: "auto", messages: [{ role: "user", content: "hi" }], stream: true }, new AbortController().signal, async (event) => { events.push(event); });
 
     const url = String((fetchMock.mock.calls[0] as any[])[0]);
+    const init = (fetchMock.mock.calls[0] as any[])[1] as RequestInit;
     expect(url).toBe("https://www.capix.network/api/v1/inference/chat/completions");
     expect(url).not.toContain("/api/v1/chat/completions");
+    const headers = new Headers(init.headers);
+    expect(headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
   it("maps capix.route/content.delta/capix.usage/capix.final into client stream events", async () => {
