@@ -314,9 +314,9 @@ test "$(node --version)" = "v20.18.2"
 ./scripts/build.sh
 ```
 
-The unsigned output is `VSCode-darwin-arm64/CapixIDE.app` on Apple silicon,
-`VSCode-darwin-x64/CapixIDE.app` on Intel macOS,
-`VSCode-linux-x64/` on x86_64 Linux, and `VSCode-win32-x64/` on Windows.
+The unsigned output is a `CapixIDE.app` bundle on macOS and a portable CapixIDE
+directory on Linux and Windows. The build command prints the exact local path
+for the selected platform.
 Package and checksum a completed build with the version in `product.json`:
 
 ```bash
