@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.14
+
+- Bundle the immutable Capix Code 2.4.9 runtime with the latest Capix Intelligence and Smart Router release gates.
+- Publish the macOS, Linux, and Windows artifacts atomically only after every mandatory archive and checksum exists.
+- Keep customer installation and build terminology Capix-native.
+
 ## 2.3.13
 
 - Add a stable idempotency key to every native Capix inference stream, including authentication-refresh retries, so IDE chat requests satisfy the production gateway contract without risking duplicate billing.
