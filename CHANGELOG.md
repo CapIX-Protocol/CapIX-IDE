@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.9
+
+- Bundle the immutable Capix Code 2.4.3 runtime and its corrected cross-platform release packaging.
+
 ## 2.3.8
 
 - Bundle the immutable Capix Code 2.4.2 runtime with merged-balance support.
