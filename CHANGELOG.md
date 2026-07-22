@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.10
+
+- Pin the single-publisher Capix Code 2.4.4 runtime for coherent cross-platform releases.
+
 ## 2.3.9
 
 - Bundle the immutable Capix Code 2.4.3 runtime and its corrected cross-platform release packaging.

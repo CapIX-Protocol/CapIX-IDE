@@ -132,7 +132,7 @@ To package distributable installers:
 ```bash
 ./scripts/build.sh
 # Current-platform output paths are listed in INSTALL.md.
-./scripts/package-release.sh v2.3.9 darwin arm64
+./scripts/package-release.sh v2.3.10 darwin arm64
 ```
 
 For CI/cross-platform release builds, tag a version and the [Release workflow](.github/workflows/release.yml) builds the four supported targets in parallel: macOS arm64/x64, Linux x64, and Windows x64.
