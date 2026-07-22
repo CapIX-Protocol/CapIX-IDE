@@ -18,7 +18,7 @@ permissions:
 
 env:
   # Immutable Capix Code runtime paired with this CapixIDE release.
-  CAPIX_CODE_SHA: 14fb123f88edfa0bb948e8a44a432e9f94424aa6
+  CAPIX_CODE_SHA: d0912410b05c9ae6d7542d57b5ad893c7b7d3031
 
 jobs:
   create-release:

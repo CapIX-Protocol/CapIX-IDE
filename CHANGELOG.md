@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.12
+
+- Bundle the immutable Capix Code 2.4.6 runtime whose cross-platform publication pipeline is fully verified.
+
 ## 2.3.11
 
 - Bundle the immutable Capix Code 2.4.5 runtime with corrected, fully branded release metadata.
