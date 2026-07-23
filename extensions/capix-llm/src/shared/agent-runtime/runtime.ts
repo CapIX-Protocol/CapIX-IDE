@@ -82,7 +82,13 @@ export interface ModelRequest {
   modelId: string;
   mode: AgentMode;
   specialist?: SpecialistAgent;
+  workspaceRoot: string;
   messages: Array<{ role: string; content: string }>;
+  tools: Array<{
+    name: string;
+    description: string;
+    riskClass: ToolDefinition['riskClass'];
+  }>;
   signal?: AbortSignal;
 }
 
@@ -324,9 +330,28 @@ export class CapixAgentRuntime implements AgentRuntime {
       const history = this.store
         .listMessages(sessionId)
         .map((m) => ({ role: m.role, content: m.content }));
-      const conversation = specialist
-        ? [{ role: 'system', content: specialist.systemPrompt }, ...history]
-        : history;
+      const profile = getModeProfile(mode);
+      const availableTools = this.tools
+        .list()
+        .filter((tool) => profile.toolAllowlist === null || profile.toolAllowlist.includes(tool.name))
+        .map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          riskClass: tool.riskClass,
+        }));
+      const baseSystemPrompt = [
+        'You are Capix Code, the native coding agent inside CapixIDE.',
+        `You are attached to the open workspace at ${workspaceRoot}.`,
+        'You can inspect this workspace through the supplied tools. Never claim that you cannot access the codebase.',
+        'For codebase questions, inspect the repository with tools before answering; do not guess from the user prompt.',
+        'Work iteratively: inspect, reason, use tools when needed, verify their output, then answer with concrete file-level evidence.',
+        `Current mode: ${mode} (${profile.description}). Respect its permission boundary.`,
+      ].join(' ');
+      const conversation = [
+        { role: 'system', content: baseSystemPrompt },
+        ...(specialist ? [{ role: 'system', content: specialist.systemPrompt }] : []),
+        ...history,
+      ];
 
       for (let round = 0; round <= this.maxToolRounds; round++) {
         let toolCall: { toolName: string; args: Record<string, unknown> } | null = null;
@@ -335,7 +360,9 @@ export class CapixAgentRuntime implements AgentRuntime {
           modelId,
           mode,
           specialist: specialist ?? undefined,
+          workspaceRoot,
           messages: conversation,
+          tools: availableTools,
           signal: controller.signal,
         })) {
           if (controller.signal.aborted) break;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.21
+
+- Prevent incomplete cloud inventory records from crashing resource details and SSH actions.
+- Restore working Capix Cloud action controls with visible labels and defensive API response handling.
+- Give Capix Code read-only workspace discovery, search, and orientation tools so codebase questions use real file evidence.
+
 ## 2.3.20
 
 - Package the Electron-compatible native session-store binding required by Capix Code.

@@ -14,8 +14,8 @@
  */
 
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
-import { isAbsolute, resolve, sep } from 'node:path';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { ToolRiskClass } from './modes.js';
 
 export interface ToolContext {
@@ -77,6 +77,50 @@ export function resolveWorkspacePath(workspaceRoot: string, filePath: string): s
 }
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
+const MAX_DISCOVERY_FILES = 500;
+const MAX_SEARCH_MATCHES = 100;
+const IGNORED_DIRECTORIES = new Set([
+  '.git',
+  '.hg',
+  '.svn',
+  'node_modules',
+  'out',
+  'dist',
+  'build',
+  'coverage',
+  '.next',
+  '.turbo',
+]);
+
+async function discoverWorkspaceFiles(
+  workspaceRoot: string,
+  startPath = '.',
+  maxFiles = MAX_DISCOVERY_FILES
+): Promise<string[]> {
+  const root = resolve(workspaceRoot);
+  const start = resolveWorkspacePath(root, startPath);
+  const files: string[] = [];
+  const pending = [start];
+
+  while (pending.length > 0 && files.length < maxFiles) {
+    const directory = pending.shift()!;
+    const entries = await readdir(directory, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') && entry.name !== '.github') continue;
+      if (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name)) continue;
+      const absolute = resolve(directory, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(absolute);
+      } else if (entry.isFile()) {
+        files.push(relative(root, absolute));
+        if (files.length >= maxFiles) break;
+      }
+    }
+  }
+
+  return files;
+}
 
 function runShell(command: string, cwd: string, timeoutMs: number): Promise<ToolResult> {
   return new Promise((resolvePromise) => {
@@ -103,6 +147,26 @@ function runShell(command: string, cwd: string, timeoutMs: number): Promise<Tool
 export function createBuiltinTools(): ToolDefinition[] {
   return [
     {
+      name: 'list_files',
+      description:
+        'List workspace files recursively from an optional directory. Build artifacts and dependency directories are excluded.',
+      riskClass: 'read',
+      async execute(args, ctx) {
+        const startPath = String(args.path ?? '.');
+        const requestedLimit = Number(args.limit ?? MAX_DISCOVERY_FILES);
+        const limit = Number.isFinite(requestedLimit)
+          ? Math.max(1, Math.min(MAX_DISCOVERY_FILES, Math.floor(requestedLimit)))
+          : MAX_DISCOVERY_FILES;
+        const files = await discoverWorkspaceFiles(ctx.workspaceRoot, startPath, limit);
+        return {
+          output: files.length
+            ? files.join('\n')
+            : `no files found under ${startPath}`,
+          metadata: { count: files.length, truncated: files.length >= limit },
+        };
+      },
+    },
+    {
       name: 'read_file',
       description: 'Read a file from the workspace.',
       riskClass: 'read',
@@ -110,6 +174,76 @@ export function createBuiltinTools(): ToolDefinition[] {
         const path = resolveWorkspacePath(ctx.workspaceRoot, String(args.path ?? ''));
         const content = await readFile(path, 'utf8');
         return { output: content };
+      },
+    },
+    {
+      name: 'capix_search_codebase',
+      description:
+        'Search text across workspace source files and return matching file paths and line numbers.',
+      riskClass: 'read',
+      async execute(args, ctx) {
+        const query = String(args.query ?? '').trim();
+        if (!query) return { output: 'query is required', isError: true };
+        const files = await discoverWorkspaceFiles(ctx.workspaceRoot);
+        const matches: string[] = [];
+        for (const file of files) {
+          if (matches.length >= MAX_SEARCH_MATCHES) break;
+          try {
+            const content = await readFile(resolveWorkspacePath(ctx.workspaceRoot, file), 'utf8');
+            const lines = content.split(/\r?\n/);
+            for (let index = 0; index < lines.length; index++) {
+              if (lines[index].toLocaleLowerCase().includes(query.toLocaleLowerCase())) {
+                matches.push(`${file}:${index + 1}: ${lines[index].trim().slice(0, 240)}`);
+                if (matches.length >= MAX_SEARCH_MATCHES) break;
+              }
+            }
+          } catch {
+            // Binary, unreadable, and transient files are skipped.
+          }
+        }
+        return {
+          output: matches.length ? matches.join('\n') : `no matches for ${query}`,
+          metadata: { count: matches.length, truncated: matches.length >= MAX_SEARCH_MATCHES },
+        };
+      },
+    },
+    {
+      name: 'capix_find_references',
+      description:
+        'Find textual references to a symbol or identifier throughout the workspace.',
+      riskClass: 'read',
+      async execute(args, ctx) {
+        const symbol = String(args.symbol ?? args.query ?? '').trim();
+        if (!symbol) return { output: 'symbol is required', isError: true };
+        const searchTool = createBuiltinTools().find(
+          (tool) => tool.name === 'capix_search_codebase'
+        )!;
+        return searchTool.execute({ query: symbol }, ctx);
+      },
+    },
+    {
+      name: 'capix_get_orientation',
+      description:
+        'Get an initial map of the workspace so you can identify manifests, documentation, source roots, tests, and entry points before answering.',
+      riskClass: 'read',
+      async execute(_args, ctx) {
+        const files = await discoverWorkspaceFiles(ctx.workspaceRoot, '.', 250);
+        const important = files.filter((file) =>
+          /(^|\/)(readme[^/]*|package\.json|cargo\.toml|pyproject\.toml|go\.mod|makefile|dockerfile|compose[^/]*|[^/]*config\.[^/]+)$/i.test(
+            file
+          )
+        );
+        return {
+          output: [
+            `Workspace: ${ctx.workspaceRoot}`,
+            'Important files:',
+            ...(important.length ? important.slice(0, 60) : ['(none detected)']),
+            '',
+            'Workspace file sample:',
+            ...files.slice(0, 190),
+          ].join('\n'),
+          metadata: { filesScanned: files.length, importantFiles: important.length },
+        };
       },
     },
     {

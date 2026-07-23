@@ -510,6 +510,15 @@ export class AgentRuntimeEngine {
         model: req.modelId === "capix/auto" ? "auto" : req.modelId,
         messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
         stream: true,
+        tools: req.tools.map((tool) => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: toolParameters(tool.name),
+          },
+        })),
+        tool_choice: "auto",
       };
       if (this.routePreferences.preferredProvider && this.routePreferences.preferredProvider !== "auto") {
         input.preferredProvider = this.routePreferences.preferredProvider;
@@ -602,4 +611,84 @@ function toToolCallChunk(raw: unknown): ModelChunk | null {
     }
   }
   return { type: "tool_call", toolName: name, args };
+}
+
+/** Concrete JSON schemas keep routed models from inventing unusable arguments. */
+function toolParameters(name: string): Record<string, unknown> {
+  if (name === "list_files") {
+    return {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Optional workspace-relative directory" },
+        limit: { type: "integer", minimum: 1, maximum: 500 },
+      },
+      additionalProperties: false,
+    };
+  }
+  if (name === "read_file") {
+    return {
+      type: "object",
+      properties: { path: { type: "string", description: "Workspace-relative file path" } },
+      required: ["path"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "write_file") {
+    return {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Workspace-relative file path" },
+        content: { type: "string", description: "Complete file content" },
+      },
+      required: ["path", "content"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "edit_file") {
+    return {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Workspace-relative file path" },
+        old_string: { type: "string", description: "Exact text to replace" },
+        new_string: { type: "string", description: "Replacement text" },
+      },
+      required: ["path", "old_string", "new_string"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "bash") {
+    return {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "Shell command to run inside the workspace" },
+        timeout_ms: { type: "integer", minimum: 1, maximum: 120000 },
+      },
+      required: ["command"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "capix_search_codebase") {
+    return {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Text or symbol to search for" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "capix_find_references") {
+    return {
+      type: "object",
+      properties: {
+        symbol: { type: "string", description: "Identifier to find references for" },
+      },
+      required: ["symbol"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "capix_get_orientation") {
+    return { type: "object", properties: {}, additionalProperties: false };
+  }
+  return { type: "object", properties: {}, additionalProperties: true };
 }

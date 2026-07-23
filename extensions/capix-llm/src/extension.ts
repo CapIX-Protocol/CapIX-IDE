@@ -48,9 +48,7 @@ import { IntelligencePanelProvider } from "./intelligencePanel";
 import { EditPreviewPanel, type PreviewChange } from "./editPreviewPanel";
 import { WebControlManager } from "./webControl";
 import { WebControlPanel } from "./webControlPanel";
-import { createBrowserTools } from "./browserTools";
 import { InfraStackService } from "./infraStack";
-import { createInfraTools } from "./infraTools";
 import { InfraPanel } from "./infraPanel";
 import { ArchitectMode } from "./architectMode";
 import { registerInlineCompletions } from "./inlineCompletionProvider";
@@ -1161,7 +1159,8 @@ async function cmdOpenTerminal(item?: unknown) {
   }
   const pick = await vscode.window.showQuickPick(
     instancesProvider.instances.map((inst) => {
-      const node = inst.nodes.find((n) => n.sshAvailable) || inst.nodes[0];
+      const nodes = Array.isArray(inst.nodes) ? inst.nodes : [];
+      const node = nodes.find((n) => n.sshAvailable) || nodes[0];
       return {
         label: inst.tier,
         description: `${inst.status} · ${node?.location || "Capix network"}`,
@@ -1337,8 +1336,6 @@ async function cmdLaunchCapixCode() {
     }
   }
 
-  // Pass the routing mode to capix-code as an env var
-  const routeMode = smartRouter.getMode();
   await terminalManager.openCapixCode(baseUrl, apiKey, model);
 }
 

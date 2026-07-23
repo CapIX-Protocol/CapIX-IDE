@@ -101,8 +101,14 @@ export class ResourceDetailsProvider implements vscode.WebviewViewProvider {
   private async loadResource(id: string): Promise<ResourceSnapshot | null> {
     try {
       const inventory = await this.client.listInstances();
-      const match = inventory.instances.find((i) => i.id === id);
-      if (match) return match;
+      const instances = Array.isArray(inventory.instances) ? inventory.instances : [];
+      const match = instances.find((i) => i.id === id);
+      if (match) {
+        return {
+          ...match,
+          nodes: Array.isArray(match.nodes) ? match.nodes : [],
+        };
+      }
       return {
         id,
         tier: "Capix compute",
@@ -133,12 +139,13 @@ export class ResourceDetailsProvider implements vscode.WebviewViewProvider {
 
   private async pickResource(): Promise<string | undefined> {
     const inventory = await this.client.listInstances();
-    if (!inventory.instances.length) {
+    const instances = Array.isArray(inventory.instances) ? inventory.instances : [];
+    if (!instances.length) {
       vscode.window.showInformationMessage("No Capix resources to view yet.");
       return undefined;
     }
     const pick = await vscode.window.showQuickPick(
-      inventory.instances.map((i) => ({ label: i.tier, description: i.status, detail: i.id, id: i.id })),
+      instances.map((i) => ({ label: i.tier, description: i.status, detail: i.id, id: i.id })),
       { placeHolder: "Select a resource to view" },
     );
     return pick?.id;
@@ -219,7 +226,11 @@ ${csp}
     const created = new Date(s.startedAt || Date.now()).toLocaleString();
     const hourlyMicro = dollarsToMicro(s.costUsdPerHour || 0);
     const accruedMicro = this.estimateAccrued(s);
-    const node = s.nodes[0];
+    // Placement metadata is legitimately absent while an instance is queued
+    // and in older inventory rows. Keep the detail view interactive instead
+    // of indexing an undefined `nodes` property.
+    const nodes = Array.isArray(s.nodes) ? s.nodes : [];
+    const node = nodes[0];
     const region = node?.location || "Capix network";
     const gpu = node?.gpu || "—";
     const health = /running|active|ready|healthy/.test(status) ? "healthy" : status;
@@ -240,7 +251,7 @@ ${csp}
       <section class="rd-grid">
         <div class="rd-card">
           <h2>Specification</h2>
-          <div class="rd-spec">${this.specRows(s, gpu)}</div>
+          <div class="rd-spec">${this.specRows(s, gpu, nodes)}</div>
         </div>
         <div class="rd-card">
           <h2>Cost &amp; Usage</h2>
@@ -286,13 +297,17 @@ ${csp}
     return { label: status || "unknown", class: "badge-unknown" };
   }
 
-  private specRows(s: ResourceSnapshot, gpu: string): string {
+  private specRows(
+    s: ResourceSnapshot,
+    gpu: string,
+    nodes: ResourceSnapshot["nodes"] = Array.isArray(s.nodes) ? s.nodes : [],
+  ): string {
     const rows: Array<[string, string]> = [
       ["ID", s.id],
       ["Tier", s.tier],
       ["GPU", gpu],
-      ["Region", s.nodes[0]?.location || "Capix network"],
-      ["Nodes", String(s.nodes.length || 1)],
+      ["Region", nodes[0]?.location || "Placement pending"],
+      ["Nodes", String(nodes.length)],
     ];
     return rows.map(([k, v]) => `<div class="rd-spec-row"><span class="rd-spec-k">${esc(k)}</span><span class="rd-spec-v">${esc(v)}</span></div>`).join("");
   }
