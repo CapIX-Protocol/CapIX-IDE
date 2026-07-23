@@ -135,8 +135,13 @@ function nowIso(): string {
 }
 
 function requiresWorkspaceOrientation(content: string): boolean {
-  return /\b(codebase|repo(?:sitory)?|project structure|architecture|entry points?|where (?:do|should) i start|map (?:this|the) (?:project|workspace)|explain (?:this|the) (?:project|workspace))\b/i.test(
-    content
+  return (
+    /\b(codebase|repo(?:sitory)?|project structure|architecture|entry points?|where (?:do|should) i start|map (?:this|the) (?:project|workspace)|explain (?:this|the) (?:project|workspace)|fresh (?:folder|workspace)|empty (?:folder|workspace))\b/i.test(
+      content
+    )
+    || /\b(?:build|create|make|scaffold|implement)\b.{0,80}\b(?:website|site|app|application|project|demo)\b/i.test(
+      content
+    )
   );
 }
 
@@ -351,6 +356,8 @@ export class CapixAgentRuntime implements AgentRuntime {
         'You can inspect this workspace through the supplied tools. Never claim that you cannot access the codebase.',
         'For codebase questions, you MUST inspect the repository before answering; do not guess from the user prompt and do not ask the user to tell you the language, framework, or file layout that the workspace can prove.',
         'Work iteratively: inspect, reason, use tools when needed, verify their output, then answer with concrete file-level evidence.',
+        'Never repeat a workspace discovery tool after its result has already established the workspace state.',
+        'If the workspace is empty, treat that as complete discovery: do not inspect it again. In a write-capable mode, begin creating the requested files; in a read-only mode, give the concrete build plan and tell the user to switch to Build for edits.',
         `Current mode: ${mode} (${profile.description}). Respect its permission boundary.`,
       ].join(' ');
       const conversation = [
@@ -377,10 +384,21 @@ export class CapixAgentRuntime implements AgentRuntime {
           role: 'system',
           content: [
             'Automatic workspace orientation completed before inference.',
-            'Use the following repository evidence directly in your answer and inspect individual files further when needed.',
+            'This is already the result of workspace discovery. Do not call capix_get_orientation again and do not call list_files for the workspace root.',
+            orientation.includes('(none detected)') || orientation.includes('(no readable key files detected)')
+              ? mode === 'build' || mode === 'debug'
+                ? 'The workspace is empty. Start the requested implementation now with write_file; do not perform more discovery.'
+                : `The workspace is empty and ${mode} mode cannot create files. Give a concise, concrete plan and tell the user to select Build to implement it; do not perform more discovery.`
+              : 'Use the following repository evidence directly and inspect only specific files or subdirectories when additional evidence is needed.',
             orientation,
           ].join('\n\n'),
         });
+        // Orientation already proves the root listing. Mark the equivalent
+        // discovery calls complete so a routed model cannot burn repeated
+        // rounds asking the same question with syntactic argument variants.
+        executedToolCalls.add('capix_get_orientation:{}');
+        executedToolCalls.add('list_files:{}');
+        executedToolCalls.add('list_files:{"path":"."}');
       }
 
       for (let round = 0; round <= this.maxToolRounds; round++) {

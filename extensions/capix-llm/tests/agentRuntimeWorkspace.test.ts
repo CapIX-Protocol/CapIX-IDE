@@ -173,6 +173,9 @@ describe("Capix Code workspace-aware runtime", () => {
 
       expect(events.filter((event) => event.type === "tool.requested")).toHaveLength(1);
       expect(events.filter((event) => event.type === "tool.output")).toHaveLength(1);
+      expect(
+        events.find((event) => event.type === "tool.requested" && event.toolName === "list_files"),
+      ).toBeUndefined();
       expect(events.find((event) => event.type === "turn.failed")?.error.message).toContain(
         "agent_no_progress",
       );
