@@ -134,6 +134,12 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function requiresWorkspaceOrientation(content: string): boolean {
+  return /\b(codebase|repo(?:sitory)?|project structure|architecture|entry points?|where (?:do|should) i start|map (?:this|the) (?:project|workspace)|explain (?:this|the) (?:project|workspace))\b/i.test(
+    content
+  );
+}
+
 export class CapixAgentRuntime implements AgentRuntime {
   readonly version = RUNTIME_VERSION;
 
@@ -343,7 +349,7 @@ export class CapixAgentRuntime implements AgentRuntime {
         'You are Capix Code, the native coding agent inside CapixIDE.',
         `You are attached to the open workspace at ${workspaceRoot}.`,
         'You can inspect this workspace through the supplied tools. Never claim that you cannot access the codebase.',
-        'For codebase questions, inspect the repository with tools before answering; do not guess from the user prompt.',
+        'For codebase questions, you MUST inspect the repository before answering; do not guess from the user prompt and do not ask the user to tell you the language, framework, or file layout that the workspace can prove.',
         'Work iteratively: inspect, reason, use tools when needed, verify their output, then answer with concrete file-level evidence.',
         `Current mode: ${mode} (${profile.description}). Respect its permission boundary.`,
       ].join(' ');
@@ -352,9 +358,30 @@ export class CapixAgentRuntime implements AgentRuntime {
         ...(specialist ? [{ role: 'system', content: specialist.systemPrompt }] : []),
         ...history,
       ];
+      if (requiresWorkspaceOrientation(input.content)) {
+        const orientation = yield* this.executeToolCall(
+          emit,
+          sessionId,
+          turnId,
+          mode,
+          workspaceRoot,
+          'capix_get_orientation',
+          {},
+          controller.signal
+        );
+        conversation.push({
+          role: 'system',
+          content: [
+            'Automatic workspace orientation completed before inference.',
+            'Use the following repository evidence directly in your answer and inspect individual files further when needed.',
+            orientation,
+          ].join('\n\n'),
+        });
+      }
 
       for (let round = 0; round <= this.maxToolRounds; round++) {
-        let toolCall: { toolName: string; args: Record<string, unknown> } | null = null;
+        const toolCalls: Array<{ toolName: string; args: Record<string, unknown> }> = [];
+        const seenToolCalls = new Set<string>();
 
         for await (const chunk of this.modelInvoker({
           modelId,
@@ -379,7 +406,11 @@ export class CapixAgentRuntime implements AgentRuntime {
               delta: chunk.delta,
             } as unknown as AgentEvent);
           } else if (chunk.type === 'tool_call') {
-            toolCall = chunk;
+            const key = `${chunk.toolName}:${JSON.stringify(chunk.args)}`;
+            if (!seenToolCalls.has(key)) {
+              seenToolCalls.add(key);
+              toolCalls.push(chunk);
+            }
           } else if (chunk.type === 'usage') {
             totalInput += chunk.inputUnits;
             totalOutput += chunk.outputUnits;
@@ -400,24 +431,34 @@ export class CapixAgentRuntime implements AgentRuntime {
           break;
         }
 
-        if (!toolCall) break; // model is done
+        if (toolCalls.length === 0) break; // model is done
         finishReason = 'tool_calls';
 
-        const toolResult = yield* this.executeToolCall(
-          emit,
-          sessionId,
-          turnId,
-          mode,
-          workspaceRoot,
-          toolCall.toolName,
-          toolCall.args,
-          controller.signal
-        );
+        for (const toolCall of toolCalls) {
+          const toolResult = yield* this.executeToolCall(
+            emit,
+            sessionId,
+            turnId,
+            mode,
+            workspaceRoot,
+            toolCall.toolName,
+            toolCall.args,
+            controller.signal
+          );
 
-        conversation.push({
-          role: 'tool',
-          content: `tool ${toolCall.toolName}: ${toolResult}`,
-        });
+          // The canonical inference gateway accepts simple role/content
+          // messages. Preserve each observation as explicit system evidence
+          // so every routed model can reason over it without relying on an
+          // upstream-specific tool_call_id representation.
+          conversation.push({
+            role: 'system',
+            content: [
+              `<capix-tool-result name="${toolCall.toolName}">`,
+              toolResult,
+              '</capix-tool-result>',
+            ].join('\n'),
+          });
+        }
       }
 
       if (assistantText) {

@@ -224,7 +224,7 @@ export function createBuiltinTools(): ToolDefinition[] {
     {
       name: 'capix_get_orientation',
       description:
-        'Get an initial map of the workspace so you can identify manifests, documentation, source roots, tests, and entry points before answering.',
+        'Get an initial evidence-backed map of the workspace, including manifests, documentation, source roots, tests, entry points, and bounded excerpts from key files.',
       riskClass: 'read',
       async execute(_args, ctx) {
         const files = await discoverWorkspaceFiles(ctx.workspaceRoot, '.', 250);
@@ -233,6 +233,19 @@ export function createBuiltinTools(): ToolDefinition[] {
             file
           )
         );
+        const excerpts: string[] = [];
+        let excerptCharacters = 0;
+        for (const file of important.slice(0, 10)) {
+          if (excerptCharacters >= 16_000) break;
+          try {
+            const content = await readFile(resolveWorkspacePath(ctx.workspaceRoot, file), 'utf8');
+            const excerpt = content.slice(0, Math.min(3_000, 16_000 - excerptCharacters));
+            excerpts.push(`--- ${file} ---\n${excerpt}`);
+            excerptCharacters += excerpt.length;
+          } catch {
+            // A transient or non-text key file should not block orientation.
+          }
+        }
         return {
           output: [
             `Workspace: ${ctx.workspaceRoot}`,
@@ -241,8 +254,15 @@ export function createBuiltinTools(): ToolDefinition[] {
             '',
             'Workspace file sample:',
             ...files.slice(0, 190),
+            '',
+            'Key file excerpts:',
+            ...(excerpts.length ? excerpts : ['(no readable key files detected)']),
           ].join('\n'),
-          metadata: { filesScanned: files.length, importantFiles: important.length },
+          metadata: {
+            filesScanned: files.length,
+            importantFiles: important.length,
+            excerptCharacters,
+          },
         };
       },
     },

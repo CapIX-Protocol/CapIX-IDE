@@ -29,6 +29,7 @@ import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import { CapixClient } from "./apiClient";
 import { AgentRuntimeEngine, type EngineEvent, type EngineMode } from "./agentRuntimeEngine";
+import { CapixContextProvider } from "./contextProvider";
 import { logger } from "./logger";
 import type { ToolDefinition } from "./shared/agent-runtime/index";
 import { icon } from "./webviewIcons";
@@ -76,6 +77,7 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   private activeTab: CodeTab = "chat";
 
   private readonly engine: AgentRuntimeEngine;
+  private readonly context = new CapixContextProvider();
 
   /** Debounce handle for refreshing the diff panel after file_changed events. */
   private diffRefreshTimer: NodeJS.Timeout | null = null;
@@ -479,6 +481,27 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
         content += "\n\n" + blocks.map((b) => b.block).join("\n\n");
         contextFiles = [...(contextFiles ?? []), ...blocks.map((b) => b.name)];
       }
+    }
+
+    // Capix Code is an IDE-native coding agent, so every turn receives the
+    // workspace signals the editor already knows: active file/selection,
+    // project tree, git changes, diagnostics, symbols, and terminal state.
+    // The provider is aggressively bounded and failure-isolated.
+    try {
+      const snapshot = await this.context.collect();
+      const ambientContext = this.context.formatForPrompt(snapshot);
+      if (ambientContext) {
+        content += [
+          "",
+          "",
+          "<capix-ide-context>",
+          "This is live workspace evidence supplied by CapixIDE. Inspect it and use tools for any missing detail.",
+          ambientContext,
+          "</capix-ide-context>",
+        ].join("\n");
+      }
+    } catch (err) {
+      logger.info("CapixCode ambient context unavailable", { error: String(err) });
     }
 
     this.streaming = true;

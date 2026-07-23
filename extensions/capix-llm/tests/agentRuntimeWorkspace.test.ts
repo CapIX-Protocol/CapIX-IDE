@@ -57,6 +57,14 @@ describe("Capix Code workspace-aware runtime", () => {
       expect(requests[0].messages[0].content).toContain(
         "Never claim that you cannot access the codebase",
       );
+      expect(
+        requests[0].messages.some(
+          (message) =>
+            message.role === "system"
+            && message.content.includes("Automatic workspace orientation completed")
+            && message.content.includes('"name":"workspace-under-test"'),
+        ),
+      ).toBe(true);
       expect(requests[0].tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining([
           "list_files",
@@ -66,7 +74,9 @@ describe("Capix Code workspace-aware runtime", () => {
           "capix_get_orientation",
         ]),
       );
-      expect(requests[1].messages.at(-1)?.content).toContain("package.json");
+      expect(requests[1].messages.some((message) => message.content.includes("package.json"))).toBe(
+        true,
+      );
       expect(events.some((event) => event.type === "tool.output")).toBe(true);
       expect(
         events
@@ -74,6 +84,62 @@ describe("Capix Code workspace-aware runtime", () => {
           .map((event) => event.content)
           .join(""),
       ).toContain("workspace-under-test");
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("executes every distinct inspection requested in one model round", async () => {
+    const root = await mkdtemp(join(tmpdir(), "capix-runtime-multitool-"));
+    temporaryDirectories.push(root);
+    await writeFile(join(root, "package.json"), '{"name":"multi-tool-workspace"}');
+    await writeFile(join(root, "entry.ts"), 'export const answer = 42;');
+
+    const requests: ModelRequest[] = [];
+    const runtime = new CapixAgentRuntime({
+      dbPath: join(root, "runtime.db"),
+      workspaceRoot: root,
+      modelInvoker: async function* (request) {
+        requests.push(request);
+        if (requests.length === 1) {
+          yield { type: "tool_call", toolName: "read_file", args: { path: "package.json" } } as const;
+          yield { type: "tool_call", toolName: "read_file", args: { path: "entry.ts" } } as const;
+          return;
+        }
+        yield { type: "text", delta: "The entry exports answer from entry.ts." } as const;
+      },
+    });
+
+    try {
+      const session = await runtime.createSession({
+        workspaceRoot: root,
+        modelId: "capix/auto",
+        mode: "ask",
+      });
+      const events = [];
+      for await (const event of runtime.sendMessage({
+        sessionId: session.id,
+        content: "Inspect package.json and entry.ts.",
+      })) {
+        events.push(event);
+      }
+
+      expect(requests).toHaveLength(2);
+      expect(
+        requests[1].messages.some(
+          (message) =>
+            message.content.includes('<capix-tool-result name="read_file">')
+            && message.content.includes("multi-tool-workspace"),
+        ),
+      ).toBe(true);
+      expect(
+        requests[1].messages.some(
+          (message) =>
+            message.content.includes('<capix-tool-result name="read_file">')
+            && message.content.includes("export const answer = 42"),
+        ),
+      ).toBe(true);
+      expect(events.filter((event) => event.type === "tool.output")).toHaveLength(2);
     } finally {
       runtime.close();
     }

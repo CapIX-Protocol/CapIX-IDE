@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.23
+
+- Ground every Capix Code turn in live IDE context: active file and selection, repository structure, Git changes, diagnostics, symbols, and terminal state.
+- Automatically inspect manifests, entry points, documentation, and tests before answering broad codebase questions.
+- Execute every distinct model-requested inspection in a tool round instead of silently retaining only the final tool call.
+
 ## 2.3.22
 
 - Build the host-native session-store binding before workspace-runtime integration tests so cross-platform release gates can execute.
