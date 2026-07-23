@@ -1043,7 +1043,7 @@ const HUB_STYLES = `
   .state.subtle .btn { margin-top: 8px; }
 `;
 
-const HUB_SCRIPT = `
+export const HUB_SCRIPT = `
   const vscode = acquireVsCodeApi();
   const showWorking = () => {
     const status = document.getElementById('action-status');
@@ -1062,9 +1062,9 @@ const HUB_SCRIPT = `
       tab: target.dataset.tab || undefined
     });
   };
-  // Restore the persisted tab selection (getState/setState) on fresh loads.
-  const saved = vscode.getState();
-  if (saved && saved.tab) vscode.postMessage({ type: 'tab', tab: saved.tab });
+  // The extension host owns the active tab and renders it into the HTML.
+  // Posting a persisted tab here caused an infinite host → HTML → webview
+  // feedback loop on every render, starving all other button events.
   document.querySelectorAll('.hub-tab[data-tab]').forEach((target) => {
     target.addEventListener('click', () => {
       const tab = target.dataset.tab;

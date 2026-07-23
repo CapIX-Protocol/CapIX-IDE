@@ -614,8 +614,9 @@ export function esc(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
-export function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+export function truncate(s: unknown, n: number): string {
+  const value = typeof s === "string" ? s : s == null ? "" : String(s);
+  return value.length > n ? value.slice(0, n - 1) + "…" : value;
 }
 
 export function recency(iso: string): string {

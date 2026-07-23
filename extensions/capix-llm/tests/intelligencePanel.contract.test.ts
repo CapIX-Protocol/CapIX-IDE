@@ -6,8 +6,15 @@ vi.mock("vscode", () => ({
 }));
 
 import { intelligenceList } from "../src/intelligencePanel";
+import { truncate } from "../src/intelligencePanelAssets";
 
 describe("Intelligence canonical list contracts", () => {
+  it("renders malformed or partial text fields without crashing the panel", () => {
+    expect(truncate(undefined, 20)).toBe("");
+    expect(truncate(null, 20)).toBe("");
+    expect(truncate(1234, 20)).toBe("1234");
+  });
+
   it("reads the canonical paginated data array", () => {
     const items = [{ id: "mem_1" }];
     expect(intelligenceList({ data: items }, "memory")).toEqual(items);

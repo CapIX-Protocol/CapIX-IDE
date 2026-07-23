@@ -32,12 +32,18 @@ import {
   mapApiKeys,
   mapModels,
   mapAccount,
+  HUB_SCRIPT,
 } from '../src/cloudHub';
 import type { CatalogModel, HostedEndpoint, LlmDeploy } from '../src/types';
 
 // ── Tab state model ─────────────────────────────────────────────────────────
 
 describe('cloud hub tab state', () => {
+  it('does not repost restored tab state on every HTML render', () => {
+    expect(HUB_SCRIPT).not.toContain("vscode.postMessage({ type: 'tab', tab: saved.tab })");
+    expect(HUB_SCRIPT).toContain("vscode.postMessage({ type: 'webviewReady' })");
+  });
+
   it('offers exactly the seven consolidated tabs in order', () => {
     expect(CLOUD_HUB_TABS.map((t) => t.id)).toEqual([
       'overview',

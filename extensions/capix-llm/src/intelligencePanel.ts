@@ -232,7 +232,9 @@ export class IntelligencePanelProvider implements vscode.WebviewViewProvider {
         if (m.tab) this.handleNav(m.tab as IntelligenceTab);
         break;
       case "signIn":
-        void vscode.commands.executeCommand("capix.connectWallet");
+        // Always enter through the recovery flow so a stale/partially rotated
+        // refresh token cannot leave Intelligence permanently signed out.
+        void vscode.commands.executeCommand("capix.resetSessionAndSignIn");
         break;
       case "searchMemory":
         void actions.searchMemory(this, String(m.query ?? ""));
