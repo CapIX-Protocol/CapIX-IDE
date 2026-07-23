@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.15
+
+- Preserve the Code-OSS 1.x extension-host API version while keeping CapixIDE's customer-facing 2.3.15 release version, restoring built-in language servers and extension activation.
+- Remove inherited remote-client source and marketplace packages from local and CI builds.
+- Harden the release verifier and repair the IDE extension test harnesses; 339 extension tests pass.
+
 ## 2.3.14
 
 - Bundle the immutable Capix Code 2.4.9 runtime with the latest Capix Intelligence and Smart Router release gates.

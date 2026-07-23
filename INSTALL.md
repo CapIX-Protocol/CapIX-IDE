@@ -11,7 +11,7 @@ Never continue when a downloaded artifact does not match its adjacent SHA-256 fi
 ## Versioning
 
 Versions are immutable `vMAJOR.MINOR.PATCH` tags. The commands below pin
-CapixIDE `v2.3.14` and Capix Code `v2.4.9`, the current customer releases with
+CapixIDE `v2.3.15` and Capix Code `v2.4.9`, the current customer releases with
 attached customer artifacts and adjacent checksums. Do not substitute a newer
 tag unless its release page contains the exact archive and checksum filenames
 used below.
@@ -22,7 +22,7 @@ used below.
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v2.3.14
+IDE_VERSION=v2.3.15
 IDE_ARCH=arm64
 IDE_NAME="CapixIDE-${IDE_VERSION}-darwin-${IDE_ARCH}-unsigned"
 IDE_URL="https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/${IDE_VERSION}"
@@ -108,7 +108,7 @@ user's home directory and do not require sudo.
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v2.3.14
+IDE_VERSION=v2.3.15
 case "$(uname -m)" in
   x86_64) IDE_ARCH=x64 ;;
   *) echo "No verified CapixIDE artifact is published for this Linux architecture"; exit 1 ;;
@@ -182,7 +182,7 @@ Open **PowerShell** as the normal user. Administrator access is not required.
 
 ```powershell
 $ErrorActionPreference = "Stop"
-$IdeVersion = "v2.3.14"
+$IdeVersion = "v2.3.15"
 $IdeName = "CapixIDE-$IdeVersion-win32-x64-unsigned"
 $IdeUrl = "https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/$IdeVersion"
 $Download = Join-Path $env:USERPROFILE "Downloads"
@@ -320,7 +320,7 @@ for the selected platform.
 Package and checksum a completed build with the version in `product.json`:
 
 ```bash
-./scripts/package-release.sh v2.3.14 darwin arm64
+./scripts/package-release.sh v2.3.15 darwin arm64
 ```
 
 Replace `darwin arm64` with the platform and architecture actually built. The
