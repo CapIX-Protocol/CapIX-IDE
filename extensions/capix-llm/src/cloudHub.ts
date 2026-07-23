@@ -394,6 +394,11 @@ export class CloudHubProvider implements vscode.WebviewViewProvider {
   // ── Messages ────────────────────────────────────────────────────────────
 
   private async runAction(msg: { type: string; tab?: string; id?: string }): Promise<void> {
+    if (!msg || typeof msg.type !== 'string') return;
+    if (msg.type === 'webviewReady') {
+      logger.info('CloudHub webview ready');
+      return;
+    }
     if (msg.type !== 'tab') {
       void this.view?.webview.postMessage({ type: 'actionState', action: msg.type, pending: true });
     }
@@ -1040,25 +1045,38 @@ const HUB_STYLES = `
 
 const HUB_SCRIPT = `
   const vscode = acquireVsCodeApi();
+  const showWorking = () => {
+    const status = document.getElementById('action-status');
+    if (!status) return;
+    status.hidden = false;
+    status.className = 'action-status';
+    status.textContent = 'Working…';
+  };
+  const sendAction = (target) => {
+    const action = target && target.dataset ? target.dataset.action : undefined;
+    if (!action) return;
+    showWorking();
+    vscode.postMessage({
+      type: action,
+      id: target.dataset.id || undefined,
+      tab: target.dataset.tab || undefined
+    });
+  };
   // Restore the persisted tab selection (getState/setState) on fresh loads.
   const saved = vscode.getState();
   if (saved && saved.tab) vscode.postMessage({ type: 'tab', tab: saved.tab });
-  document.addEventListener('click', (e) => {
-    const target = e.target instanceof Element ? e.target.closest('[data-action],[data-tab]') : null;
-    if (!target) return;
-    if (target.dataset.tab && target.classList.contains('hub-tab')) {
-      vscode.setState({ tab: target.dataset.tab });
-      vscode.postMessage({ type: 'tab', tab: target.dataset.tab });
-    } else if (target.dataset.action) {
-      const status = document.getElementById('action-status');
-      if (status) {
-        status.hidden = false;
-        status.className = 'action-status';
-        status.textContent = 'Working…';
-      }
-      vscode.postMessage({ type: target.dataset.action, id: target.dataset.id || undefined, tab: target.dataset.tab || undefined });
-    }
+  document.querySelectorAll('.hub-tab[data-tab]').forEach((target) => {
+    target.addEventListener('click', () => {
+      const tab = target.dataset.tab;
+      if (!tab) return;
+      vscode.setState({ tab });
+      vscode.postMessage({ type: 'tab', tab });
+    });
   });
+  document.querySelectorAll('[data-action]').forEach((target) => {
+    target.addEventListener('click', () => sendAction(target));
+  });
+  vscode.postMessage({ type: 'webviewReady' });
   window.addEventListener('message', (event) => {
     const msg = event.data;
     if (!msg || msg.type !== 'actionState') return;

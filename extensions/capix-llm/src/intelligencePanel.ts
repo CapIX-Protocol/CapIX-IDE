@@ -71,6 +71,31 @@ const NAV_TABS: Array<{ id: IntelligenceTab; label: string }> = [
 
 const API = "/api/v1";
 
+type CanonicalListResponse<T> = {
+  data?: T[];
+  memory?: T[];
+  versions?: T[];
+  agents?: T[];
+  plans?: T[];
+  receipts?: T[];
+  skills?: T[];
+};
+
+/**
+ * Intelligence list endpoints use the canonical `{ data, cursor, hasMore }`
+ * contract. Keep the named fields as a compatibility bridge for older
+ * self-hosted control planes, but never hand an unvalidated value to a view.
+ */
+export function intelligenceList<T>(
+  response: CanonicalListResponse<T> | null | undefined,
+  legacyField: keyof Omit<CanonicalListResponse<T>, "data">,
+): T[] {
+  const canonical = response?.data;
+  if (Array.isArray(canonical)) return canonical;
+  const legacy = response?.[legacyField];
+  return Array.isArray(legacy) ? legacy : [];
+}
+
 // ── Provider ────────────────────────────────────────────────────────────────
 
 export class IntelligencePanelProvider implements vscode.WebviewViewProvider {
@@ -124,32 +149,38 @@ export class IntelligencePanelProvider implements vscode.WebviewViewProvider {
 
       const [memoryR, graph, covenantsR, agentsR, plansR, receiptsR, skillsR, codebaseR] =
         await Promise.all([
-          this.client.get<{ memory: MemoryNode[] }>(`${API}/memory`).catch(soft({ memory: [] as MemoryNode[] })),
+          this.client.get<CanonicalListResponse<MemoryNode>>(`${API}/memory`).catch(soft({ data: [] as MemoryNode[] })),
           this.client.post<GraphData>(`${API}/graph`, {}).catch(soft(emptyGraph)),
-          this.client.get<{ versions: CovenantVersion[] }>(`${API}/covenants`).catch(soft({ versions: [] as CovenantVersion[] })),
-          this.client.get<{ agents: AgentRecord[] }>(`${API}/agents`).catch(soft({ agents: [] as AgentRecord[] })),
-          this.client.get<{ plans: PlanRecord[] }>(`${API}/plans`).catch(soft({ plans: [] as PlanRecord[] })),
-          this.client.get<{ receipts: WorkReceipt[] }>(`${API}/receipts`).catch(soft({ receipts: [] as WorkReceipt[] })),
-          this.client.get<{ skills: SkillRecord[] }>(`${API}/skills`).catch(soft({ skills: [] as SkillRecord[] })),
+          this.client.get<CanonicalListResponse<CovenantVersion>>(`${API}/covenants`).catch(soft({ data: [] as CovenantVersion[] })),
+          this.client.get<CanonicalListResponse<AgentRecord>>(`${API}/agents`).catch(soft({ data: [] as AgentRecord[] })),
+          this.client.get<CanonicalListResponse<PlanRecord>>(`${API}/plans`).catch(soft({ data: [] as PlanRecord[] })),
+          this.client.get<CanonicalListResponse<WorkReceipt>>(`${API}/receipts`).catch(soft({ data: [] as WorkReceipt[] })),
+          this.client.get<CanonicalListResponse<SkillRecord>>(`${API}/skills`).catch(soft({ data: [] as SkillRecord[] })),
           this.client.get<CodebaseSummary>(`${API}/codebase/summary`).catch(soft({ filesIndexed: 0, symbolsFound: 0 })),
         ]);
 
       const pinned = this.snapshot.pinnedMemory;
-      const violations = this.extractViolations(covenantsR.versions);
+      const memory = intelligenceList(memoryR, "memory");
+      const covenants = intelligenceList(covenantsR, "versions");
+      const agents = intelligenceList(agentsR, "agents");
+      const plans = intelligenceList(plansR, "plans");
+      const receipts = intelligenceList(receiptsR, "receipts");
+      const skills = intelligenceList(skillsR, "skills");
+      const violations = this.extractViolations(covenants);
 
       this.snapshot = {
         configured: true,
         loading: false,
         error: null,
-        memory: memoryR.memory ?? [],
+        memory,
         pinnedMemory: pinned,
         graph: graph.nodes ? graph : emptyGraph,
-        covenants: covenantsR.versions ?? [],
+        covenants,
         violations,
-        agents: agentsR.agents ?? [],
-        plans: plansR.plans ?? [],
-        skills: skillsR.skills ?? [],
-        receipts: receiptsR.receipts ?? [],
+        agents,
+        plans,
+        skills,
+        receipts,
         codebase: codebaseR ?? { filesIndexed: 0, symbolsFound: 0 },
         activeTab: this.snapshot.activeTab,
         updatedAt: new Date().toISOString(),
@@ -166,7 +197,7 @@ export class IntelligencePanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private extractViolations(versions: CovenantVersion[]): CovenantViolation[] {
+  private extractViolations(versions: CovenantVersion[] = []): CovenantViolation[] {
     const rules = versions[0]?.rules ?? [];
     return rules
       .filter((r) => r.severity === "error")

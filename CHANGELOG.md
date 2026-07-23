@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.24
+
+- Consume the canonical paginated Intelligence API contract so profile,
+  memory, covenant, agent, plan, skill, and receipt panels cannot crash on
+  `undefined` list fields.
+- Bind Cloud Hub buttons directly inside the webview and report readiness to
+  the extension host, restoring reliable tab and action controls.
+- Bundle the Capix Code 2.4.15 runtime with the cross-platform npm installer
+  repair and directory-aware workspace inspection.
+
 ## 2.3.23
 
 - Ground every Capix Code turn in live IDE context: active file and selection, repository structure, Git changes, diagnostics, symbols, and terminal state.
