@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.25
+
+- Prevent repeated root-directory discovery and orientation calls in fresh
+  workspaces so Capix Code progresses from inspection to implementation.
+- Bound silent inference streams and stop duplicate tool-call loops instead of
+  leaving the native agent panel working indefinitely.
+- Bundle Capix Code 2.4.18 with serialized refresh-token rotation and
+  transient-error-safe credential persistence.
+
 ## 2.3.24
 
 - Consume the canonical paginated Intelligence API contract so profile,
