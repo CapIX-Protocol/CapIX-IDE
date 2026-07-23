@@ -358,6 +358,10 @@ export class CapixAgentRuntime implements AgentRuntime {
         ...(specialist ? [{ role: 'system', content: specialist.systemPrompt }] : []),
         ...history,
       ];
+      // A routed model may repeat the same inspection after its result is
+      // already present in conversation. Execute each exact call once per
+      // turn so an empty/new workspace cannot become an expensive tool loop.
+      const executedToolCalls = new Set<string>();
       if (requiresWorkspaceOrientation(input.content)) {
         const orientation = yield* this.executeToolCall(
           emit,
@@ -382,6 +386,8 @@ export class CapixAgentRuntime implements AgentRuntime {
       for (let round = 0; round <= this.maxToolRounds; round++) {
         const toolCalls: Array<{ toolName: string; args: Record<string, unknown> }> = [];
         const seenToolCalls = new Set<string>();
+        let duplicateToolCalls = 0;
+        const roundTextStart = assistantText.length;
 
         for await (const chunk of this.modelInvoker({
           modelId,
@@ -407,8 +413,11 @@ export class CapixAgentRuntime implements AgentRuntime {
             } as unknown as AgentEvent);
           } else if (chunk.type === 'tool_call') {
             const key = `${chunk.toolName}:${JSON.stringify(chunk.args)}`;
-            if (!seenToolCalls.has(key)) {
+            if (executedToolCalls.has(key)) {
+              duplicateToolCalls += 1;
+            } else if (!seenToolCalls.has(key)) {
               seenToolCalls.add(key);
+              executedToolCalls.add(key);
               toolCalls.push(chunk);
             }
           } else if (chunk.type === 'usage') {
@@ -431,7 +440,25 @@ export class CapixAgentRuntime implements AgentRuntime {
           break;
         }
 
-        if (toolCalls.length === 0) break; // model is done
+        if (toolCalls.length === 0) {
+          if (duplicateToolCalls > 0 && assistantText.length === roundTextStart) {
+            if (round === this.maxToolRounds) {
+              throw problem(
+                502,
+                CAPIX_ERROR_CODES.PROVIDER_ERROR,
+                'Agent made no progress',
+                'agent_no_progress: the selected route repeated tool calls whose results were already available'
+              );
+            }
+            conversation.push({
+              role: 'system',
+              content:
+                'The requested tool calls were already executed in this turn and their results are above. Do not repeat them. Use that evidence now: answer the user, or choose a different concrete tool action that advances the task.',
+            });
+            continue;
+          }
+          break; // model is done
+        }
         finishReason = 'tool_calls';
 
         for (const toolCall of toolCalls) {

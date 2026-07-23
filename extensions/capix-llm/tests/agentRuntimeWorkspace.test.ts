@@ -144,4 +144,40 @@ describe("Capix Code workspace-aware runtime", () => {
       runtime.close();
     }
   });
+
+  it("executes an identical tool call only once across model rounds", async () => {
+    const root = await mkdtemp(join(tmpdir(), "capix-runtime-no-progress-"));
+    temporaryDirectories.push(root);
+    const runtime = new CapixAgentRuntime({
+      dbPath: join(root, "runtime.db"),
+      workspaceRoot: root,
+      maxToolRounds: 2,
+      modelInvoker: async function* () {
+        yield { type: "tool_call", toolName: "list_files", args: { path: "." } } as const;
+      },
+    });
+
+    try {
+      const session = await runtime.createSession({
+        workspaceRoot: root,
+        modelId: "capix/auto",
+        mode: "build",
+      });
+      const events = [];
+      for await (const event of runtime.sendMessage({
+        sessionId: session.id,
+        content: "Build a site in this empty folder.",
+      })) {
+        events.push(event);
+      }
+
+      expect(events.filter((event) => event.type === "tool.requested")).toHaveLength(1);
+      expect(events.filter((event) => event.type === "tool.output")).toHaveLength(1);
+      expect(events.find((event) => event.type === "turn.failed")?.error.message).toContain(
+        "agent_no_progress",
+      );
+    } finally {
+      runtime.close();
+    }
+  });
 });
