@@ -668,6 +668,46 @@ describe('CapixClient', () => {
       expect(secretStorage.store).toHaveBeenCalledWith('capix.ai.apiKey', 'sk-my-key');
     });
 
+    it('lists serverless jobs from the canonical durable queue', async () => {
+      client.setSecretStorage(createMockSecretStorage('cpxs_session'));
+      fetchMock.mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ jobs: [{ id: 'job_1', status: 'queued' }] }),
+      });
+
+      await expect(client.getJobs()).resolves.toEqual({
+        ok: true,
+        jobs: [{ id: 'job_1', status: 'queued' }],
+      });
+      expect(fetchMock.mock.calls[0][0]).toBe('https://www.capix.network/api/v1/jobs');
+    });
+
+    it('enqueues structured serverless jobs on the canonical route', async () => {
+      client.setSecretStorage(createMockSecretStorage('cpxs_session'));
+      fetchMock.mockResolvedValueOnce({
+        status: 201,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ job: { id: 'job_2' } }),
+      });
+
+      await expect(client.triggerJob({
+        image: 'ubuntu:24.04',
+        command: ['echo', 'hello'],
+        timeoutSeconds: 300,
+      })).resolves.toMatchObject({ ok: true, job: { id: 'job_2' } });
+      expect(fetchMock.mock.calls[0][0]).toBe('https://www.capix.network/api/v1/jobs');
+      expect(fetchMock.mock.calls[0][1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify({
+          image: 'ubuntu:24.04',
+          command: ['echo', 'hello'],
+          timeoutSeconds: 300,
+        }),
+      });
+      expect(fetchMock.mock.calls[0][1].headers['Idempotency-Key']).toBeTruthy();
+    });
+
     it('getSecret should return undefined when no secret storage is set', async () => {
       const result = await client.getSecret('any-key');
       expect(result).toBeUndefined();

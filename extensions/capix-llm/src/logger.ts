@@ -21,8 +21,9 @@ function log(level: LogLevel, message: string, data?: Record<string, unknown>): 
 export const logger = {
   info: (msg: string, data?: Record<string, unknown>) => log("info", msg, data),
   warn: (msg: string, data?: Record<string, unknown>) => log("warn", msg, data),
-  error: (msg: string, data?: Record<string, unknown>) => {
-    log("error", msg, data);
-    vscode.window.showErrorMessage(`CapixIDE: ${msg}`);
-  },
+  // Diagnostics belong in the CapixIDE output channel. User-facing surfaces
+  // opt in to concise, actionable messages at the point where recovery is
+  // possible; low-level provider/view failures must not appear as debug toast
+  // spam in production builds.
+  error: (msg: string, data?: Record<string, unknown>) => log("error", msg, data),
 };

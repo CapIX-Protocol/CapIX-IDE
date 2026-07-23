@@ -9,7 +9,7 @@ vi.mock("vscode", () => ({
   },
 }));
 
-import { CliTokenBroker } from "../src/cliTokenBroker";
+import { CliTokenBroker, resolveCliBinary } from "../src/cliTokenBroker";
 
 const okRunner = (token: string) =>
   vi.fn(async () => ({ stdout: JSON.stringify({ access_token: token }), stderr: "" }));
@@ -20,6 +20,14 @@ const failRunner = () =>
   });
 
 describe("CliTokenBroker", () => {
+  it("honours an explicit CLI binary override", () => {
+    expect(resolveCliBinary(
+      { CAPIX_CODE_BIN: "/opt/capix/bin/capix-code" },
+      "/Users/test",
+      "darwin",
+    )).toBe("/opt/capix/bin/capix-code");
+  });
+
   it("returns the parsed access token", async () => {
     const broker = new CliTokenBroker(okRunner("tok_abc"));
     await expect(broker.getAccessToken()).resolves.toBe("tok_abc");

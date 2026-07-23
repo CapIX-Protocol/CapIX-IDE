@@ -13,6 +13,9 @@
  */
 
 import { execFile } from "child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "util";
 import { logger } from "./logger";
 
@@ -22,7 +25,25 @@ const execFileAsync = promisify(execFile);
 const TOKEN_TTL_MS = 45 * 60 * 1000;
 /** Don't hammer the CLI when the user is simply signed out. */
 const FAILURE_BACKOFF_MS = 30 * 1000;
-const EXEC_TIMEOUT_MS = 15 * 1000;
+const EXEC_TIMEOUT_MS = 5 * 1000;
+
+/** Prefer the installer-managed binary over an ambiguous Electron PATH. */
+export function resolveCliBinary(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const configured = env.CAPIX_CODE_BIN?.trim();
+  if (configured) return configured;
+  const names = platform === "win32"
+    ? ["capix-code.exe", "capix-code.cmd", "capix-code"]
+    : ["capix-code"];
+  for (const name of names) {
+    const installed = join(home, ".capix-code", "bin", name);
+    if (existsSync(installed)) return installed;
+  }
+  return platform === "win32" ? "capix-code.cmd" : "capix-code";
+}
 
 type TokenRunner = (
   bin: string,
@@ -44,9 +65,7 @@ export class CliTokenBroker {
       });
       return { stdout, stderr };
     },
-    private readonly bin: string = (
-      process.env.CAPIX_CODE_BIN || "capix-code"
-    ).trim() || "capix-code",
+    private readonly bin: string = resolveCliBinary(),
   ) {}
 
   /**

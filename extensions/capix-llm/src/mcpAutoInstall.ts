@@ -105,7 +105,7 @@ export class McpAutoInstaller {
   async register(accessToken?: string): Promise<void> {
     const token = accessToken ?? (await this.client.getStoredToken());
     const config = vscode.workspace.getConfiguration(MCP_CONFIG_SECTION);
-    const servers = config.get<Record<string, unknown>>("servers") ?? {};
+    const servers = { ...(config.get<Record<string, unknown>>("servers") ?? {}) };
     servers[MCP_SERVER_ID] = {
       command: MCP_SERVER_COMMAND,
       args: MCP_SERVER_ARGS,
@@ -132,7 +132,7 @@ export class McpAutoInstaller {
   async unregister(): Promise<void> {
     try {
       const config = vscode.workspace.getConfiguration(MCP_CONFIG_SECTION);
-      const servers = config.get<Record<string, unknown>>("servers") ?? {};
+      const servers = { ...(config.get<Record<string, unknown>>("servers") ?? {}) };
       if (servers[MCP_SERVER_ID]) {
         delete servers[MCP_SERVER_ID];
         await config.update("servers", servers, vscode.ConfigurationTarget.Global);

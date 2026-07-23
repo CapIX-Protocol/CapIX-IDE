@@ -601,11 +601,19 @@ export class CapixClient {
 
   // ── Serverless Jobs ───────────────────────────────────────────────────
   async getJobs(): Promise<{ ok: boolean; jobs?: unknown[] }> {
-    return this.get("/api/cloud/job-trigger");
+    const result = await this.get<{ jobs?: unknown[] }>("/api/v1/jobs");
+    return { ok: true, jobs: result.jobs ?? [] };
   }
 
-  async triggerJob(yaml: string): Promise<{ ok: boolean; job?: unknown; error?: string }> {
-    return this.post("/api/cloud/job-trigger", { yaml });
+  async triggerJob(input: {
+    image: string;
+    command: string[];
+    tierId?: string;
+    timeoutSeconds?: number;
+    projectId?: string;
+  }): Promise<{ ok: boolean; job?: unknown; error?: string }> {
+    const result = await this.post<{ job?: unknown; error?: string }>("/api/v1/jobs", input);
+    return { ok: Boolean(result.job), job: result.job, error: result.error };
   }
 
   // ── Instances: list, detail, control ───────────────────────────────────

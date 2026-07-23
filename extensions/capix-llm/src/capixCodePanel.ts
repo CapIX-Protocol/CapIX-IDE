@@ -53,6 +53,7 @@ const MODES: Array<{ id: ComposerMode; label: string }> = [
 ];
 
 export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
+  private static readonly AUTH_BOOT_TIMEOUT_MS = 8_000;
   private view?: vscode.WebviewView;
   private configured = false;
   private streaming = false;
@@ -180,8 +181,35 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
     this.model = config.get<string>("ai.model") || "auto";
     this.preferredProvider = config.get<ProviderPreference>("ai.preferredProvider") || "auto";
     this.preferredModel = config.get<string>("ai.preferredModel") || "";
-    this.configured = await this.client.checkConfigured();
+    try {
+      this.configured = await this.checkConfiguredWithinDeadline();
+    } catch (err) {
+      this.configured = false;
+      logger.warn("CapixCode authentication restore timed out", { error: String(err) });
+      this.view?.webview.postMessage({
+        type: "error",
+        message: "Capix Code could not restore your session. Sign in again to reconnect.",
+      });
+    }
     this.pushState();
+  }
+
+  /** Never leave the native panel indefinitely waiting on keychain/network I/O. */
+  private async checkConfiguredWithinDeadline(): Promise<boolean> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        this.client.checkConfigured(),
+        new Promise<boolean>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("authentication_restore_timeout")),
+            CapixCodePanelProvider.AUTH_BOOT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private pushState(): void {
@@ -219,7 +247,12 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
    */
   private async ensureEngine(): Promise<void> {
     if (this.engineStarted) return;
-    const configured = await this.client.checkConfigured();
+    let configured = false;
+    try {
+      configured = await this.checkConfiguredWithinDeadline();
+    } catch (err) {
+      logger.warn("CapixCode authentication check timed out", { error: String(err) });
+    }
     if (!configured) {
       this.view?.webview.postMessage({
         type: "error",

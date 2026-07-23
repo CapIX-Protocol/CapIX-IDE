@@ -1091,21 +1091,8 @@ async function cmdDeployAgent() {
 // Trigger a serverless job
 async function cmdTriggerJob() {
   if (!checkConfigured()) return;
-  const yaml = await vscode.window.showInputBox({
-    prompt: "Paste your capix-job.yml",
-    placeHolder: "apiVersion: capix/v1\nkind: ServerlessJob",
-    ignoreFocusOut: true,
-  });
-  if (!yaml) return;
-
-  const res = await client.triggerJob(yaml);
-  if (res.ok) {
-    vscode.window.showInformationMessage("✓ Serverless job triggered — check the Jobs tab in the Capix Cloud hub.");
-    void cloudHubProvider.refresh();
-    devTokens.onDeploy();
-  } else {
-    vscode.window.showErrorMessage(res.error || "Job trigger failed.");
-  }
+  await creationWizard.start("serverless_job");
+  void cloudHubProvider.refresh();
 }
 
 // Create an API key (for the chat gateway)
