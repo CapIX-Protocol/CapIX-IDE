@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.18
+
+- Remove a duplicate release-workflow cleanup that ran after the idempotent rebrand cleanup and caused every Unix artifact build to fail.
+- Bundle the Capix Code 2.4.11 runtime with signed-out MCP registration and broker-backed authentication recovery.
+- Preserve the built-in authentication isolation, Cloud Hub jobs readiness, and full cross-platform release gates from 2.3.17.
+
 ## 2.3.17
 
 - Isolate the built-in Capix Code runtime from the standalone CLI credential broker so IDE sign-in cannot enter a competing refresh loop.

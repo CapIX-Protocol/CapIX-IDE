@@ -18,7 +18,7 @@ permissions:
 
 env:
   # Immutable Capix Code runtime paired with this CapixIDE release.
-  CAPIX_CODE_SHA: 80b48d576deea2ec36a44c505a6e7c6e3b87d088
+  CAPIX_CODE_SHA: eb7f7277f0fa86a4b543eebdf3dae9894c15319b
 
 jobs:
   validate:
@@ -186,26 +186,6 @@ jobs:
         run: bash scripts/bootstrap.sh
         env:
           VSCODE_DIR: ${{ github.workspace }}/vscode
-
-      - name: Remove inherited remote-client extensions
-        working-directory: vscode
-        shell: bash
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const file = 'build/npm/dirs.js';
-          let source = fs.readFileSync(file, 'utf8');
-          for (const entry of [
-            "\t'extensions/open-remote-ssh', // Void added this\n",
-            "\t'extensions/open-remote-wsl', // Void added this\n",
-          ]) {
-            const matches = source.split(entry).length - 1;
-            if (matches !== 1) throw new Error(`inherited extension context mismatch: expected 1, found ${matches}`);
-            source = source.replace(entry, '');
-          }
-          fs.writeFileSync(file, source);
-          NODE
-          rm -rf extensions/open-remote-ssh extensions/open-remote-wsl
 
       - name: Use portable node-gyp launcher (Windows)
         if: runner.os == 'Windows'

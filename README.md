@@ -143,7 +143,7 @@ To package distributable installers:
 ```bash
 CAPIX_CODE_CUSTOMER_DIR=../capix-code/dist/customer ./scripts/build.sh
 # Current-platform output paths are listed in INSTALL.md.
-./scripts/package-release.sh v2.3.17 darwin arm64
+./scripts/package-release.sh v2.3.18 darwin arm64
 ```
 
 For CI/cross-platform release builds, tag a version and the [Release workflow](.github/workflows/release.yml) builds the four supported targets in parallel: macOS arm64/x64, Linux x64, and Windows x64.
