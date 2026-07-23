@@ -91,6 +91,10 @@ interface RoutePreferences {
   preferredModel?: string;
 }
 
+/** Fail visibly instead of leaving the composer in "Working…" forever. */
+export const INFERENCE_FIRST_EVENT_TIMEOUT_MS = 30_000;
+export const INFERENCE_IDLE_TIMEOUT_MS = 60_000;
+
 /**
  * Reverse a unified diff (swap the before/after sides of every hunk) so a
  * recorded agent change can be reverted through `applyPatch`.
@@ -501,10 +505,24 @@ export class AgentRuntimeEngine {
       let failure: Error | null = null;
       let finished = false;
       let receivedModelPayload = false;
+      let watchdog: NodeJS.Timeout | undefined;
+      let timeoutStage: "first_event" | "idle" | null = null;
+      const streamController = new AbortController();
 
       const wake = () => {
         while (waiters.length) waiters.shift()!();
       };
+      const abortFromCaller = () => streamController.abort(req.signal?.reason);
+      req.signal?.addEventListener("abort", abortFromCaller, { once: true });
+      const armWatchdog = (stage: "first_event" | "idle", timeoutMs: number) => {
+        if (watchdog) clearTimeout(watchdog);
+        watchdog = setTimeout(() => {
+          timeoutStage = stage;
+          streamController.abort(new Error(`inference_${stage}_timeout`));
+          wake();
+        }, timeoutMs);
+      };
+      armWatchdog("first_event", INFERENCE_FIRST_EVENT_TIMEOUT_MS);
 
       const input: Record<string, unknown> = {
         model: req.modelId === "capix/auto" ? "auto" : req.modelId,
@@ -528,7 +546,8 @@ export class AgentRuntimeEngine {
       }
 
       const streamPromise = this.client
-        .streamAgentChat(input, req.signal ?? new AbortController().signal, async (event) => {
+        .streamAgentChat(input, streamController.signal, async (event) => {
+          armWatchdog("idle", INFERENCE_IDLE_TIMEOUT_MS);
           if (event.type === "delta") {
             if (typeof event.content === "string" && event.content) {
               queue.push({ type: "text", delta: event.content });
@@ -556,12 +575,18 @@ export class AgentRuntimeEngine {
           wake();
         })
         .catch((err: unknown) => {
-          failure = err instanceof Error ? err : new Error(String(err));
+          failure = timeoutStage
+            ? new Error(
+                timeoutStage === "first_event"
+                  ? "inference_first_event_timeout: Capix did not receive a route or model response within 30 seconds"
+                  : "inference_idle_timeout: the selected route stopped responding",
+              )
+            : err instanceof Error
+              ? err
+              : new Error(String(err));
           finished = true;
           wake();
         });
-
-      req.signal?.addEventListener("abort", wake, { once: true });
 
       try {
         while (true) {
@@ -582,7 +607,11 @@ export class AgentRuntimeEngine {
           await new Promise<void>((resolve) => waiters.push(resolve));
         }
       } finally {
-        // Detach so a late stream resolution cannot touch the generator.
+        if (watchdog) clearTimeout(watchdog);
+        req.signal?.removeEventListener("abort", abortFromCaller);
+        if (!finished) streamController.abort();
+        // The promise owns its rejection handler, so a late resolution cannot
+        // become an unhandled rejection after the generator is closed.
         void streamPromise;
       }
     }.bind(this);
