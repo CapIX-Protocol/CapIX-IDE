@@ -24,11 +24,18 @@ echo "  done: product.json"
 node - "$VSCODE" <<'NODE'
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const vscode = process.argv[2];
 const product = JSON.parse(fs.readFileSync(path.join(vscode, 'product.json'), 'utf8'));
 if (!/^\d+\.\d+\.\d+$/.test(product.capixVersion || '')) {
   throw new Error(`invalid product capixVersion: ${product.capixVersion}`);
 }
+const pristinePackage = JSON.parse(execFileSync('git', ['-C', vscode, 'show', 'HEAD:package.json'], { encoding: 'utf8' }));
+if (!/^1\.\d+\.\d+$/.test(pristinePackage.version || '')) {
+  throw new Error(`invalid Code-OSS engine version: ${pristinePackage.version}`);
+}
+product.capixEngineVersion = pristinePackage.version;
+fs.writeFileSync(path.join(vscode, 'product.json'), `${JSON.stringify(product, null, 2)}\n`);
 for (const name of ['package.json', 'package-lock.json']) {
   const file = path.join(vscode, name);
   if (!fs.existsSync(file)) continue;
@@ -38,7 +45,30 @@ for (const name of ['package.json', 'package-lock.json']) {
   fs.writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
 }
 NODE
-echo "  done: CapixIDE version metadata"
+echo "  done: CapixIDE release metadata + compatible extension API version"
+
+# Keep local builds aligned with release CI: the inherited remote-client
+# extensions are not Capix products and their legacy native dependencies do
+# not compile against the pinned desktop runtime. This cleanup is idempotent
+# because rebrand.sh runs before every package build.
+node - "$VSCODE" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const vscode = process.argv[2];
+const dirsFile = path.join(vscode, 'build/npm/dirs.js');
+let source = fs.readFileSync(dirsFile, 'utf8');
+for (const name of ['open-remote-ssh', 'open-remote-wsl']) {
+  const entry = `\t'extensions/${name}', // Void added this\n`;
+  const matches = source.split(entry).length - 1;
+  if (matches > 1) {
+    throw new Error(`inherited extension context mismatch for ${name}: found ${matches}`);
+  }
+  source = source.replace(entry, '');
+  fs.rmSync(path.join(vscode, 'extensions', name), { recursive: true, force: true });
+}
+fs.writeFileSync(dirsFile, source);
+NODE
+echo "  done: inherited remote-client extensions removed"
 
 # The app version is Capix-stamped (2.x), but built-in extensions declare
 # engines.vscode against the Code-OSS engine (1.x) and their language clients
@@ -189,6 +219,15 @@ elif git -C "$VSCODE" apply --check "$DIR/patches/0010-capix-default-layout.patc
   echo "  done: Capix default layout registered (chat docks right on first run)"
 else
   echo "ERROR: Capix default layout patch no longer applies"
+  exit 1
+fi
+if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0011-preserve-extension-api-version.patch" >/dev/null 2>&1; then
+  echo "  done: compatible extension API version already registered"
+elif git -C "$VSCODE" apply --check "$DIR/patches/0011-preserve-extension-api-version.patch"; then
+  git -C "$VSCODE" apply "$DIR/patches/0011-preserve-extension-api-version.patch"
+  echo "  done: compatible extension API version registered"
+else
+  echo "ERROR: extension API compatibility patch no longer applies"
   exit 1
 fi
 if git -C "$VSCODE" apply --reverse --check "$DIR/patches/0008-stabilize-local-terminal-pty.patch" >/dev/null 2>&1; then

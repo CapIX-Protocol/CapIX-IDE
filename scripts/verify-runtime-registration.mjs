@@ -8,6 +8,27 @@ const vscodeRoot = process.env.VSCODE_DIR || path.join(root, "vscode");
 const extensions = ["capix-llm", "capix-cloud", "capix-workspace", "capix-agent-ui", "capix-intelligence"];
 const manifests = new Map();
 
+const product = JSON.parse(fs.readFileSync(path.join(vscodeRoot, "product.json"), "utf8"));
+if (!/^1\.\d+\.\d+$/.test(product.capixEngineVersion ?? "")) {
+  fail("product.json does not preserve a compatible 1.x extension API version");
+}
+const inheritedRemoteIds = new Set(["jeanp413.open-remote-ssh", "jeanp413.open-remote-wsl"]);
+if ((product.builtInExtensions ?? []).some((extension) => inheritedRemoteIds.has(extension?.name))) {
+  fail("product.json still ships an inherited remote-client marketplace extension");
+}
+for (const name of ["open-remote-ssh", "open-remote-wsl"]) {
+  if (fs.existsSync(path.join(vscodeRoot, "extensions", name))) {
+    fail(`inherited remote-client source is still present: ${name}`);
+  }
+}
+const localExtensionHost = fs.readFileSync(
+  path.join(vscodeRoot, "src", "vs", "workbench", "services", "extensions", "electron-sandbox", "localProcessExtensionHost.ts"),
+  "utf8",
+);
+if (!localExtensionHost.includes("capixEngineVersion ?? this._productService.version")) {
+  fail("local extension host exposes the branded release version instead of the compatible engine version");
+}
+
 for (const file of ["capix-broker.ts", "capix-ipc-registration.ts", "capix-native-auth.ts", "capix-runtime-bootstrap.ts"]) {
   if (!fs.existsSync(path.join(vscodeRoot, "src", "main", file))) fail(`native runtime module is missing: ${file}`);
 }

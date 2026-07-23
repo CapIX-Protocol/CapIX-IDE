@@ -1,0 +1,51 @@
+diff --git a/src/vs/base/common/product.ts b/src/vs/base/common/product.ts
+index b57573d..6c3f3b1 100644
+--- a/src/vs/base/common/product.ts
++++ b/src/vs/base/common/product.ts
+@@ -57,6 +57,7 @@ export type ExtensionVirtualWorkspaceSupport = {
+ 
+ export interface IProductConfiguration {
+ 	readonly version: string;
++	readonly capixEngineVersion?: string;
+ 	readonly voidVersion?: string;
+ 	readonly release?: string; // Void - VSCodium added this, we add it for TS
+ 	readonly date?: string;
+diff --git a/src/vs/workbench/services/extensions/browser/webWorkerExtensionHost.ts b/src/vs/workbench/services/extensions/browser/webWorkerExtensionHost.ts
+index 6af4d3e..af2ae36 100644
+--- a/src/vs/workbench/services/extensions/browser/webWorkerExtensionHost.ts
++++ b/src/vs/workbench/services/extensions/browser/webWorkerExtensionHost.ts
+@@ -293,7 +293,7 @@ export class WebWorkerExtensionHost extends Disposable implements IExtensionHost
+ 		}
+ 		return {
+ 			commit: this._productService.commit,
+-			version: this._productService.version,
++			version: this._productService.capixEngineVersion ?? this._productService.version,
+ 			quality: this._productService.quality,
+ 			parentPid: 0,
+ 			environment: {
+diff --git a/src/vs/workbench/services/extensions/common/remoteExtensionHost.ts b/src/vs/workbench/services/extensions/common/remoteExtensionHost.ts
+index b9cb6c0..37edcb0 100644
+--- a/src/vs/workbench/services/extensions/common/remoteExtensionHost.ts
++++ b/src/vs/workbench/services/extensions/common/remoteExtensionHost.ts
+@@ -207,7 +207,7 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
+ 		const workspace = this._contextService.getWorkspace();
+ 		return {
+ 			commit: this._productService.commit,
+-			version: this._productService.version,
++			version: this._productService.capixEngineVersion ?? this._productService.version,
+ 			quality: this._productService.quality,
+ 			parentPid: remoteInitData.pid,
+ 			environment: {
+diff --git a/src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts b/src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts
+index 2a850d9..cddbc19 100644
+--- a/src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts
++++ b/src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts
+@@ -464,7 +464,7 @@ export class LocalProcessExtensionHost extends Disposable implements IExtensionH
+ 		const workspace = this._contextService.getWorkspace();
+ 		return {
+ 			commit: this._productService.commit,
+-			version: this._productService.version,
++			version: this._productService.capixEngineVersion ?? this._productService.version,
+ 			quality: this._productService.quality,
+ 			parentPid: 0,
+ 			environment: {

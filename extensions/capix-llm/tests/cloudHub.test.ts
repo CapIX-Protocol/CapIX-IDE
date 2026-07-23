@@ -9,7 +9,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('vscode', () => ({}));
+vi.mock('vscode', () => ({
+  EventEmitter: class {
+    readonly event = vi.fn();
+    readonly fire = vi.fn();
+    readonly dispose = vi.fn();
+  },
+}));
 vi.mock('../src/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));

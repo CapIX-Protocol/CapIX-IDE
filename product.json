@@ -30,20 +30,7 @@
 	"licenseFileName": "LICENSE.txt",
 	"licenseUrl": "https://github.com/CapIX-Protocol/CapIX-IDE/blob/main/LICENSE",
 	"reportIssueUrl": "https://github.com/CapIX-Protocol/CapIX-IDE/issues/new",
-	"builtInExtensions": [
-		{
-			"name": "jeanp413.open-remote-ssh",
-			"version": "0.2.0",
-			"repo": "https://github.com/jeanp413/open-remote-ssh",
-			"sha256": "4da3bcb0096d86a2d1251e8a2a57335ac27b1dd66a92085033bd52506512eda6"
-		},
-		{
-			"name": "jeanp413.open-remote-wsl",
-			"version": "0.0.5",
-			"repo": "https://github.com/jeanp413/open-remote-wsl",
-			"sha256": "f1025d8a2cf7a2e9b2876bf11d7c97180e597f90a722722c22a94c0d5975a355"
-		}
-	],
+	"builtInExtensions": [],
 	"extensionsGallery": {
 		"serviceUrl": "https://open-vsx.org/vscode/gallery",
 		"itemUrl": "https://open-vsx.org/vscode/item",
