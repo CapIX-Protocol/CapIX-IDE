@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.17
+
+- Isolate the built-in Capix Code runtime from the standalone CLI credential broker so IDE sign-in cannot enter a competing refresh loop.
+- Restore Cloud Hub jobs and native Capix Code readiness while keeping authentication inside the IDE secure-storage boundary.
+- Carry forward the immutable Capix Code 2.4.10 runtime and the complete cross-platform release gates from 2.3.16.
+
 ## 2.3.16
 
 - Bind every customer artifact to an immutable source tag and the Capix Code 2.4.10 runtime.
