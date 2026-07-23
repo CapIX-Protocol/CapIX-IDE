@@ -597,6 +597,14 @@ ${csp}
     </label>
   </div>
 
+  <div class="auth-banner" id="auth-banner" hidden>
+    <div>
+      <strong>Connect Capix Code</strong>
+      <span>Sign in through your browser to use your Capix models and balance.</span>
+    </div>
+    <button data-cmd="signIn">Sign in</button>
+  </div>
+
   <main class="conversation" id="conversation">
     <div class="empty-state" id="empty-state">
       <div class="empty-glyph">✦</div>

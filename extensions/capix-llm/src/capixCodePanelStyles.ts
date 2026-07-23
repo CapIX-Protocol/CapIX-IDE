@@ -240,6 +240,33 @@ export const PANEL_STYLES = `
     width: 10px; height: 10px; border: 2px solid rgba(0,0,0,0.3); border-top-color: #000;
     border-radius: 50%; animation: spin 0.8s linear infinite;
   }
+
+  .auth-banner {
+    margin: 10px 12px 0;
+    padding: 10px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 55%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--vscode-focusBorder) 8%, var(--vscode-sideBar-background));
+  }
+  .auth-banner[hidden] { display: none; }
+  .auth-banner div { min-width: 0; display: grid; gap: 2px; }
+  .auth-banner strong { font-size: 12px; color: var(--vscode-foreground); }
+  .auth-banner span { font-size: 11px; line-height: 1.35; color: var(--vscode-descriptionForeground); }
+  .auth-banner button {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 6px;
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    cursor: pointer;
+  }
+  .auth-banner button:hover { background: var(--vscode-button-hoverBackground); }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* Approval modal */

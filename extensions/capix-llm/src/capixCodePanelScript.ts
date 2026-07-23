@@ -414,8 +414,9 @@ export const PANEL_SCRIPT = `
           if (mqNow) renderMentionMenu(msg.files || [], mqNow.query);
           break;
         }
-        case 'state':
+      case 'state':
         $('conn-dot').className = 'conn-dot ' + (msg.engineStatus === 'online' ? 'online' : (msg.configured ? 'offline' : 'offline'));
+        $('auth-banner').hidden = !!msg.configured;
         $('session-title').textContent = msg.sessionId ? ('Session ' + String(msg.sessionId).slice(0, 8)) : 'Capix Code';
         $('chip-project').textContent = msg.project || '—';
         $('chip-model').textContent = msg.model || 'auto';

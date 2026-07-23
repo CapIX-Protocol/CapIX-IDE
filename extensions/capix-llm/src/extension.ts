@@ -16,7 +16,6 @@ import * as vscode from "vscode";
 import { chmod } from "node:fs/promises";
 import { CapixApiError, CapixClient } from "./apiClient";
 import { CapixAuthBrokerService } from "./authBroker";
-import { CliTokenBroker } from "./cliTokenBroker";
 import { DeploysTreeProvider } from "./treeViews";
 import { InstancesTreeProvider } from "./cloudPanels";
 import { CloudHubProvider } from "./cloudHub";
@@ -120,18 +119,14 @@ export function activate(context: vscode.ExtensionContext) {
   // All API calls authenticate through the shared @capix/auth-broker (PKCE,
   // single-flight refresh, rotation reuse detection, SecretStorage-backed
   // credential store). Legacy sessions are migrated once on activation.
-  // When the IDE has no grant of its own, fall back to the Capix Code CLI as
-  // the native credential broker so a CLI sign-in carries into the IDE.
+  // The built-in Capix Code surface is authenticated by the IDE's own native
+  // OAuth grant. Do not automatically execute the standalone CLI as a token
+  // fallback: on macOS that can repeatedly invoke secure-storage consent while
+  // the user is merely viewing the IDE, leaving the panel apparently loading.
+  // Standalone Capix Code keeps its own explicit `capix-code login` lifecycle.
   authBroker = new CapixAuthBrokerService(context, CapixClient.PRODUCTION_BASE_URL);
-  const cliTokenBroker = new CliTokenBroker();
   client.setTokenProvider({
-    getAccessToken: async () => {
-      try {
-        return await authBroker.getAccessToken();
-      } catch {
-        return cliTokenBroker.getAccessToken();
-      }
-    },
+    getAccessToken: () => authBroker.getAccessToken(),
   });
   context.subscriptions.push(
     (() => {
