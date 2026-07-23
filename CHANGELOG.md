@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.26
+
+- Bundle Capix Code 2.4.19 from its immutable source commit.
+- Restore clean cross-platform release builds by installing the embedded
+  agent web application's build dependencies with the native runtime.
+
 ## 2.3.25
 
 - Prevent repeated root-directory discovery and orientation calls in fresh
