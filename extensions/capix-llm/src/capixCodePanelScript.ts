@@ -34,16 +34,19 @@ export const PANEL_SCRIPT = `
     div.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
     div.innerHTML = '<div class="msg-role">' + (role === 'user' ? 'You' : 'Capix Code') + '</div><div class="msg-body"></div>';
     conversation.appendChild(div);
+    const body = div.querySelector('.msg-body');
+    if (body) body.innerHTML = renderMarkdown(String(content || ''));
     conversation.scrollTop = conversation.scrollHeight;
-    return div.querySelector('.msg-body');
+    return body;
   }
 
   function startAssistant(mode) {
     clearEmpty();
     const div = document.createElement('div');
     div.className = 'msg assistant';
-    if (mode === 'plan') div.insertAdjacentHTML('afterbegin', '<span class="route-pill">Planning</span>');
-    div.innerHTML = '<div class="msg-role"><span class="working-dot"></span> Capix Code · Working…</div><div class="msg-body"></div>';
+    div.innerHTML =
+      (mode === 'plan' ? '<span class="route-pill">Planning</span>' : '') +
+      '<div class="msg-role"><span class="working-dot"></span> Capix Code · Working…</div><div class="msg-body"></div>';
     conversation.appendChild(div);
     activeAssistant = div.querySelector('.msg-body');
     activeTextRaw = '';
@@ -496,7 +499,12 @@ export const PANEL_SCRIPT = `
         break;
       case 'error':
         setStreaming(false);
-        appendTurn('assistant', '⚠ ' + esc(msg.message));
+        if (activeAssistant) {
+          appendText('\\n⚠ ' + (msg.message || 'Capix Code could not complete this request.'));
+          finishAssistant();
+        } else {
+          appendTurn('assistant', '⚠ ' + (msg.message || 'Capix Code could not complete this request.'));
+        }
         activeAssistant = null;
         break;
       case 'cleared':

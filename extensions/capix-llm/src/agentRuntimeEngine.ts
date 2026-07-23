@@ -500,6 +500,7 @@ export class AgentRuntimeEngine {
       const waiters: Array<() => void> = [];
       let failure: Error | null = null;
       let finished = false;
+      let receivedModelPayload = false;
 
       const wake = () => {
         while (waiters.length) waiters.shift()!();
@@ -522,10 +523,14 @@ export class AgentRuntimeEngine {
           if (event.type === "delta") {
             if (typeof event.content === "string" && event.content) {
               queue.push({ type: "text", delta: event.content });
+              receivedModelPayload = true;
             }
             for (const toolCall of event.toolCalls ?? []) {
               const chunk = toToolCallChunk(toolCall);
-              if (chunk) queue.push(chunk);
+              if (chunk) {
+                queue.push(chunk);
+                receivedModelPayload = true;
+              }
             }
           } else if (event.type === "usage") {
             queue.push({
@@ -556,7 +561,14 @@ export class AgentRuntimeEngine {
             continue;
           }
           if (failure) throw failure;
-          if (finished) return;
+          if (finished) {
+            if (!receivedModelPayload) {
+              throw new Error(
+                "empty_inference_stream: the selected route completed without text or tool output",
+              );
+            }
+            return;
+          }
           if (req.signal?.aborted) return;
           await new Promise<void>((resolve) => waiters.push(resolve));
         }

@@ -482,12 +482,13 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
     }
 
     this.streaming = true;
-    this.view?.webview.postMessage({ type: "turn", role: "user", content: text });
     this.view?.webview.postMessage({ type: "streamStart", mode });
     this.view?.webview.postMessage({ type: "streaming", value: true });
     this.pushState();
 
     try {
+      let receivedRenderableEvent = false;
+      let terminalError: string | null = null;
       for await (const evt of this.engine.sendMessage(content, {
         mode,
         model: this.model,
@@ -495,8 +496,25 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
         preferredModel: this.preferredModel,
         contextFiles,
       })) {
+        if (
+          evt.type === "text" ||
+          evt.type === "tool_call" ||
+          evt.type === "tool_result" ||
+          evt.type === "file_changed" ||
+          evt.type === "plan" ||
+          evt.type === "approval_request"
+        ) {
+          receivedRenderableEvent = true;
+        }
+        if (evt.type === "error") terminalError = evt.message;
         this.onEngineEvent(evt, mode);
         if (evt.type === "done" || evt.type === "error") break;
+      }
+      if (terminalError) throw new Error(terminalError);
+      if (!receivedRenderableEvent) {
+        throw new Error(
+          "Capix returned an empty inference stream. No balance was charged; retry or choose another route.",
+        );
       }
       this.view?.webview.postMessage({ type: "streamDone" });
     } catch (err) {

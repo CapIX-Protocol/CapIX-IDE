@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.20
+
+- Package the Electron-compatible native session-store binding required by Capix Code.
+- Show explicit inference/runtime failures instead of leaving an empty assistant message.
+- Remove duplicate user turns and preserve the Plan status pill in the native Code panel.
+
 ## 2.3.19
 
 - Consolidated Agent Sessions and Agent Hub into native tabs inside Capix Code.

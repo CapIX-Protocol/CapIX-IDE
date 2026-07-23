@@ -76,6 +76,32 @@ for extension in capix-llm capix-cloud capix-workspace capix-agent-ui capix-inte
   echo "  compiling $extension extension..."
   (cd "extensions/$extension" && npm install --silent && npx tsc -p ./)
 done
+
+# capix-llm persists shared Capix Code sessions through better-sqlite3. Native
+# addons installed by the host Node runtime cannot be loaded by Electron when
+# their ABIs differ, and an omitted binding makes the entire agent runtime fail
+# at first message. Rebuild against the exact Electron shipped by Code OSS and
+# fail the release before packaging if no native module was produced.
+ELECTRON_VERSION="$(node -p "require('./package.json').devDependencies.electron")"
+if [ -z "$ELECTRON_VERSION" ] || [ "$ELECTRON_VERSION" = "undefined" ]; then
+  echo "ERROR: could not determine the packaged Electron version."
+  exit 1
+fi
+echo "  rebuilding capix-llm native modules for Electron ${ELECTRON_VERSION}..."
+(
+  cd extensions/capix-llm
+  npm rebuild better-sqlite3 \
+    --runtime=electron \
+    --target="$ELECTRON_VERSION" \
+    --dist-url=https://electronjs.org/headers
+)
+SQLITE_BINDING="$(find extensions/capix-llm/node_modules/better-sqlite3 -type f -name 'better_sqlite3.node' -print -quit)"
+if [ -z "$SQLITE_BINDING" ]; then
+  echo "ERROR: Electron-compatible better-sqlite3 binding was not produced."
+  exit 1
+fi
+echo "  native session-store binding verified: $SQLITE_BINDING"
+
 VSCODE_DIR="$VSCODE" node "$DIR/scripts/verify-runtime-registration.mjs" --compiled
 
 # React must build FIRST.
