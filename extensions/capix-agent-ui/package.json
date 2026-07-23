@@ -17,14 +17,6 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "views": {
-      "capix-code": [
-        {
-          "id": "capix.agent.sessions",
-          "name": "Agent Sessions"
-        }
-      ]
-    },
     "commands": [
       {
         "command": "capix.agent.refreshSessions",
@@ -61,33 +53,7 @@
         "title": "Capix: List Agent Sessions",
         "category": "Capix Agent"
       }
-    ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "capix.agent.startSession",
-          "when": "view == capix.agent.sessions",
-          "group": "navigation@1"
-        },
-        {
-          "command": "capix.agent.refreshSessions",
-          "when": "view == capix.agent.sessions",
-          "group": "navigation@2"
-        },
-        {
-          "command": "capix.agent.cancel",
-          "when": "view == capix.agent.chat",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "capix.agent.resumeSession",
-          "when": "viewItem == capix-agent-session",
-          "group": "inline"
-        }
-      ]
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "tsc -p ./",

@@ -47,17 +47,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	sessionsProvider = new SessionsTreeProvider(broker);
 	chatProvider = new ChatViewProvider(broker, context.extensionUri);
 
-	const sessionsView = vscode.window.createTreeView("capix.agent.sessions", {
-		treeDataProvider: sessionsProvider,
-		showCollapseAll: false,
-	});
-
 	// NOTE: capix.agent.chat is retired — the canonical chat surface is
-	// capix.code.chat (capix-llm). The provider object stays for approval
-	// flows; show() redirects focus to the canonical panel.
-	context.subscriptions.push(
-		sessionsView,
-	);
+	// capix.agent.sessions is a tab inside capix.code.chat. Keep this provider
+	// as the single native data source without contributing another panel.
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand("capix.agent.refreshSessions", () =>
@@ -70,7 +62,15 @@ export function activate(context: vscode.ExtensionContext): void {
 		),
 		vscode.commands.registerCommand("capix.agent.selectModel", () => selectModel()),
 		vscode.commands.registerCommand("capix.agent.cancel", () => chatProvider.cancel()),
-		vscode.commands.registerCommand("capix.agent.listSessions", () => sessionsProvider.refresh()),
+		vscode.commands.registerCommand("capix.agent.listSessions", async () => {
+			await sessionsProvider.refresh();
+			return sessionsProvider.all;
+		}),
+		vscode.commands.registerCommand("capix.agent.resumeSessionById", async (sessionId?: string) => {
+			if (!sessionId) return;
+			const session = sessionsProvider.all.find((entry) => entry.id === sessionId);
+			await resumeSession(session ? new SessionNode(session) : undefined);
+		}),
 		vscode.commands.registerCommand("capix.agent.refreshAuth", async () => {
 			await sessionsProvider.refresh();
 			await chatProvider.init(true);

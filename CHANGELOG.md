@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.19
+
+- Consolidated Agent Sessions and Agent Hub into native tabs inside Capix Code.
+- Synchronized browser authentication across Cloud, Intelligence, and Capix Code.
+- Corrected Intelligence sign-in to use the shared Capix authentication broker.
+- Made Cloud navigation responsive and added visible action progress and error feedback.
+
 ## 2.3.18
 
 - Remove a duplicate release-workflow cleanup that ran after the idempotent rebrand cleanup and caused every Unix artifact build to fail.

@@ -201,7 +201,7 @@ export class IntelligencePanelProvider implements vscode.WebviewViewProvider {
         if (m.tab) this.handleNav(m.tab as IntelligenceTab);
         break;
       case "signIn":
-        void vscode.commands.executeCommand("capix.onboarding.start");
+        void vscode.commands.executeCommand("capix.connectWallet");
         break;
       case "searchMemory":
         void actions.searchMemory(this, String(m.query ?? ""));

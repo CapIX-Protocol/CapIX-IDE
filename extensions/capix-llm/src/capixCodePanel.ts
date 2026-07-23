@@ -37,6 +37,15 @@ import { PANEL_SCRIPT } from "./capixCodePanelScript";
 
 type ComposerMode = EngineMode;
 type ProviderPreference = "auto" | "usepod" | "openrouter" | "surplus";
+type CodeTab = "chat" | "sessions" | "agents";
+
+interface CodeSessionSummary {
+  id: string;
+  modelId?: string;
+  messages?: unknown[];
+  costMinor?: string;
+  currency?: string;
+}
 
 interface AttachedContext {
   name: string;
@@ -64,6 +73,7 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   private costUsd = 0;
   private attached: AttachedContext | null = null;
   private engineStarted = false;
+  private activeTab: CodeTab = "chat";
 
   private readonly engine: AgentRuntimeEngine;
 
@@ -96,6 +106,20 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
   /** Density hint from the active layout preset (compact rail / focus mode). */
   notifyDensity(compact: boolean, focus: boolean): void {
     this.view?.webview.postMessage({ type: "density", compact, focus });
+  }
+
+  /** Synchronize this view with the shared browser-login broker. */
+  async refreshAuthentication(): Promise<void> {
+    try {
+      this.configured = await this.checkConfiguredWithinDeadline();
+      if (!this.configured) this.engineStarted = false;
+    } catch (err) {
+      this.configured = false;
+      this.engineStarted = false;
+      logger.warn("CapixCode authentication refresh failed", { error: String(err) });
+    }
+    this.pushState();
+    if (this.activeTab === "sessions") await this.loadSessions();
   }
 
   /** Start a fresh session. */
@@ -292,6 +316,8 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
     query?: string;
     approved?: boolean;
     filePath?: string;
+    id?: string;
+    tab?: CodeTab;
   }): void {
     switch (msg.type) {
       case "submit":
@@ -348,7 +374,28 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
         this.showHistory();
         break;
       case "signIn":
-        vscode.commands.executeCommand("capix.resetSessionAndSignIn");
+        vscode.commands.executeCommand("capix.connectWallet");
+        break;
+      case "selectCodeTab":
+        if (msg.tab && ["chat", "sessions", "agents"].includes(msg.tab)) {
+          this.activeTab = msg.tab;
+          if (msg.tab === "sessions") void this.loadSessions();
+        }
+        break;
+      case "refreshSessions":
+        void this.loadSessions();
+        break;
+      case "startAgentSession":
+        void vscode.commands.executeCommand("capix.agent.startSession").then(() => this.loadSessions());
+        break;
+      case "resumeAgentSession":
+        if (msg.id) void vscode.commands.executeCommand("capix.agent.resumeSessionById", msg.id);
+        break;
+      case "selectAgentModel":
+        void vscode.commands.executeCommand("capix.agent.selectModel");
+        break;
+      case "openAgentIntelligence":
+        void vscode.commands.executeCommand("capix.intelligence.openPanel", "agents");
         break;
       case "configureRouting":
         vscode.commands.executeCommand("capix.setRouteMode");
@@ -371,6 +418,23 @@ export class CapixCodePanelProvider implements vscode.WebviewViewProvider {
       case "checkpoint":
         void this.checkpoint();
         break;
+    }
+  }
+
+  private async loadSessions(): Promise<void> {
+    try {
+      const sessions = await vscode.commands.executeCommand<CodeSessionSummary[]>("capix.agent.listSessions");
+      this.view?.webview.postMessage({
+        type: "sessions",
+        sessions: Array.isArray(sessions) ? sessions : [],
+      });
+    } catch (err) {
+      logger.error("CapixCode session tab failed", { error: String(err) });
+      this.view?.webview.postMessage({
+        type: "sessions",
+        sessions: [],
+        error: "Sessions could not be loaded. Refresh or sign in again.",
+      });
     }
   }
 
@@ -582,6 +646,13 @@ ${csp}
     </div>
   </header>
 
+  <nav class="code-tabs" aria-label="Capix Code">
+    <button class="code-tab active" data-code-tab="chat">Chat</button>
+    <button class="code-tab" data-code-tab="sessions">Sessions</button>
+    <button class="code-tab" data-code-tab="agents">Agent Hub</button>
+  </nav>
+
+  <section class="code-pane active" data-code-pane="chat">
   <div class="meta-row" id="meta-row">
     <span class="meta-chip" id="chip-project" title="Project">—</span>
     <span class="meta-chip" id="chip-model" title="Model">auto</span>
@@ -661,6 +732,36 @@ ${csp}
   </footer>
 
   <div class="modal-layer" id="modal-layer"></div>
+  </section>
+
+  <section class="code-pane management-pane" data-code-pane="sessions">
+    <div class="management-head">
+      <div><span class="eyebrow">Durable work</span><h2>Sessions</h2></div>
+      <div class="management-actions">
+        <button class="quiet-action" data-cmd="refreshSessions">${icon("refresh")} Refresh</button>
+        <button class="primary-action" data-cmd="startAgentSession">${icon("add")} New</button>
+      </div>
+    </div>
+    <div id="sessions-list" class="management-list">
+      <div class="management-empty">Open this tab to load your Capix Code sessions.</div>
+    </div>
+  </section>
+
+  <section class="code-pane management-pane" data-code-pane="agents">
+    <div class="management-head">
+      <div><span class="eyebrow">Orchestration</span><h2>Agent Hub</h2></div>
+    </div>
+    <div class="agent-hero">
+      <span class="agent-mark">✦</span>
+      <h3>Coordinate work without leaving Code.</h3>
+      <p>Start a durable agent session, choose its routed model, or inspect the shared Intelligence agent graph.</p>
+    </div>
+    <div class="agent-actions-grid">
+      <button data-cmd="startAgentSession"><strong>New agent session</strong><span>Start a routed coding task →</span></button>
+      <button data-cmd="selectAgentModel"><strong>Select model</strong><span>Choose the agent lane →</span></button>
+      <button data-cmd="openAgentIntelligence"><strong>Agent intelligence</strong><span>Plans, delegation and receipts →</span></button>
+    </div>
+  </section>
 
   <script nonce="${nonce}">${PANEL_SCRIPT}</script>
 </body>

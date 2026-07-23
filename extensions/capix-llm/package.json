@@ -57,11 +57,6 @@
           "id": "capix.code.chat",
           "name": "Capix Code",
           "type": "webview"
-        },
-        {
-          "id": "capix.agent.hub",
-          "name": "Agent Hub",
-          "type": "webview"
         }
       ]
     },

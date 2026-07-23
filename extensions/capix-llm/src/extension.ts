@@ -144,6 +144,9 @@ export function activate(context: vscode.ExtensionContext) {
     } else if (event.type === "refresh_failed") {
       logger.warn("Capix auth: token refresh failed", { reason: event.reason });
     }
+    if (event.type === "login" || event.type === "refresh" || event.type === "logout") {
+      void synchronizeAuthenticatedSurfaces();
+    }
   });
   // ── MCP Auto-Installer: zero-config MCP server registration ────────────
   mcpAutoInstaller = new McpAutoInstaller(client, context);
@@ -275,10 +278,9 @@ export function activate(context: vscode.ExtensionContext) {
   setInterval(() => vscode.commands.executeCommand("capix.checkCommits"), 10_000);
 
   // ── Consolidated sidebar hubs ────────────────────────────────────────────
-  // capix.cloud.hub: one tabbed webview (Overview, Deployments, Instances,
-  // Jobs, API Keys, Models, Account) replacing the 9 retired capix-cloud
-  // views. capix.agent.hub: one tabbed webview hosting the orchestration,
-  // agent timeline and agent debugger panels as three tab bodies.
+  // Cloud remains an operational tabbed surface. Agent sessions and hub
+  // controls are tabs inside Capix Code, so they no longer consume extra
+  // collapsible panels in the Code activity container.
   const orchestrationEngine = new OrchestrationEngine({ maxParallel: 3 });
   const orchestrationProvider = new CapixOrchestrationViewProvider(orchestrationEngine, context.extensionUri);
   const agentTimelineProvider = new CapixAgentTimelineViewProvider(context.extensionUri);
@@ -296,8 +298,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("capix.launchCentre", () => cmdLaunchCentre()),
     vscode.window.registerWebviewViewProvider("capix.cloud.hub", cloudHubProvider),
     vscode.window.registerWebviewViewProvider("capix.code.chat", capixCodeProvider),
-    vscode.window.registerWebviewViewProvider("capix.agent.hub", agentHubProvider),
   );
+  context.subscriptions.push({ dispose: () => agentHubProvider.dispose() });
 
   // ── Run-On target: status bar + change handler ──────────────────────────
   runOnStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
@@ -596,6 +598,15 @@ async function refreshAll() {
     cloudHubProvider.refresh(),
   ]);
   if (statusBarItem) await updateStatusBar(statusBarItem);
+}
+
+async function synchronizeAuthenticatedSurfaces(): Promise<void> {
+  await Promise.allSettled([
+    refreshAll(),
+    intelligencePanel.refresh(),
+    capixCodeProvider.refreshAuthentication(),
+    vscode.commands.executeCommand("capix.agent.refreshAuth"),
+  ]);
 }
 
 function setupAutoRefresh(context: vscode.ExtensionContext) {
@@ -1260,8 +1271,7 @@ async function cmdConnectWallet() {
     // the canonical configured check.
     await client.checkConfigured();
     vscode.window.showInformationMessage("Capix sign-in complete.");
-    await refreshAll();
-    await vscode.commands.executeCommand("capix.agent.refreshAuth");
+    await synchronizeAuthenticatedSurfaces();
     // Zero-config MCP: register the Capix MCP server now that auth succeeded.
     // (Also fired via the OAuth token-publish handler — coalesced + idempotent.)
     await mcpAutoInstaller.ensureInstalled();
@@ -1281,12 +1291,12 @@ async function cmdResetSessionAndSignIn() {
       // session is cleared. (Also fired via the OAuth token-publish handler.)
       await mcpAutoInstaller.unregister();
       try {
-        await refreshAll();
+        await synchronizeAuthenticatedSurfaces();
       } catch (error) {
         logger.error("Capix signed-out view refresh failed", { error: String(error) });
       }
       try {
-        await vscode.commands.executeCommand("capix.agent.refreshAuth");
+        await capixCodeProvider.refreshAuthentication();
       } catch (error) {
         logger.error("Capix agent signed-out refresh failed", { error: String(error) });
       }

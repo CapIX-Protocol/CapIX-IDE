@@ -103,23 +103,17 @@ for (const [name, { manifest }] of manifests) {
     }
   }
 }
-for (const requiredView of ["capix.agent.sessions"]) {
-  if (contributedViews.get(requiredView) !== "capix-agent-ui") {
-    fail(`${requiredView} must be packaged as a capix-agent-ui view contribution`);
-  }
-}
 // The canonical chat surface is capix.code.chat in capix-llm; the legacy
-// capix.agent.chat view is retired (duplicate panel removed).
+// agent chat, session tree and hub are tabs inside that single surface.
 if (contributedViews.get("capix.code.chat") !== "capix-llm") {
   fail("capix.code.chat must be packaged as a capix-llm view contribution");
 }
 if (contributedViews.has("capix.agent.chat")) {
   fail("capix.agent.chat is retired; the canonical chat surface is capix.code.chat");
 }
-// Canonical consolidated hubs (panel consolidation: 15 views → 4).
+// Canonical consolidated hubs.
 // capix.cloud.hub is the single capix-cloud surface (7 internal tabs);
-// capix.agent.hub hosts orchestration / timeline / debugger as tab bodies.
-for (const requiredView of ["capix.cloud.hub", "capix.agent.hub"]) {
+for (const requiredView of ["capix.cloud.hub"]) {
   if (contributedViews.get(requiredView) !== "capix-llm") {
     fail(`${requiredView} must be packaged as a capix-llm view contribution`);
   }
@@ -138,9 +132,11 @@ for (const retiredView of [
   "capix.orchestration.view",
   "capix.agentTimeline.view",
   "capix.agentDebugger.view",
+  "capix.agent.sessions",
+  "capix.agent.hub",
 ]) {
   if (contributedViews.has(retiredView)) {
-    fail(`${retiredView} is retired; use the consolidated capix.cloud.hub / capix.agent.hub surfaces`);
+    fail(`${retiredView} is retired; use the consolidated Cloud and Capix Code tabs`);
   }
 }
 for (const [viewId, contributor] of contributedViews) {
@@ -165,6 +161,8 @@ for (const retiredView of [
   "capix.orchestration.view",
   "capix.agentTimeline.view",
   "capix.agentDebugger.view",
+  "capix.agent.sessions",
+  "capix.agent.hub",
 ]) {
   if (registrations.has(retiredView)) {
     fail(`${retiredView} is a retired orphan view; use the canonical capix-llm hub surfaces`);

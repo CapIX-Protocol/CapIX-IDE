@@ -75,6 +75,33 @@ export const PANEL_SCRIPT = `
     if (show && !menu.children.length) menu.innerHTML = ${JSON.stringify(SLASH_HTML)} || '';
   }
 
+  function selectCodeTab(tab) {
+    document.querySelectorAll('[data-code-tab]').forEach((el) => el.classList.toggle('active', el.dataset.codeTab === tab));
+    document.querySelectorAll('[data-code-pane]').forEach((el) => el.classList.toggle('active', el.dataset.codePane === tab));
+    vscode.setState({ ...(vscode.getState() || {}), codeTab: tab });
+    vscode.postMessage({ type: 'selectCodeTab', tab });
+  }
+
+  function renderSessions(sessions, error) {
+    const list = $('sessions-list');
+    if (!list) return;
+    if (error) {
+      list.innerHTML = '<div class="management-empty">' + esc(error) + '</div>';
+      return;
+    }
+    if (!Array.isArray(sessions) || !sessions.length) {
+      list.innerHTML = '<div class="management-empty">No sessions yet. Start one here and it will remain available across Capix Code.</div>';
+      return;
+    }
+    list.innerHTML = sessions.map((session) => {
+      const count = Array.isArray(session.messages) ? session.messages.length : 0;
+      const cost = session.costMinor ? ' · ' + esc(session.costMinor) + ' ' + esc(session.currency || '') : '';
+      return '<div class="session-row"><div><strong>' + esc(session.modelId || 'Capix Auto') +
+        '</strong><span>' + esc(String(session.id).slice(0, 14)) + ' · ' + count + ' messages' + cost +
+        '</span></div><button data-resume-session="' + esc(session.id) + '">Resume</button></div>';
+    }).join('');
+  }
+
 
   // ── @ file mentions ───────────────────────────────────────────────────
   const mentionMenu = $('mention-menu');
@@ -343,6 +370,17 @@ export const PANEL_SCRIPT = `
       return;
     }
 
+    const tab = t && t.closest('[data-code-tab]');
+    if (tab) {
+      selectCodeTab(tab.getAttribute('data-code-tab') || 'chat');
+      return;
+    }
+    const resume = t && t.closest('[data-resume-session]');
+    if (resume) {
+      vscode.postMessage({ type: 'resumeAgentSession', id: resume.getAttribute('data-resume-session') });
+      return;
+    }
+
     const tgt = t && t.closest('[data-cmd],[data-mode],[data-slash],[data-mention]');
     if (!tgt) return;
     if (t && t.dataset && t.dataset.mode) { pickMode(t.dataset.mode); vscode.postMessage({ type: 'setMode', mode: t.dataset.mode }); return; }
@@ -424,6 +462,9 @@ export const PANEL_SCRIPT = `
         if (msg.mode) pickMode(msg.mode);
         if (msg.streaming) setStreaming(true);
         break;
+      case 'sessions':
+        renderSessions(msg.sessions, msg.error);
+        break;
       case 'turn':
         appendTurn(msg.role, msg.content);
         activeAssistant = null; activeTextRaw = ''; activeTools = new Map();
@@ -492,4 +533,6 @@ export const PANEL_SCRIPT = `
   });
 
   autoGrow();
+  const restored = vscode.getState();
+  if (restored && restored.codeTab) selectCodeTab(restored.codeTab);
 `;

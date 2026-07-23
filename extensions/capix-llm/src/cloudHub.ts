@@ -317,7 +317,7 @@ export class CloudHubProvider implements vscode.WebviewViewProvider {
     this.view = view;
     view.webview.options = { enableScripts: true, localResourceRoots: [this.extensionUri] };
     view.webview.html = this.getHtml();
-    view.webview.onDidReceiveMessage((msg) => void this.handleMessage(msg));
+    view.webview.onDidReceiveMessage((msg) => void this.runAction(msg));
     void this.refresh();
   }
 
@@ -388,6 +388,29 @@ export class CloudHubProvider implements vscode.WebviewViewProvider {
   }
 
   // ── Messages ────────────────────────────────────────────────────────────
+
+  private async runAction(msg: { type: string; tab?: string; id?: string }): Promise<void> {
+    if (msg.type !== 'tab') {
+      void this.view?.webview.postMessage({ type: 'actionState', action: msg.type, pending: true });
+    }
+    try {
+      await this.handleMessage(msg);
+      if (msg.type !== 'tab') {
+        void this.view?.webview.postMessage({ type: 'actionState', action: msg.type, pending: false, ok: true });
+      }
+    } catch (err) {
+      logger.error('CloudHub action failed', { action: msg.type, error: String(err) });
+      const message = `Capix Cloud could not complete ${msg.type.replace(/([A-Z])/g, ' $1').toLowerCase()}. ${err instanceof Error ? err.message : String(err)}`;
+      void this.view?.webview.postMessage({
+        type: 'actionState',
+        action: msg.type,
+        pending: false,
+        ok: false,
+        message,
+      });
+      void vscode.window.showErrorMessage(message);
+    }
+  }
 
   private async handleMessage(msg: { type: string; tab?: string; id?: string }): Promise<void> {
     switch (msg.type) {
@@ -529,6 +552,7 @@ ${csp}
     <button class="btn btn-new" data-action="newResource">+ New Resource</button>
   </header>
   <nav class="hub-tabs">${tabs}</nav>
+  <div class="action-status" id="action-status" role="status" hidden></div>
   <main id="content">${this.tabHtml()}</main>
   <script nonce="${nonce}">${HUB_SCRIPT}</script>
 </body>
@@ -892,24 +916,40 @@ const HUB_STYLES = `
 
   /* Tab bar */
   .hub-tabs {
-    display: flex; align-items: stretch; height: 36px;
+    display: grid; grid-template-columns: repeat(7, minmax(72px, 1fr)); align-items: stretch; min-height: 36px;
     border-bottom: 1px solid var(--capix-border);
     overflow-x: auto; scrollbar-width: none;
     padding: 0 4px;
   }
   .hub-tabs::-webkit-scrollbar { display: none; }
   .hub-tab {
-    flex: 0 0 auto;
     background: transparent; border: none; cursor: pointer;
     border-bottom: 2px solid transparent;
     color: var(--capix-muted);
     font-family: inherit;
     font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
-    padding: 0 12px;
+    padding: 0 8px; min-height: 36px;
     transition: color .12s ease, border-color .12s ease;
   }
   .hub-tab:hover { color: var(--capix-fg); }
   .hub-tab.active { color: var(--capix-cyan); border-bottom-color: var(--capix-cyan); }
+  .action-status {
+    margin: 8px 12px 0; padding: 7px 10px; border: 1px solid var(--capix-border);
+    border-radius: 7px; color: var(--capix-muted); background: var(--capix-surface);
+    font-size: 11px;
+  }
+  .action-status.error { color: var(--capix-red); border-color: rgba(255,100,100,.35); }
+
+  @media (max-width: 620px) {
+    .hub-tabs {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      overflow: visible;
+    }
+    .hub-tab { font-size: 9px; letter-spacing: .035em; padding: 0 4px; }
+    .hub-header { align-items: stretch; }
+    .balance-chip { min-width: 0; flex: 1; flex-wrap: wrap; }
+    .chip-sub { width: 100%; }
+  }
 
   main { padding: 12px; }
 
@@ -1006,8 +1046,24 @@ const HUB_SCRIPT = `
       vscode.setState({ tab: target.dataset.tab });
       vscode.postMessage({ type: 'tab', tab: target.dataset.tab });
     } else if (target.dataset.action) {
+      const status = document.getElementById('action-status');
+      if (status) {
+        status.hidden = false;
+        status.className = 'action-status';
+        status.textContent = 'Working…';
+      }
       vscode.postMessage({ type: target.dataset.action, id: target.dataset.id || undefined, tab: target.dataset.tab || undefined });
     }
+  });
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (!msg || msg.type !== 'actionState') return;
+    const status = document.getElementById('action-status');
+    if (!status) return;
+    status.hidden = false;
+    status.className = 'action-status' + (msg.ok === false ? ' error' : '');
+    status.textContent = msg.pending ? 'Working…' : (msg.ok === false ? msg.message : 'Done');
+    if (msg.ok === true) setTimeout(() => { status.hidden = true; }, 1400);
   });
 `;
 
