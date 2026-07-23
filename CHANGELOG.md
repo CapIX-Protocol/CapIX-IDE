@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.22
+
+- Build the host-native session-store binding before workspace-runtime integration tests so cross-platform release gates can execute.
+- Carry forward the workspace-aware Capix Code and defensive Capix Cloud fixes from 2.3.21.
+
 ## 2.3.21
 
 - Prevent incomplete cloud inventory records from crashing resource details and SSH actions.
