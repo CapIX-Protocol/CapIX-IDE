@@ -6,15 +6,14 @@
  *  (architecture §11.7).
  *
  *  Build model:
- *    - Uses the Code-OSS/VSCodium-style platform build, not `electron-builder`
- *      around incomplete raw output.
- *    - Built from the checked-out source commit; the build NEVER clones upstream
- *      or arbitrary refs at build time. Source SHA, API/schema range,
- *      `capix-server`, workspace agent/image, bundled Capix Code/engine/plugin
- *      versions and signatures are recorded in build provenance.
- *    - Fail-closed: any compile / lint / test / package / sign / notarize /
- *      post-sign clean-install smoke test / SBOM / provenance failure prevents
- *      publication.
+ *    - Uses the pinned editor baseline plus the checked-out Capix overlay.
+ *      The baseline commit is immutable and the overlay source SHA is recorded
+ *      in every platform's provenance file.
+ *    - Customer artifacts are explicitly UNSIGNED portable archives. Signing
+ *      and notarization are not release gates until Capix enables a signed
+ *      channel; the archive name and release notes must state this clearly.
+ *    - Fail-closed: compile / extension tests / runtime registration / branding /
+ *      package / SBOM / provenance / notice failures prevent publication.
  *    - Every release includes checksums (sha256), SBOM, third-party notices and
  *      build provenance.
  *    - Updater uses threshold/TUF-style signed metadata with rollback/freeze
@@ -28,40 +27,41 @@ export const BUILD_CONFIG = {
 	platforms: {
 		"darwin-arm64": {
 			electronArch: "arm64",
-			target: "dmg",
-			signingRequired: true,
-			notarizationRequired: true,
+			target: "tar.gz",
+			signingRequired: false,
+			notarizationRequired: false,
 		},
 		"darwin-x64": {
 			electronArch: "x64",
-			target: "dmg",
-			signingRequired: true,
-			notarizationRequired: true,
+			target: "tar.gz",
+			signingRequired: false,
+			notarizationRequired: false,
 		},
 		"linux-x64": {
 			electronArch: "x64",
-			target: ["AppImage", "deb", "rpm"],
-			signingRequired: true,
+			target: "tar.gz",
+			signingRequired: false,
 		},
 		"win32-x64": {
 			electronArch: "x64",
-			target: "nsis",
-			signingRequired: true,
-			timestampingRequired: true,
+			target: "zip",
+			signingRequired: false,
+			timestampingRequired: false,
 		},
 	},
 
-	// Fail-closed: any compile/test/package/sign/notary failure prevents publication
+	// These are the gates enforced by the current unsigned portable channel.
 	failClosed: {
 		compile: true,
 		test: true,
-		lint: true,
+		runtimeRegistration: true,
+		branding: true,
 		package: true,
-		sign: true,
-		notarize: true,
-		postSignSmokeTest: true,
+		sign: false,
+		notarize: false,
 		sbom: true,
 		provenance: true,
+		thirdPartyNotices: true,
 	},
 
 	// Artifacts
@@ -72,8 +72,10 @@ export const BUILD_CONFIG = {
 		thirdPartyNotices: true,
 	},
 
-	// Build from checked-out commit, NEVER clone upstream at build time
-	buildFromCheckedOutCommit: true,
+	// The Capix overlay is checked out; bootstrap hydrates an immutable baseline.
+	buildFromCheckedOutCommit: false,
+	upstreamBaselinePinned: true,
+	releaseChannel: "unsigned-portable",
 } as const;
 
 export type BuildConfig = typeof BUILD_CONFIG;

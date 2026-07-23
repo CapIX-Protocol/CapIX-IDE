@@ -2,18 +2,20 @@
 
 ## 1. Install
 
-Download the installer for your OS from the [Releases page](https://github.com/Ritzky/CapixIDE/releases):
+Download the unsigned portable archive for your OS from the [official Releases page](https://github.com/CapIX-Protocol/CapIX-IDE/releases). Verify its adjacent `.sha256` file before extraction:
 
 | Platform | File |
 |---|---|
-| macOS (M-series) | `CapixIDE-x.x.x-arm64.dmg` |
-| macOS (Intel) | `CapixIDE-x.x.x-x64.dmg` |
-| Windows | `CapixIDE-Setup-x.x.x.exe` |
-| Linux | `CapixIDE-x.x.x.AppImage` (or `.deb` / `.rpm`) |
+| macOS (M-series) | `CapixIDE-vX.Y.Z-darwin-arm64-unsigned.tar.gz` |
+| macOS (Intel) | `CapixIDE-vX.Y.Z-darwin-x64-unsigned.tar.gz` |
+| Windows x64 | `CapixIDE-vX.Y.Z-win32-x64-unsigned.zip` |
+| Linux x64 | `CapixIDE-vX.Y.Z-linux-x64-unsigned.tar.gz` |
 
-- **Mac:** Open the `.dmg`, drag CapixIDE to Applications. The build is **unsigned** — right-click → **Open** on first launch to bypass Gatekeeper's unverified-app warning.
-- **Windows:** Run the `.exe`. The NSIS installer lets you pick the install directory.
-- **Linux:** Make the AppImage executable (`chmod +x CapixIDE-*.AppImage`) and run, or install the `.deb` / `.rpm`.
+- **Mac:** Verify and extract the `.tar.gz`, copy `CapixIDE.app` to Applications, then control-click → **Open** on first launch.
+- **Windows:** Verify and extract the `.zip`, then run `CapixIDE.exe`. SmartScreen may require **More info → Run anyway** because the build is unsigned.
+- **Linux:** Verify and extract the `.tar.gz` into a user-local directory, then run the included `capix` or `capixide` executable.
+
+Use [`../INSTALL.md`](../INSTALL.md) for exact copy-paste checksum and installation commands.
 
 ## 2. Import your existing settings
 

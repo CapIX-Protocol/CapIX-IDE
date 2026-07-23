@@ -116,13 +116,24 @@ See [`docs/getting-started.md`](docs/getting-started.md) for the full walkthroug
 ## For developers — building from source
 
 ```bash
+mkdir capix-build && cd capix-build
+git clone https://github.com/CapIX-Protocol/CapIX-Code.git capix-code
+git -C capix-code checkout 80b48d576deea2ec36a44c505a6e7c6e3b87d088
+(
+  cd capix-code
+  ./scripts/bootstrap.sh
+  ./scripts/rebrand.sh
+  ./scripts/install-config.sh
+  ./scripts/build.sh
+)
+
 git clone https://github.com/CapIX-Protocol/CapIX-IDE.git
 cd CapIX-IDE
 nvm install 20.18.2
 nvm use 20.18.2
 test "$(node --version)" = "v20.18.2"
 ./scripts/bootstrap.sh
-./scripts/dev.sh
+CAPIX_CODE_CUSTOMER_DIR=../capix-code/dist/customer ./scripts/dev.sh
 ```
 
 This repository contains the CapixIDE product source, integrated modules, brand assets, and release pipeline. The bootstrap script prepares the generated editor-source workspace used by the build.
@@ -130,16 +141,16 @@ This repository contains the CapixIDE product source, integrated modules, brand 
 To package distributable installers:
 
 ```bash
-./scripts/build.sh
+CAPIX_CODE_CUSTOMER_DIR=../capix-code/dist/customer ./scripts/build.sh
 # Current-platform output paths are listed in INSTALL.md.
-./scripts/package-release.sh v2.3.15 darwin arm64
+./scripts/package-release.sh v2.3.16 darwin arm64
 ```
 
 For CI/cross-platform release builds, tag a version and the [Release workflow](.github/workflows/release.yml) builds the four supported targets in parallel: macOS arm64/x64, Linux x64, and Windows x64.
 
 ## License
 
-- **Capix IDE extension + brand kit** (`extensions/`, `scripts/`, `electron-builder.yml`, docs): MIT, Copyright 2026 Capix.
+- **Capix IDE product overlay** (`extensions/`, `scripts/`, build configuration, docs): MIT, Copyright 2026 Capix.
 - **Editor core**: MIT, Copyright Microsoft Corporation.
 
 See `LICENSE`, `NOTICE`.

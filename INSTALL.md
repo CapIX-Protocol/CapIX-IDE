@@ -11,10 +11,10 @@ Never continue when a downloaded artifact does not match its adjacent SHA-256 fi
 ## Versioning
 
 Versions are immutable `vMAJOR.MINOR.PATCH` tags. The commands below pin
-CapixIDE `v2.3.15` and Capix Code `v2.4.9`, the current customer releases with
-attached customer artifacts and adjacent checksums. Do not substitute a newer
-tag unless its release page contains the exact archive and checksum filenames
-used below.
+CapixIDE `v2.3.16` and Capix Code `v2.4.10`. Before running them, confirm each
+tag's release page contains the exact archive and adjacent checksum filename
+used below; a source tag without those customer assets is not an installable
+release. Do not substitute another tag or filename.
 
 ## macOS
 
@@ -22,7 +22,7 @@ used below.
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v2.3.15
+IDE_VERSION=v2.3.16
 IDE_ARCH=arm64
 IDE_NAME="CapixIDE-${IDE_VERSION}-darwin-${IDE_ARCH}-unsigned"
 IDE_URL="https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/${IDE_VERSION}"
@@ -64,7 +64,7 @@ Do not substitute the Apple-silicon archive on an Intel Mac.
 
 ```bash
 set -euo pipefail
-CODE_VERSION=v2.4.9
+CODE_VERSION=v2.4.10
 CODE_ARCH=arm64
 CODE_NAME="capix-code-${CODE_VERSION#v}-darwin-${CODE_ARCH}-unsigned"
 CODE_URL="https://github.com/CapIX-Protocol/CapIX-Code/releases/download/${CODE_VERSION}"
@@ -108,7 +108,7 @@ user's home directory and do not require sudo.
 
 ```bash
 set -euo pipefail
-IDE_VERSION=v2.3.15
+IDE_VERSION=v2.3.16
 case "$(uname -m)" in
   x86_64) IDE_ARCH=x64 ;;
   *) echo "No verified CapixIDE artifact is published for this Linux architecture"; exit 1 ;;
@@ -139,7 +139,7 @@ capixide
 
 ```bash
 set -euo pipefail
-CODE_VERSION=v2.4.9
+CODE_VERSION=v2.4.10
 case "$(uname -m)" in
   x86_64) CODE_ARCH=x64 ;;
   aarch64|arm64) CODE_ARCH=arm64 ;;
@@ -182,7 +182,7 @@ Open **PowerShell** as the normal user. Administrator access is not required.
 
 ```powershell
 $ErrorActionPreference = "Stop"
-$IdeVersion = "v2.3.15"
+$IdeVersion = "v2.3.16"
 $IdeName = "CapixIDE-$IdeVersion-win32-x64-unsigned"
 $IdeUrl = "https://github.com/CapIX-Protocol/CapIX-IDE/releases/download/$IdeVersion"
 $Download = Join-Path $env:USERPROFILE "Downloads"
@@ -211,7 +211,7 @@ The build is unsigned. If SmartScreen appears, select **More info**, verify the 
 
 ```powershell
 $ErrorActionPreference = "Stop"
-$CodeVersion = "v2.4.9"
+$CodeVersion = "v2.4.10"
 $CodeName = "capix-code-$($CodeVersion.TrimStart('v'))-win32-x64-unsigned"
 $CodeUrl = "https://github.com/CapIX-Protocol/CapIX-Code/releases/download/$CodeVersion"
 $Download = Join-Path $env:USERPROFILE "Downloads"
@@ -305,14 +305,30 @@ desktop build dependencies; Windows requires Visual Studio 2022 Build Tools,
 Python, and Git Bash.
 
 ```bash
+mkdir capix-build && cd capix-build
+git clone https://github.com/CapIX-Protocol/CapIX-Code.git capix-code
+git -C capix-code checkout 80b48d576deea2ec36a44c505a6e7c6e3b87d088
+(
+  cd capix-code
+  ./scripts/bootstrap.sh
+  ./scripts/rebrand.sh
+  ./scripts/install-config.sh
+  ./scripts/build.sh
+)
+
 git clone https://github.com/CapIX-Protocol/CapIX-IDE.git
 cd CapIX-IDE
 nvm install 20.18.2
 nvm use 20.18.2
 test "$(node --version)" = "v20.18.2"
 ./scripts/bootstrap.sh
-./scripts/build.sh
+CAPIX_CODE_CUSTOMER_DIR=../capix-code/dist/customer ./scripts/build.sh
 ```
+
+The Capix Code build requires Node.js 22, Bun `1.3.14`, Rust stable, and the
+native build tools listed in its repository. Build it first, then switch to
+Node.js `20.18.2` for CapixIDE. CapixIDE deliberately fails rather than package
+without that pinned customer runtime.
 
 The unsigned output is a `CapixIDE.app` bundle on macOS and a portable CapixIDE
 directory on Linux and Windows. The build command prints the exact local path
@@ -320,7 +336,7 @@ for the selected platform.
 Package and checksum a completed build with the version in `product.json`:
 
 ```bash
-./scripts/package-release.sh v2.3.15 darwin arm64
+./scripts/package-release.sh v2.3.16 darwin arm64
 ```
 
 Replace `darwin arm64` with the platform and architecture actually built. The

@@ -18,26 +18,52 @@ permissions:
 
 env:
   # Immutable Capix Code runtime paired with this CapixIDE release.
-  CAPIX_CODE_SHA: 4165dab0dd3bb37c5150a2c48e44549bf18391da
+  CAPIX_CODE_SHA: 80b48d576deea2ec36a44c505a6e7c6e3b87d088
 
 jobs:
+  validate:
+    name: Validate release identity and source gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20.18.2
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20.18.2"
+
+      - name: Bind version, tag and source commit
+        shell: bash
+        run: |
+          bash scripts/verify-release-inputs.sh \
+            "${{ inputs.version || github.ref_name }}" \
+            "${{ inputs.release_tag || github.ref_name }}" \
+            "${{ github.sha }}"
+
+      - name: Run extension unit, compile and branding gates
+        run: bash scripts/run-extension-gates.sh
+
   create-release:
     name: Create GitHub Release
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Verify customer documentation branding
         run: node scripts/scan-customer-branding.mjs --source-only
 
       - name: Create or update release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           name: Capix IDE ${{ inputs.release_tag || github.ref_name }} (UNSIGNED)
           body: |
-            ## Capix IDE ${{ github.ref_name }} — UNSIGNED
+            ## Capix IDE ${{ inputs.release_tag || github.ref_name }} — UNSIGNED
 
             The AI IDE for the Capix protocol.
 
@@ -45,9 +71,9 @@ jobs:
 
             ### SHA-256 Verification
 
-            Download the `checksums-*.sha256` file for your platform and verify:
+            Download the archive and its adjacent `.sha256` file for your platform and verify:
             ```bash
-            sha256sum -c checksums-*.sha256
+            sha256sum -c CapixIDE-*.sha256
             ```
             If checksums do not match, **do not use** the artifact.
 
@@ -90,7 +116,6 @@ jobs:
     name: Build (${{ matrix.os }} ${{ matrix.arch }})
     needs: create-release
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -101,7 +126,6 @@ jobs:
           - os: macos-14
             platform: darwin
             arch: x64
-            experimental: true
           - os: ubuntu-latest
             platform: linux
             arch: x64
@@ -111,18 +135,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
 
       - name: Setup Node 22 for Capix Code runtime
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version: "1.3.14"
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable 2026-07-23
 
       - name: Install native prerequisites (Linux)
         if: runner.os == 'Linux'
@@ -147,12 +173,12 @@ jobs:
           bash ../capix-code/scripts/build.sh
 
       - name: Setup Node 20.18.2 for IDE build
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20.18.2"
 
       - name: Setup Python 3.12 for node-gyp
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
 
@@ -272,29 +298,68 @@ jobs:
           VSCODE_DIR: ${{ github.workspace }}/vscode
           VSCODE_ARCH: ${{ matrix.arch }}
 
+      - name: Verify compiled runtime registration
+        shell: bash
+        run: VSCODE_DIR="${{ github.workspace }}/vscode" node scripts/verify-runtime-registration.mjs --compiled
+
       - name: Package and statically verify release artifact
         shell: bash
         run: bash scripts/package-release.sh "${{ inputs.version || github.ref_name }}" "${{ matrix.platform }}" "${{ matrix.arch }}"
 
-      - name: Notarize macOS app
-        if: runner.os == 'macOS'
-        run: |
-          echo "Building unsigned — no Apple Developer ID configured."
-          echo "macOS users will need to right-click → Open on first launch."
-
-      - name: Record runtime provenance and generate SBOM
+      - name: Generate fail-closed SBOM, provenance and notices
         if: success()
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-artifacts
-          cp capix-code-runtime-sha.txt release-artifacts/capix-code-runtime-sha.txt
-          echo "=== Capix Code runtime SHA ==="
-          cat release-artifacts/capix-code-runtime-sha.txt
-          npx @cyclonedx/cyclonedx-npm --output-file release-artifacts/sbom.json --output-format JSON 2>/dev/null || \
-            echo '{"component":{"name":"CapixIDE","version":"${{ inputs.version || github.ref_name }}"},"dependencies":[]}' > release-artifacts/sbom.json
-          test -s release-artifacts/sbom.json || { echo "::error::SBOM generation failed"; exit 1; }
-          echo "=== SBOM generated ==="
+          version="${{ inputs.version || github.ref_name }}"
+          base="CapixIDE-${version}-${{ matrix.platform }}-${{ matrix.arch }}-unsigned"
+          cp NOTICE "release-artifacts/${base}.NOTICE.txt"
+          cp capix-code-runtime-sha.txt "release-artifacts/${base}.capix-code-runtime-sha.txt"
+          (
+            cd vscode
+            npx --yes @cyclonedx/cyclonedx-npm@6.0.0 \
+              --output-file "../release-artifacts/${base}.sbom.json" \
+              --output-format JSON \
+              --validate \
+              --ignore-npm-errors
+          )
+          node - "release-artifacts/${base}.sbom.json" <<'NODE'
+          const fs = require('fs');
+          const file = process.argv[2];
+          const sbom = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (sbom.bomFormat !== 'CycloneDX' || !sbom.specVersion || !Array.isArray(sbom.components)) {
+            throw new Error(`invalid or incomplete CycloneDX SBOM: ${file}`);
+          }
+          NODE
+          node - "release-artifacts/${base}.provenance.json" <<'NODE'
+          const fs = require('fs');
+          const output = process.argv[2];
+          const document = {
+            schemaVersion: 1,
+            product: 'CapixIDE',
+            version: process.env.RELEASE_VERSION,
+            platform: process.env.RELEASE_PLATFORM,
+            architecture: process.env.RELEASE_ARCH,
+            channel: 'unsigned-portable',
+            signed: false,
+            sourceRepository: process.env.GITHUB_SERVER_URL + '/' + process.env.GITHUB_REPOSITORY,
+            sourceCommit: process.env.GITHUB_SHA,
+            sourceTag: process.env.RELEASE_TAG,
+            workflowRun: process.env.GITHUB_SERVER_URL + '/' + process.env.GITHUB_REPOSITORY + '/actions/runs/' + process.env.GITHUB_RUN_ID,
+            capixCodeCommit: fs.readFileSync('capix-code-runtime-sha.txt', 'utf8').trim(),
+          };
+          fs.writeFileSync(output, JSON.stringify(document, null, 2) + '\n');
+          NODE
+          test -s "release-artifacts/${base}.NOTICE.txt"
+          test -s "release-artifacts/${base}.capix-code-runtime-sha.txt"
+          test -s "release-artifacts/${base}.sbom.json"
+          test -s "release-artifacts/${base}.provenance.json"
+        env:
+          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          RELEASE_PLATFORM: ${{ matrix.platform }}
+          RELEASE_ARCH: ${{ matrix.arch }}
 
       - name: Generate SHA-256 checksums
         if: success()
@@ -303,13 +368,14 @@ jobs:
           set -euo pipefail
           cd release-artifacts
           if command -v sha256sum >/dev/null 2>&1; then
-            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "capix-code-runtime-sha.txt" -o -name "sbom.json" \) -exec sha256sum {} \; > checksums.sha256
+            find . -maxdepth 1 -type f ! -name "*.checksums.sha256" -exec sha256sum {} \; | sort > "CapixIDE-${{ inputs.version || github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}-unsigned.checksums.sha256"
           else
-            find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "capix-code-runtime-sha.txt" -o -name "sbom.json" \) -exec shasum -a 256 {} \; > checksums.sha256
+            find . -maxdepth 1 -type f ! -name "*.checksums.sha256" -exec shasum -a 256 {} \; | sort > "CapixIDE-${{ inputs.version || github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}-unsigned.checksums.sha256"
           fi
-          if [ -s checksums.sha256 ]; then
+          checksums="CapixIDE-${{ inputs.version || github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}-unsigned.checksums.sha256"
+          if [ -s "$checksums" ]; then
             echo "=== SHA-256 Checksums ==="
-            cat checksums.sha256
+            cat "$checksums"
           else
             echo "::error::No build artifacts found for checksum generation"
             exit 1
@@ -317,7 +383,7 @@ jobs:
 
       - name: Upload artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: CapixIDE-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
@@ -328,13 +394,10 @@ jobs:
     name: Release
     needs: [create-release, build]
     runs-on: ubuntu-latest
-    # Matrix-level conclusions include the experimental Intel lane. Run the
-    # assembler after the matrix and let exact mandatory-asset checks decide
-    # whether publication is safe.
-    if: always() && !cancelled() && needs.create-release.result == 'success'
+    if: needs.create-release.result == 'success' && needs.build.result == 'success'
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
 
@@ -343,16 +406,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          find dist -type f \( -name 'CapixIDE-*.tar.gz' -o -name 'CapixIDE-*.zip' -o -name 'CapixIDE-*.tar.gz.sha256' -o -name 'CapixIDE-*.zip.sha256' -o -name 'CapixIDE-*.source-commit.txt' \) -exec cp {} release-assets/ \;
+          find dist -type f -name 'CapixIDE-*' -exec cp {} release-assets/ \;
           version="${{ inputs.version || github.ref_name }}"
           required=(
             "CapixIDE-${version}-darwin-arm64-unsigned.tar.gz"
+            "CapixIDE-${version}-darwin-x64-unsigned.tar.gz"
             "CapixIDE-${version}-linux-x64-unsigned.tar.gz"
             "CapixIDE-${version}-win32-x64-unsigned.zip"
           )
           for archive in "${required[@]}"; do
+            base="${archive%.tar.gz}"
+            base="${base%.zip}"
             test -s "release-assets/$archive"
             test -s "release-assets/$archive.sha256"
+            test -s "release-assets/${base}.source-commit.txt"
+            test -s "release-assets/${base}.sbom.json"
+            test -s "release-assets/${base}.provenance.json"
+            test -s "release-assets/${base}.NOTICE.txt"
+            test -s "release-assets/${base}.capix-code-runtime-sha.txt"
+            test -s "release-assets/${base}.checksums.sha256"
+            test "$(cat "release-assets/${base}.source-commit.txt")" = "${{ github.sha }}"
           done
           for archive in release-assets/*.tar.gz release-assets/*.zip; do
             [ -e "$archive" ] || continue
@@ -360,7 +433,7 @@ jobs:
           done
 
       - name: Upload to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: release-assets/*

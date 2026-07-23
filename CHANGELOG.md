@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.16
+
+- Bind every customer artifact to an immutable source tag and the Capix Code 2.4.10 runtime.
+- Require all four platform builds, compiled runtime registration, extension tests, customer branding, SBOM, provenance, notices, and checksums before publication.
+- Document the unsigned portable release channel and verified source-build prerequisites accurately.
+
 ## 2.3.15
 
 - Preserve the Code-OSS 1.x extension-host API version while keeping CapixIDE's customer-facing 2.3.15 release version, restoring built-in language servers and extension activation.

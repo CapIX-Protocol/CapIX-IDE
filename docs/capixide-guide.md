@@ -6,16 +6,16 @@ CapixIDE is the open-source AI IDE for the Capix protocol: a VS Code-compatible 
 
 | Platform | Download |
 |---|---|
-| macOS (Apple Silicon) | `CapixIDE-x.x.x-arm64.dmg` |
-| macOS (Intel) | `CapixIDE-x.x.x-x64.dmg` |
-| Windows | `CapixIDE-Setup-x.x.x.exe` |
-| Linux | `CapixIDE-x.x.x.AppImage` / `.deb` / `.rpm` |
+| macOS (Apple Silicon) | `CapixIDE-vX.Y.Z-darwin-arm64-unsigned.tar.gz` |
+| macOS (Intel) | `CapixIDE-vX.Y.Z-darwin-x64-unsigned.tar.gz` |
+| Windows x64 | `CapixIDE-vX.Y.Z-win32-x64-unsigned.zip` |
+| Linux x64 | `CapixIDE-vX.Y.Z-linux-x64-unsigned.tar.gz` |
 
-Get the latest from [github.com/Ritzky/CapixIDE/releases](https://github.com/Ritzky/CapixIDE/releases) or [capix.network/ide](https://capix.network/ide).
+Get the latest from [the official CapixIDE releases](https://github.com/CapIX-Protocol/CapIX-IDE/releases) or [capix.network/ide](https://capix.network/ide). Every archive is unsigned and must be verified with its adjacent `.sha256` file before extraction; see [`../INSTALL.md`](../INSTALL.md).
 
-- **Mac:** Open the `.dmg`, drag CapixIDE to Applications. The build is **unsigned** — right-click → **Open** on first launch to bypass Gatekeeper.
-- **Windows:** Run the `.exe` NSIS installer — it lets you pick the install directory.
-- **Linux:** `chmod +x CapixIDE-*.AppImage` and run, or install the `.deb` / `.rpm`.
+- **Mac:** Extract the verified `.tar.gz`, copy `CapixIDE.app` to Applications, then right-click → **Open** on first launch.
+- **Windows:** Extract the verified `.zip` and run `CapixIDE.exe`; SmartScreen may require **More info → Run anyway**.
+- **Linux:** Extract the verified `.tar.gz` into a user-local directory and run the included executable.
 
 ## 2. Import your existing settings
 
@@ -111,10 +111,15 @@ CapixIDE uses [Open VSX](https://open-vsx.org) (license-compatible), so the stan
 ## 7. Building from source
 
 ```bash
-git clone https://github.com/Ritzky/CapixIDE.git
-cd CapixIDE
-./scripts/bootstrap.sh   # clones the source + applies the Capix branding + installs the extension
-./scripts/dev.sh          # launches the dev Electron build
+mkdir capix-build && cd capix-build
+git clone https://github.com/CapIX-Protocol/CapIX-Code.git capix-code
+git -C capix-code checkout 80b48d576deea2ec36a44c505a6e7c6e3b87d088
+# Build capix-code/dist/customer using the Capix Code build guide first.
+
+git clone https://github.com/CapIX-Protocol/CapIX-IDE.git
+cd CapIX-IDE
+./scripts/bootstrap.sh
+CAPIX_CODE_CUSTOMER_DIR=../capix-code/dist/customer ./scripts/dev.sh
 ```
 
 See `docs/contributing.md` for prereqs (Node 20.18.2, platform native deps) and the build pipeline.
@@ -123,13 +128,13 @@ See `docs/contributing.md` for prereqs (Node 20.18.2, platform native deps) and 
 
 | What | Where |
 |---|---|
-| Download installers | [capix.network/ide](https://capix.network/ide) · [GitHub Releases](https://github.com/Ritzky/CapixIDE/releases) |
-| Source code | [github.com/Ritzky/CapixIDE](https://github.com/Ritzky/CapixIDE) |
+| Download archives | [capix.network/ide](https://capix.network/ide) · [GitHub Releases](https://github.com/CapIX-Protocol/CapIX-IDE/releases) |
+| Source code | [github.com/CapIX-Protocol/CapIX-IDE](https://github.com/CapIX-Protocol/CapIX-IDE) |
 | LLM deploy (web) | [capix.network/cloud/llm](https://capix.network/cloud/llm) |
 | SuperGemma partnership doc | [docs/supergemma-partnership.md](supergemma-partnership.md) |
 | LLM deploy guide | [docs/llm-deploy.md](llm-deploy.md) |
 | API reference | `/api/llm/models`, `/api/llm/offers`, `/api/llm/deploy`, `/api/llm/[id]` |
-| Report an issue | [github.com/Ritzky/CapixIDE/issues](https://github.com/Ritzky/CapixIDE/issues) |
+| Report an issue | [github.com/CapIX-Protocol/CapIX-IDE/issues](https://github.com/CapIX-Protocol/CapIX-IDE/issues) |
 
 ## License
 
